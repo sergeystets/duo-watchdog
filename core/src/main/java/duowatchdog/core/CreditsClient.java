@@ -107,7 +107,7 @@ public final class CreditsClient {
         JsonObject user = obj(self.data(), "currentUser");
         if (user == null) {
             throw new GitLabException(self.errors().isEmpty()
-                    ? "GitLab did not accept the token as a user. Check the token and its read_api scope."
+                    ? "GitLab did not accept the token as a user. Check the token and its read_api and ai_features scopes."
                     : String.join("; ", self.errors()));
         }
         String username = str(user, "username");
@@ -260,10 +260,10 @@ public final class CreditsClient {
         }
 
         if (response.status() == 401) {
-            throw new GitLabException("GitLab rejected the token (HTTP 401). Create a personal access token with the read_api scope.");
+            throw new GitLabException("GitLab rejected the token (HTTP 401). Create a personal access token with the read_api and ai_features scopes.");
         }
         if (response.status() == 403) {
-            throw new GitLabException("GitLab refused the request (HTTP 403). The token needs the read_api scope.");
+            throw new GitLabException("GitLab refused the request (HTTP 403). The token needs the read_api and ai_features scopes.");
         }
         if (response.status() < 200 || response.status() >= 300) {
             throw new GitLabException("GitLab returned HTTP " + response.status() + " from " + endpoint.getHost() + ".");

@@ -27,7 +27,7 @@
 |---|---|
 | GitLab URL | `https://gitlab.com` або адреса вашого GitLab |
 | Top-level group | шлях групи, якій належить підписка Duo, напр. `my-company` |
-| Personal access token | токен зі scope **`read_api`** (*User Settings → Access tokens*). Зберігається в Password Safe IDE, а не в налаштуваннях |
+| Personal access token | токен зі scopes **`read_api`** і **`ai_features`** (*User Settings → Access tokens*). Зберігається в Password Safe IDE, а не в налаштуваннях |
 | Limit (credits) | ваш ліміт, за замовчуванням 100 |
 | Alert at % of limit | пороги через кому, напр. `50, 80, 95` |
 | Alert when the month-end forecast passes the limit | попередження за прогнозом |

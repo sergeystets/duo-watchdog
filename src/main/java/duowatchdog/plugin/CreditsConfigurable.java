@@ -52,7 +52,7 @@ public final class CreditsConfigurable implements Configurable {
                 .addLabeledComponent("Top-level group:", namespace)
                 .addComponentToRightColumn(hint("The group that owns the Duo subscription, e.g. my-company."))
                 .addLabeledComponent("Personal access token:", token)
-                .addComponentToRightColumn(hint("Scope read_api. Kept in the IDE password safe."))
+                .addComponentToRightColumn(hint("Scopes read_api and ai_features. Kept in the IDE password safe."))
                 .addSeparator()
                 .addLabeledComponent("Limit (credits):", limit)
                 .addComponentToRightColumn(hint("Your GitLab cap, or a lower budget of your own."))

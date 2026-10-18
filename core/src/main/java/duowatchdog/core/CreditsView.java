@@ -65,7 +65,7 @@ public final class CreditsView {
         if (s.status() == Snapshot.Status.NOT_CONFIGURED) {
             html.append("<p>Not set up yet. Open <b>Settings | Tools | Duo Watchdog</b> and enter the GitLab URL, ")
                     .append("the top-level group that owns the Duo subscription, and a personal access token with the ")
-                    .append("<code>read_api</code> scope.</p>");
+                    .append("<code>read_api</code> and <code>ai_features</code> scopes.</p>");
         } else if (r == null && s.status() != Snapshot.Status.ERROR) {
             html.append("<p>Loading…</p>");
         }
