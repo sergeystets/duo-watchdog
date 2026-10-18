@@ -6,12 +6,6 @@ plugins {
 group = "local.duowatchdog"
 version = "0.1.0"
 
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
-    }
-}
-
 repositories {
     mavenCentral()
     intellijPlatform {
@@ -44,11 +38,34 @@ val installedIdea: String? = providers.gradleProperty("ideaPath")
     .orNull
     ?: findInstalledIdea()
 
+/** The IDE's branch from its product-info.json, e.g. 253 for 2025.3, or null when it cannot be read. */
+fun ideaBranch(idea: String): Int? =
+    listOf("product-info.json", "Contents/Resources/product-info.json")
+        .map { File(idea, it) }
+        .firstOrNull { it.isFile }
+        ?.readText()
+        ?.let { Regex("\"buildNumber\"\\s*:\\s*\"(?:[A-Z]+-)?(\\d+)").find(it) }
+        ?.groupValues?.get(1)?.toIntOrNull()
+
+// IDEs from 2026.2 (branch 262) on are compiled for Java 25, which a JDK 21 javac cannot read, so they are
+// compiled against with JDK 25. The classes stay Java 21 either way, so the plugin still installs on 2024.3.
+val compileJdk = if ((installedIdea?.let(::ideaBranch) ?: 0) >= 262) 25 else 21
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(compileJdk)
+    }
+}
+
+tasks.withType<JavaCompile>().configureEach {
+    options.release = 21
+}
+
 dependencies {
     implementation(project(":core"))
     intellijPlatform {
         if (installedIdea != null) {
-            logger.lifecycle("Duo Watchdog: compiling against the installed IDE at $installedIdea")
+            logger.lifecycle("Duo Watchdog: compiling against the installed IDE at $installedIdea with JDK $compileJdk")
             local(installedIdea)
         } else {
             intellijIdeaCommunity("2024.3")
