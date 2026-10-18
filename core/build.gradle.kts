@@ -22,4 +22,6 @@ dependencies {
 
 tasks.test {
     useJUnitPlatform()
+    // The UI components are painted to build/ui-previews without a screen.
+    systemProperty("java.awt.headless", "true")
 }

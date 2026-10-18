@@ -10,7 +10,6 @@ import java.time.ZoneOffset;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -20,7 +19,7 @@ class CreditsViewTest {
     private static final Instant AT = Instant.parse("2026-10-18T14:05:00Z");
 
     static CreditsReport report(double used, boolean blocked) {
-        return new CreditsReport("alice", CreditsReport.Source.SELF,
+        return new CreditsReport("alice",
                 LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 31), used, blocked,
                 blocked ? "FLAT_USER_CAP" : null,
                 List.of(new DailyUsage(LocalDate.of(2026, 10, 17), 3.5), new DailyUsage(LocalDate.of(2026, 10, 18), 1.25)),
@@ -60,46 +59,36 @@ class CreditsViewTest {
     }
 
     @Test
-    void statusTextShowsUsedOverLimit() {
-        assertEquals("Duo 42.4/100", CreditsView.statusText(Snapshot.ok(report(42.37, false), AT), 100));
-        assertEquals("Duo blocked 100/100", CreditsView.statusText(Snapshot.ok(report(100, true), AT), 100));
-        assertEquals("Duo 42.4/300 ⚠", CreditsView.statusText(Snapshot.ok(report(42.37, false), AT).failed("x"), 300));
+    void statusTextShowsDollarsUsedOverLimit() {
+        assertEquals("$42.4 / 100", CreditsView.statusText(Snapshot.ok(report(42.37, false), AT), 100));
+        assertEquals("Blocked · $100 / 100", CreditsView.statusText(Snapshot.ok(report(100, true), AT), 100));
+        assertEquals("$42.4 / 300 ⚠", CreditsView.statusText(Snapshot.ok(report(42.37, false), AT).failed("x"), 300));
         assertEquals("Duo: set up", CreditsView.statusText(Snapshot.notConfigured(), 100));
         assertEquals("Duo: error", CreditsView.statusText(Snapshot.loading().failed("x"), 100));
     }
 
     @Test
-    void detailsShowProjectionPaceAndForecast() {
-        String html = CreditsView.detailsHtml(Snapshot.ok(report(72, false), AT), 100, TODAY, ZoneOffset.UTC);
-
-        assertTrue(html.contains("<b>72</b> of 100 (72%)"), html);
-        assertTrue(html.contains("124 by 2026-10-31"), html);
-        assertTrue(html.contains("day 18 of 31"), html);
-        assertTrue(html.contains("4 a day; at this pace the limit is reached around 2026-10-25"), html);
-        assertTrue(html.contains("Updated 2026-10-18 14:05"), html);
-    }
-
-    @Test
-    void detailsListFeaturesByCreditsAndEscapeGitLabText() {
-        String html = CreditsView.detailsHtml(Snapshot.ok(report(42, false), AT), 100, TODAY, ZoneOffset.UTC);
-
-        assertTrue(html.contains("Code &lt;Review&gt;"), html);
-        assertFalse(html.contains("<Review>"), html);
-        assertTrue(html.indexOf("Code &lt;Review&gt;") < html.indexOf("Duo Chat"), "the costlier feature first");
-        assertTrue(html.indexOf("2026-10-18") < html.indexOf("2026-10-17"), "newest day first");
-        assertFalse(html.contains("at this pace"), "no forecast when the projection stays under the limit");
-    }
-
-    @Test
-    void aFailedRefreshKeepsTheNumbersAndSaysWhy() {
+    void theTooltipExplainsTheDollarAndKeepsTheLastError() {
         Snapshot s = Snapshot.ok(report(42, false), AT).failed("Cannot reach gitlab.com: <timeout>");
 
-        String html = CreditsView.detailsHtml(s, 100, TODAY, ZoneOffset.UTC);
         String tip = CreditsView.tooltipHtml(s, 100, TODAY, ZoneOffset.UTC);
 
-        assertTrue(html.contains("<b>42</b> of 100"), html);
-        assertTrue(html.contains("Last refresh failed:</b> Cannot reach gitlab.com: &lt;timeout&gt;"), html);
-        assertTrue(tip.contains("Last refresh failed: Cannot reach gitlab.com"), tip);
+        assertTrue(tip.contains("Used 42 of 100 (42%), left 58"), tip);
+        assertTrue(tip.contains("Forecast by Oct 31: 72"), tip);
+        assertTrue(tip.contains("$ = credits at GitLab's $1 list price"), tip);
+        assertTrue(tip.contains("Last refresh failed: Cannot reach gitlab.com: &lt;timeout&gt;"), tip);
+    }
+
+    @Test
+    void periodAndDatesReadAsInTheMockup() {
+        BillingPeriod october = BillingPeriod.of(LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 18), TODAY);
+        assertEquals("October 1 – 31 · day 18 of 31", CreditsView.periodText(october));
+        assertEquals("October", CreditsView.monthText(october));
+        assertEquals("Oct 16", CreditsView.day(LocalDate.of(2026, 10, 16)));
+
+        BillingPeriod across = BillingPeriod.of(LocalDate.of(2026, 9, 15), LocalDate.of(2026, 10, 14), LocalDate.of(2026, 10, 14));
+        assertEquals("September 15 – October 14 · day 30 of 30", CreditsView.periodText(across));
+        assertEquals("September – October", CreditsView.monthText(across));
     }
 
     @Test

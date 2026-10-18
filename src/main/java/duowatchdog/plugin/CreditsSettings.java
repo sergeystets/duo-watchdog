@@ -13,6 +13,8 @@ import duowatchdog.core.Alert;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.List;
+
 /** Duo Watchdog's settings. The token is not here: it lives in the IDE's password safe. */
 @Service(Service.Level.APP)
 @State(name = "DuoWatchdogSettings", storages = @Storage("duo-watchdog.xml"))
@@ -20,7 +22,7 @@ public final class CreditsSettings implements PersistentStateComponent<CreditsSe
 
     public static final class Settings {
         public String gitlabUrl = "https://gitlab.com";
-        /** The top-level group that owns the Duo subscription, e.g. {@code my-company}. */
+        /** The path of the top-level group that owns the Duo subscription, e.g. {@code my-company}. */
         public String namespace = "";
         /**
          * The credits the user means to stay within: their GitLab cap, or a lower budget
@@ -49,6 +51,15 @@ public final class CreditsSettings implements PersistentStateComponent<CreditsSe
     @Override
     public void loadState(@NotNull Settings state) {
         settings = state;
+    }
+
+    /** The alert percents, or the default ones while the saved text does not parse. */
+    public List<Integer> percents() {
+        try {
+            return Alert.parsePercents(settings.alertPercents);
+        } catch (IllegalArgumentException e) {
+            return Alert.parsePercents(Alert.DEFAULT_PERCENTS);
+        }
     }
 
     /** Reads the password safe, which may block: call off the EDT. */

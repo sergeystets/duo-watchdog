@@ -37,7 +37,9 @@ public record Alert(String key, Kind kind, String title, String message) {
         }
         String scope = period + "|" + CreditsView.number(limit);
         BillingPeriod billing = BillingPeriod.of(report.startDate(), report.endDate(), today);
-        String pace = " At this pace: " + CreditsView.number(billing.project(used)) + " by " + billing.end() + ".";
+        LocalDate reach = billing.reachDate(used, limit, today);
+        String pace = " At this pace: " + CreditsView.number(billing.project(used)) + " by " + CreditsView.day(billing.end())
+                + (reach != null ? ", the limit is reached around " + CreditsView.day(reach) : "") + ".";
         if (used >= limit) {
             return Optional.of(new Alert("limit|" + scope, Kind.LIMIT, "Duo credits: limit reached",
                     "Used " + CreditsView.number(used) + " of your " + CreditsView.number(limit) + "-credit limit."));
@@ -51,10 +53,8 @@ public record Alert(String key, Kind kind, String title, String message) {
             }
         }
         if (forecast && billing.project(used) > limit) {
-            LocalDate day = billing.reachDate(used, limit, today);
             return Optional.of(new Alert("forecast|" + scope, Kind.FORECAST, "Duo credits: on pace to pass your limit",
-                    "Used " + CreditsView.number(used) + " of " + CreditsView.number(limit) + " so far." + pace
-                            + (day != null ? " The limit is reached around " + day + "." : "")));
+                    "Used " + CreditsView.number(used) + " of " + CreditsView.number(limit) + " so far." + pace));
         }
         return Optional.empty();
     }

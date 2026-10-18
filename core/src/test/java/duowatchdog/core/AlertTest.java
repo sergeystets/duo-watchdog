@@ -32,8 +32,7 @@ class AlertTest {
         Alert a = alert(72, 100, true).orElseThrow();
         assertEquals(Alert.Kind.FORECAST, a.kind());
         assertEquals("forecast|2026-10-01|100", a.key());
-        assertTrue(a.message().contains("124 by 2026-10-31"), a.message());
-        assertTrue(a.message().contains("reached around 2026-10-25"), a.message());
+        assertTrue(a.message().contains("At this pace: 124 by Oct 31, the limit is reached around Oct 25."), a.message());
 
         assertTrue(alert(72, 100, false).isEmpty(), "the forecast notice can be turned off");
     }
@@ -44,6 +43,7 @@ class AlertTest {
         assertEquals(Alert.Kind.THRESHOLD, at80.kind());
         assertEquals("threshold|2026-10-01|100|80", at80.key());
         assertEquals("Duo credits: 80% of your limit", at80.title());
+        assertEquals("Used 80 of 100. At this pace: 137.8 by Oct 31, the limit is reached around Oct 23.", at80.message());
 
         Alert at95 = alert(96, 100, true).orElseThrow();
         assertEquals("threshold|2026-10-01|100|95", at95.key());

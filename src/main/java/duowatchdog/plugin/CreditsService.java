@@ -1,5 +1,6 @@
 package duowatchdog.plugin;
 
+import com.intellij.notification.NotificationAction;
 import com.intellij.notification.NotificationGroupManager;
 import com.intellij.notification.NotificationType;
 import com.intellij.openapi.Disposable;
@@ -10,6 +11,7 @@ import com.intellij.util.concurrency.AppExecutorUtil;
 import com.intellij.util.net.ssl.CertificateManager;
 import duowatchdog.core.Alert;
 import duowatchdog.core.CreditsClient;
+import duowatchdog.core.GitLabAddress;
 import duowatchdog.core.HttpTransport;
 import duowatchdog.core.Snapshot;
 
@@ -82,8 +84,8 @@ public final class CreditsService implements Disposable {
             return Snapshot.notConfigured();
         }
         try {
-            CreditsClient client = new CreditsClient(settings.gitlabUrl, token.trim(), new HttpTransport(http()));
-            return Snapshot.ok(client.fetch(settings.namespace.trim()), Instant.now());
+            CreditsClient client = new CreditsClient(settings.gitlabUrl, token.trim(), transport());
+            return Snapshot.ok(client.fetch(GitLabAddress.groupPath(settings.namespace, settings.gitlabUrl)), Instant.now());
         } catch (Exception e) {
             // The message is the user's to read; it never carries the token.
             LOG.info("Duo Watchdog refresh failed: " + e.getMessage());
@@ -102,18 +104,15 @@ public final class CreditsService implements Disposable {
 
     private static void notifyOnce(Snapshot s) {
         CreditsSettings.Settings settings = CreditsSettings.getInstance().getState();
-        List<Integer> percents;
-        try {
-            percents = Alert.parsePercents(settings.alertPercents);
-        } catch (IllegalArgumentException e) {
-            percents = Alert.parsePercents(Alert.DEFAULT_PERCENTS);
-        }
+        List<Integer> percents = CreditsSettings.getInstance().percents();
         Alert.of(s.report(), settings.limit, percents, settings.alertOnForecast, LocalDate.now())
                 .filter(alert -> !alert.key().equals(settings.lastAlertKey))
                 .ifPresent(alert -> {
                     settings.lastAlertKey = alert.key();
                     NotificationGroupManager.getInstance().getNotificationGroup(NOTIFICATION_GROUP)
                             .createNotification(alert.title(), alert.message(), type(alert.kind()))
+                            .addAction(NotificationAction.create("Open Duo Watchdog",
+                                    (event, notification) -> CreditsToolWindowFactory.show(event.getProject())))
                             .notify(null);
                 });
     }
@@ -124,6 +123,11 @@ public final class CreditsService implements Disposable {
             case LIMIT, THRESHOLD -> NotificationType.WARNING;
             case FORECAST -> NotificationType.INFORMATION;
         };
+    }
+
+    /** GitLab through the IDE's proxy and certificates; Find my group in the settings goes the same way. */
+    HttpTransport transport() {
+        return new HttpTransport(http());
     }
 
     /** One client for the IDE's lifetime, through the IDE's proxy settings and trusted certificates. */

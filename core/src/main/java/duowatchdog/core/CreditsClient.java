@@ -7,22 +7,19 @@ import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 import duowatchdog.core.CreditsReport.DailyUsage;
 import duowatchdog.core.CreditsReport.FlowUsage;
-import duowatchdog.core.CreditsReport.Source;
 
 import java.io.IOException;
 import java.net.URI;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
- * Reads the token owner's GitLab Credits.
- *
- * <p>First through {@code currentUser.creditsUsage}, which any member of the top-level group may read about
- * themselves. When GitLab does not serve it (the field is an Experiment since 19.4), it falls back to the
- * namespace owner's per-user view, {@code subscriptionUsage.usersUsage},
- * which works only for a token with Owner rights.
+ * Reads the token owner's GitLab Credits through {@code currentUser.creditsUsage}, which any member of the top-level
+ * group may read about themselves (the field is an Experiment since GitLab 19.4).
  */
 public final class CreditsClient {
 
@@ -43,35 +40,31 @@ public final class CreditsClient {
             }
             """;
 
-    static final String OWNER_QUERY = """
-            query DuoUserCreditsAsOwner($namespacePath: ID, $username: String) {
-              subscriptionUsage(namespacePath: $namespacePath) {
-                enabled
-                startDate
-                endDate
-                usersUsage {
-                  users(username: $username, first: 1) {
-                    nodes {
-                      username
-                      usage {
-                        totalCreditsUsed
-                        creditsUsed
-                        monthlyCommitmentCreditsUsed
-                        monthlyWaiverCreditsUsed
-                        overageCreditsUsed
-                        paidTierTrialCreditsUsed
-                      }
-                      blockedStatus { blocked capType }
-                      usedFlowTypes { id title }
-                    }
-                  }
-                }
+    static final String GROUPS_QUERY = """
+            query DuoMyGroups {
+              currentUser {
+                groups(first: 100) { nodes { fullPath name } }
               }
             }
             """;
 
     /** Each feature is one more aliased call to GitLab's billing backend; past this many the rest stay unpriced. */
     static final int MAX_PRICED_FLOWS = 12;
+
+    /** Find my group asks about at most this many top-level groups, in one aliased query. */
+    static final int MAX_PROBED_GROUPS = 20;
+
+    /** @param path the group path, as it goes in the settings; {@code name} what GitLab shows on its pages */
+    public record GroupMatch(String path, String name) {
+        @Override
+        public String toString() {
+            return name == null || name.equals(path) ? path : path + "  (" + name + ")";
+        }
+    }
+
+    /** @param checked the top-level groups asked about; {@code withCredits} those GitLab gave the user's credits for */
+    public record Groups(List<String> checked, List<GroupMatch> withCredits) {
+    }
 
     private final URI endpoint;
     private final String token;
@@ -112,23 +105,69 @@ public final class CreditsClient {
         }
         String username = str(user, "username");
         JsonObject usage = obj(user, "creditsUsage");
-        if (usage != null) {
-            if (!bool(usage, "enabled") && num(usage, "creditsUsed") == null) {
-                throw new GitLabException("GitLab Credits data is not enabled for " + namespace + ".");
-            }
-            return withFlowCredits(selfReport(username, usage), namespace);
+        if (usage == null) {
+            String why = self.errors().isEmpty() ? "no data returned" : String.join("; ", self.errors());
+            throw new GitLabException("GitLab returned no credits for @" + username + " in \"" + namespace + "\": " + why
+                    + ". Check that the group path is the one in the group's address, not the name GitLab shows,"
+                    + " or use Find my group in Settings.");
         }
-
-        String selfError = self.errors().isEmpty() ? "no data returned" : String.join("; ", self.errors());
-        try {
-            return ownerReport(namespace, username);
-        } catch (GitLabException ownerError) {
-            throw new GitLabException("GitLab returned no credits usage for @" + username + " in " + namespace
-                    + ": " + selfError + " (owner view: " + ownerError.getMessage() + ")");
+        if (!bool(usage, "enabled") && num(usage, "creditsUsed") == null) {
+            throw new GitLabException("GitLab Credits data is not enabled for " + namespace + ".");
         }
+        return withFlowCredits(report(username, usage), namespace);
     }
 
-    private static CreditsReport selfReport(String username, JsonObject usage) {
+    /**
+     * The top-level groups of the groups the user belongs to, and which of them GitLab gives the user's credits for:
+     * what Find my group offers.
+     */
+    public Groups findGroups() throws GitLabException {
+        Result result = graphql(GROUPS_QUERY, new JsonObject());
+        JsonObject user = obj(result.data(), "currentUser");
+        if (user == null) {
+            throw new GitLabException(result.errors().isEmpty()
+                    ? "GitLab did not accept the token as a user. Check the token and its read_api and ai_features scopes."
+                    : String.join("; ", result.errors()));
+        }
+        Map<String, String> names = new LinkedHashMap<>();
+        for (JsonElement e : arr(obj(user, "groups"), "nodes")) {
+            String fullPath = e.isJsonObject() ? str(e.getAsJsonObject(), "fullPath") : null;
+            if (fullPath == null || fullPath.isBlank()) {
+                continue;
+            }
+            String top = fullPath.split("/")[0];
+            String name = fullPath.equals(top) ? str(e.getAsJsonObject(), "name") : null;
+            if (name != null || !names.containsKey(top)) {
+                names.put(top, name);
+            }
+        }
+        List<String> checked = new ArrayList<>(names.keySet()).subList(0, Math.min(names.size(), MAX_PROBED_GROUPS));
+        if (checked.isEmpty()) {
+            return new Groups(List.of(), List.of());
+        }
+
+        StringBuilder header = new StringBuilder("query DuoProbeGroups(");
+        StringBuilder fields = new StringBuilder();
+        JsonObject variables = new JsonObject();
+        for (int i = 0; i < checked.size(); i++) {
+            header.append(i == 0 ? "" : ", ").append("$g").append(i).append(": ID!");
+            fields.append("    g").append(i).append(": creditsUsage(namespacePath: $g").append(i)
+                    .append(") { enabled creditsUsed }\n");
+            variables.addProperty("g" + i, checked.get(i));
+        }
+        String query = header + ") {\n  currentUser {\n" + fields + "  }\n}\n";
+        JsonObject probed = obj(graphql(query, variables).data(), "currentUser");
+        List<GroupMatch> matches = new ArrayList<>();
+        for (int i = 0; i < checked.size(); i++) {
+            JsonObject usage = obj(probed, "g" + i);
+            if (usage != null && (bool(usage, "enabled") || num(usage, "creditsUsed") != null)) {
+                matches.add(new GroupMatch(checked.get(i), names.get(checked.get(i))));
+            }
+        }
+        return new Groups(List.copyOf(checked), matches);
+    }
+
+    private static CreditsReport report(String username, JsonObject usage) {
         JsonObject blocked = obj(usage, "blockedStatus");
         List<DailyUsage> daily = new ArrayList<>();
         for (JsonElement e : arr(usage, "dailyUsage")) {
@@ -139,51 +178,9 @@ public final class CreditsClient {
                 }
             }
         }
-        return new CreditsReport(username, Source.SELF, date(usage, "startDate"), date(usage, "endDate"),
+        return new CreditsReport(username, date(usage, "startDate"), date(usage, "endDate"),
                 orZero(num(usage, "creditsUsed")), bool(blocked, "blocked"), str(blocked, "capType"),
                 daily, flows(usage));
-    }
-
-    private CreditsReport ownerReport(String namespace, String username) throws GitLabException {
-        JsonObject variables = new JsonObject();
-        variables.addProperty("namespacePath", namespace);
-        variables.addProperty("username", username);
-        Result result = graphql(OWNER_QUERY, variables);
-
-        JsonObject subscription = obj(result.data(), "subscriptionUsage");
-        if (subscription == null) {
-            throw new GitLabException(result.errors().isEmpty() ? "no data returned" : String.join("; ", result.errors()));
-        }
-        if (!bool(subscription, "enabled") && obj(subscription, "usersUsage") == null) {
-            throw new GitLabException("GitLab Credits data is not enabled for " + namespace + ".");
-        }
-        JsonObject node = null;
-        for (JsonElement e : arr(obj(obj(subscription, "usersUsage"), "users"), "nodes")) {
-            if (e.isJsonObject() && username != null && username.equalsIgnoreCase(str(e.getAsJsonObject(), "username"))) {
-                node = e.getAsJsonObject();
-            }
-        }
-        if (node == null) {
-            throw new GitLabException("@" + username + " has no usage record in " + namespace);
-        }
-        JsonObject blocked = obj(node, "blockedStatus");
-        return new CreditsReport(username, Source.OWNER, date(subscription, "startDate"), date(subscription, "endDate"),
-                usageTotal(obj(node, "usage")), bool(blocked, "blocked"), str(blocked, "capType"),
-                List.of(), flows(node));
-    }
-
-    /** The credits used: the cross-wallet total when GitLab gives it, else the sum of the wallets. */
-    static double usageTotal(JsonObject usage) {
-        Double total = num(usage, "totalCreditsUsed");
-        if (total != null) {
-            return total;
-        }
-        double sum = 0;
-        for (String field : List.of("creditsUsed", "monthlyCommitmentCreditsUsed", "monthlyWaiverCreditsUsed",
-                "overageCreditsUsed", "paidTierTrialCreditsUsed")) {
-            sum += orZero(num(usage, field));
-        }
-        return sum;
     }
 
     /**
@@ -226,9 +223,9 @@ public final class CreditsClient {
         }
     }
 
-    private static List<FlowUsage> flows(JsonObject owner) {
+    private static List<FlowUsage> flows(JsonObject usage) {
         List<FlowUsage> flows = new ArrayList<>();
-        for (JsonElement e : arr(owner, "usedFlowTypes")) {
+        for (JsonElement e : arr(usage, "usedFlowTypes")) {
             if (e.isJsonObject()) {
                 String id = str(e.getAsJsonObject(), "id");
                 if (id != null) {

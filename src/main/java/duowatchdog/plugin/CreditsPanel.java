@@ -10,36 +10,59 @@ import com.intellij.openapi.actionSystem.DefaultActionGroup;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.options.ShowSettingsUtil;
 import com.intellij.openapi.project.DumbAware;
+import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.SimpleToolWindowPanel;
+import com.intellij.ui.JBColor;
 import com.intellij.ui.ScrollPaneFactory;
-import com.intellij.util.ui.HTMLEditorKitBuilder;
+import com.intellij.ui.components.JBLabel;
+import com.intellij.util.ui.JBFont;
 import com.intellij.util.ui.JBUI;
-import duowatchdog.core.CreditsView;
+import com.intellij.util.ui.UIUtil;
 import duowatchdog.core.Snapshot;
+import duowatchdog.core.ui.Dashboard;
 import org.jetbrains.annotations.NotNull;
 
-import javax.swing.JEditorPane;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.ScrollPaneConstants;
+import java.awt.BorderLayout;
+import java.awt.Color;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 
-/** The tool window page: the period, used, left, projection, features and recent days. */
+/** The tool window: Refresh, Settings and "Updated HH:mm" over the dashboard. */
 final class CreditsPanel extends SimpleToolWindowPanel implements Disposable {
 
-    private final JEditorPane page = new JEditorPane();
+    private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm");
 
-    CreditsPanel() {
+    private final Dashboard dashboard;
+    private final JBLabel updated = new JBLabel();
+
+    CreditsPanel(Project project) {
         super(true, true);
-        page.setEditable(false);
-        page.setEditorKit(HTMLEditorKitBuilder.simple());
-        page.setBorder(JBUI.Borders.empty(8));
-        setContent(ScrollPaneFactory.createScrollPane(page, true));
+        Color background = JBUI.CurrentTheme.ToolWindow.background();
+        dashboard = new Dashboard(DuoIcons.theme(), () -> openSettings(project));
+        dashboard.setBackground(background);
+        JScrollPane scroll = ScrollPaneFactory.createScrollPane(dashboard, true);
+        scroll.getViewport().setBackground(background);
+        scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        setContent(scroll);
 
         DefaultActionGroup actions = new DefaultActionGroup();
         actions.add(ActionManager.getInstance().getAction(RefreshCreditsAction.ID));
         actions.add(new OpenSettingsAction());
         ActionToolbar toolbar = ActionManager.getInstance().createActionToolbar("DuoWatchdog", actions, true);
         toolbar.setTargetComponent(this);
-        setToolbar(toolbar.getComponent());
+        updated.setFont(JBFont.small());
+        updated.setForeground(UIUtil.getContextHelpForeground());
+        updated.setBorder(JBUI.Borders.emptyRight(12));
+        JPanel bar = new JPanel(new BorderLayout());
+        bar.setOpaque(false);
+        bar.setBorder(JBUI.Borders.customLineBottom(JBColor.border()));
+        bar.add(toolbar.getComponent(), BorderLayout.WEST);
+        bar.add(updated, BorderLayout.EAST);
+        setToolbar(bar);
 
         ApplicationManager.getApplication().getMessageBus().connect(this).subscribe(CreditsListener.TOPIC, this::render);
         CreditsService.getInstance().start();
@@ -47,9 +70,14 @@ final class CreditsPanel extends SimpleToolWindowPanel implements Disposable {
     }
 
     private void render(Snapshot snapshot) {
-        page.setText(CreditsView.detailsHtml(snapshot, CreditsSettings.getInstance().getState().limit,
-                LocalDate.now(), ZoneId.systemDefault()));
-        page.setCaretPosition(0);
+        CreditsSettings settings = CreditsSettings.getInstance();
+        dashboard.show(snapshot, settings.getState().limit, settings.percents(), LocalDate.now());
+        updated.setText(snapshot.fetchedAt() == null ? ""
+                : "Updated " + TIME.format(snapshot.fetchedAt().atZone(ZoneId.systemDefault())));
+    }
+
+    private static void openSettings(Project project) {
+        ShowSettingsUtil.getInstance().showSettingsDialog(project, CreditsConfigurable.class);
     }
 
     @Override
@@ -64,7 +92,7 @@ final class CreditsPanel extends SimpleToolWindowPanel implements Disposable {
 
         @Override
         public void actionPerformed(@NotNull AnActionEvent e) {
-            ShowSettingsUtil.getInstance().showSettingsDialog(e.getProject(), CreditsConfigurable.class);
+            openSettings(e.getProject());
         }
     }
 }
