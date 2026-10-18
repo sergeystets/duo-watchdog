@@ -1,0 +1,38 @@
+<idea-plugin>
+    <id>local.duo-watchdog</id>
+    <name>Duo Watchdog</name>
+    <vendor>local</vendor>
+    <description><![CDATA[
+    Watches your own GitLab Credits (GitLab Duo) for the current billing period:
+    used, left, the month-end forecast, usage by feature and by day.
+    Set a limit and the percents to be warned at; Duo Watchdog alerts once a period
+    when the forecast passes the limit, at each threshold, at the limit, and when GitLab blocks you.
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <applicationConfigurable parentId="tools"
+                                 id="duowatchdog"
+                                 displayName="Duo Watchdog"
+                                 instance="duowatchdog.plugin.CreditsConfigurable"/>
+        <statusBarWidgetFactory id="DuoWatchdog"
+                                implementation="duowatchdog.plugin.CreditsWidgetFactory"/>
+        <toolWindow id="Duo Watchdog"
+                    anchor="right"
+                    secondary="true"
+                    icon="AllIcons.General.Information"
+                    factoryClass="duowatchdog.plugin.CreditsToolWindowFactory"/>
+        <notificationGroup id="Duo Watchdog" displayType="BALLOON"/>
+    </extensions>
+
+    <actions>
+        <action id="duowatchdog.RefreshCredits"
+                class="duowatchdog.plugin.RefreshCreditsAction"
+                text="Refresh Duo Credits"
+                description="Read your GitLab Credits usage now"
+                icon="AllIcons.Actions.Refresh">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+    </actions>
+</idea-plugin>
