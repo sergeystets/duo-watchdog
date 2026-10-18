@@ -89,7 +89,7 @@ public final class UsageMeter extends JComponent {
         }
 
         int tick = Math.max(1, theme.px(2));
-        g.setColor(getBackground());
+        g.setColor(Draw.backdrop(this, theme));
         for (int percent : percents) {
             int x = (int) Math.round(width * percent / 100.0);
             if (percent < 100) {

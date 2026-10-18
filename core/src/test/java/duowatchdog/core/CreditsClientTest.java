@@ -75,6 +75,7 @@ class CreditsClientTest {
         assertEquals(2, r.daily().size());
         assertEquals(List.of(new FlowUsage("chat", "Duo Chat", 30.0), new FlowUsage("code_review", "Code Review", 12.37)),
                 r.flows());
+        assertNull(r.flowsError());
 
         JsonObject breakdown = http.requests.get(1);
         String query = breakdown.get("query").getAsString();
@@ -92,6 +93,20 @@ class CreditsClientTest {
         assertEquals(42.37, r.creditsUsed(), 1e-9);
         assertEquals(2, r.flows().size());
         assertNull(r.flows().get(0).credits());
+        assertEquals("GitLab returned HTTP 500 from gitlab.com.", r.flowsError());
+    }
+
+    @Test
+    void featuresGitLabWillNotPriceCarryItsReason() throws Exception {
+        FakeTransport http = new FakeTransport().reply(200, SELF_OK).reply(200, """
+                {"errors":[{"message":"Argument 'flowTypes' has an invalid value"}],
+                 "data":{"currentUser":{"f0":null,"f1":null}}}
+                """);
+
+        CreditsReport r = new CreditsClient("https://gitlab.com", "t", http).fetch("acme");
+
+        assertNull(r.flows().get(1).credits());
+        assertEquals("Argument 'flowTypes' has an invalid value", r.flowsError());
     }
 
     @Test

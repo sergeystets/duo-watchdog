@@ -10,12 +10,9 @@ public enum Tone {
     SECONDARY(0x6C707E, 0x8C8F96),
     BORDER(0xEBECF0, 0x393B40),
     TRACK(0xEBECF0, 0x393B40),
-    FEATURE_TRACK(0xF2F3F5, 0x35373C),
     ACCENT(0x3574F0, 0x548AF7),
     /** The bar under the pointer. */
     ACCENT_STRONG(0x2B5FCC, 0x83A9F9),
-    /** The rest of the month in the daily chart. */
-    SHADE(0xF7F8FA, 0x323438),
     AXIS(0xC9CCD6, 0x55585E),
     GRID(0xEBECF0, 0x393B40),
     POPUP(0xFFFFFF, 0x393B40),

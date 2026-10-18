@@ -43,7 +43,7 @@ class RenderTest {
                 List.of(new DailyUsage(LocalDate.of(2026, 10, 8), 0.3), new DailyUsage(LocalDate.of(2026, 10, 9), 0.3),
                         new DailyUsage(LocalDate.of(2026, 10, 13), 0.5), new DailyUsage(LocalDate.of(2026, 10, 16), 20.5)),
                 List.of(new FlowUsage("code_review", "Code Review Flow", 1.0),
-                        new FlowUsage("developer", "Developer Flow", 20.5)));
+                        new FlowUsage("developer", "Developer Flow", 20.5)), null);
     }
 
     @Test
@@ -66,6 +66,14 @@ class RenderTest {
         Dashboard warning = new Dashboard(Theme.light(FONT), () -> { });
         warning.show(Snapshot.ok(report(245, false), AT), 300, PERCENTS, TODAY);
         save("dashboard-warning", warning, 470);
+
+        Dashboard unpriced = new Dashboard(Theme.light(FONT), () -> { });
+        unpriced.setBackground(new Color(0xF7F8FA));
+        CreditsReport noFigures = report(21.5, false).withFlows(List.of(
+                new FlowUsage("code_review", "Code Review Flow", null), new FlowUsage("developer", "Developer Flow", null)),
+                "Cannot reach gitlab.com: request timed out");
+        unpriced.show(Snapshot.ok(noFigures, AT), 300, List.of(3, 95), TODAY);
+        save("dashboard-grey-unpriced", unpriced, 470);
 
         Dashboard blocked = new Dashboard(Theme.light(FONT), () -> { });
         blocked.show(Snapshot.ok(report(300, true), AT), 300, PERCENTS, TODAY);
