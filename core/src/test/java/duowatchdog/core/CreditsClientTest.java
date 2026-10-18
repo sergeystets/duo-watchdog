@@ -68,7 +68,6 @@ class CreditsClientTest {
         assertEquals(List.of("glpat-x", "glpat-x"), http.tokens);
         assertEquals("acme", http.requests.get(0).getAsJsonObject("variables").get("namespacePath").getAsString());
         assertEquals("alice", r.username());
-        assertEquals(CreditsReport.Source.SELF, r.source());
         assertEquals(LocalDate.of(2026, 10, 1), r.startDate());
         assertEquals(LocalDate.of(2026, 10, 31), r.endDate());
         assertEquals(42.37, r.creditsUsed(), 1e-9);
@@ -111,45 +110,52 @@ class CreditsClientTest {
     }
 
     @Test
-    void fallsBackToTheOwnerViewWhenTheOwnFieldIsRefused() throws Exception {
-        FakeTransport http = new FakeTransport().reply(200, SELF_DENIED).reply(200, """
-                {"data":{"subscriptionUsage":{"enabled":true,"startDate":"2026-10-01","endDate":"2026-10-31",
-                  "usersUsage":{"users":{"nodes":[{"username":"Alice",
-                    "usage":{"totalCreditsUsed":null,"creditsUsed":50,"monthlyCommitmentCreditsUsed":20,
-                             "monthlyWaiverCreditsUsed":null,"overageCreditsUsed":5.5,"paidTierTrialCreditsUsed":0},
-                    "blockedStatus":{"blocked":false,"capType":null},
-                    "usedFlowTypes":[{"id":"chat","title":"Duo Chat"}]}]}}}}}
-                """);
-
-        CreditsReport r = new CreditsClient("https://gitlab.com", "t", http).fetch("acme");
-
-        assertEquals(CreditsReport.Source.OWNER, r.source());
-        assertEquals(75.5, r.creditsUsed(), 1e-9, "the wallet sum when totalCreditsUsed is absent");
-        assertEquals("alice", http.requests.get(1).getAsJsonObject("variables").get("username").getAsString());
-        assertTrue(r.daily().isEmpty());
-        assertEquals(1, r.flows().size());
-    }
-
-    @Test
-    void ownerViewPrefersTheCrossWalletTotal() {
-        JsonObject usage = JsonParser.parseString("""
-                {"totalCreditsUsed":80.25,"creditsUsed":50,"overageCreditsUsed":5}
-                """).getAsJsonObject();
-        assertEquals(80.25, CreditsClient.usageTotal(usage), 1e-9);
-    }
-
-    @Test
-    void namesBothFailuresWhenNeitherViewAnswers() {
-        FakeTransport http = new FakeTransport().reply(200, SELF_DENIED).reply(200, """
-                {"errors":[{"message":"owner only"}],"data":{"subscriptionUsage":null}}
-                """);
+    void aRefusedGroupSaysToCheckThePathOrFindTheGroup() {
+        FakeTransport http = new FakeTransport().reply(200, SELF_DENIED);
 
         GitLabException e = assertThrows(GitLabException.class,
-                () -> new CreditsClient("https://gitlab.com", "t", http).fetch("acme"));
+                () -> new CreditsClient("https://gitlab.com", "t", http).fetch("Acme Corp"));
 
-        assertTrue(e.getMessage().contains("@alice in acme"), e.getMessage());
+        assertTrue(e.getMessage().contains("@alice in \"Acme Corp\""), e.getMessage());
         assertTrue(e.getMessage().contains("don't have permission"), e.getMessage());
-        assertTrue(e.getMessage().contains("owner view: owner only"), e.getMessage());
+        assertTrue(e.getMessage().contains("Find my group"), e.getMessage());
+        assertEquals(1, http.requests.size(), "no owner fallback");
+    }
+
+    @Test
+    void findsTheTopLevelGroupsThatGiveCredits() throws Exception {
+        FakeTransport http = new FakeTransport()
+                .reply(200, """
+                        {"data":{"currentUser":{"groups":{"nodes":[
+                          {"fullPath":"acme/platform/tools","name":"Tools"},
+                          {"fullPath":"acme","name":"Acme Corp"},
+                          {"fullPath":"hobby","name":"hobby"},
+                          {"fullPath":"oss/sub","name":"Sub"}]}}}}
+                        """)
+                .reply(200, """
+                        {"errors":[{"message":"no access","path":["currentUser","g1"]}],
+                         "data":{"currentUser":{"g0":{"enabled":true,"creditsUsed":21.5},"g1":null,
+                                                "g2":{"enabled":false,"creditsUsed":null}}}}
+                        """);
+
+        CreditsClient.Groups groups = new CreditsClient("https://gitlab.com", "t", http).findGroups();
+
+        assertEquals(List.of("acme", "hobby", "oss"), groups.checked());
+        assertEquals(List.of(new CreditsClient.GroupMatch("acme", "Acme Corp")), groups.withCredits());
+        assertEquals("acme  (Acme Corp)", groups.withCredits().get(0).toString());
+        JsonObject probe = http.requests.get(1);
+        assertTrue(probe.get("query").getAsString().contains("g2: creditsUsage(namespacePath: $g2)"));
+        assertEquals("oss", probe.getAsJsonObject("variables").get("g2").getAsString());
+    }
+
+    @Test
+    void findsNoGroupsWithoutAskingAboutNone() throws Exception {
+        FakeTransport http = new FakeTransport().reply(200, "{\"data\":{\"currentUser\":{\"groups\":{\"nodes\":[]}}}}");
+
+        CreditsClient.Groups groups = new CreditsClient("https://gitlab.com", "t", http).findGroups();
+
+        assertTrue(groups.checked().isEmpty());
+        assertEquals(1, http.requests.size());
     }
 
     @Test
