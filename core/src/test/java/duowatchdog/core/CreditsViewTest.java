@@ -23,7 +23,7 @@ class CreditsViewTest {
                 LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 31), used, blocked,
                 blocked ? "FLAT_USER_CAP" : null,
                 List.of(new DailyUsage(LocalDate.of(2026, 10, 17), 3.5), new DailyUsage(LocalDate.of(2026, 10, 18), 1.25)),
-                List.of(new FlowUsage("chat", "Duo Chat", 12.0), new FlowUsage("review", "Code <Review>", 30.0)));
+                List.of(new FlowUsage("chat", "Duo Chat", 12.0), new FlowUsage("review", "Code <Review>", 30.0)), null);
     }
 
     @Test

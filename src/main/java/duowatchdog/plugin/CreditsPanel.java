@@ -18,6 +18,7 @@ import com.intellij.ui.components.JBLabel;
 import com.intellij.util.ui.JBFont;
 import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
+import duowatchdog.core.CreditsReport;
 import duowatchdog.core.Snapshot;
 import duowatchdog.core.ui.Dashboard;
 import org.jetbrains.annotations.NotNull;
@@ -30,14 +31,17 @@ import java.awt.Color;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
 
-/** The tool window: Refresh, Settings and "Updated HH:mm" over the dashboard. */
+/** The tool window: Refresh, Settings and "@user · group · Updated HH:mm" over the dashboard. */
 final class CreditsPanel extends SimpleToolWindowPanel implements Disposable {
 
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm");
 
     private final Dashboard dashboard;
-    private final JBLabel updated = new JBLabel();
+    /** Whose credits, in which group, and when: the IDE shows header actions only on hover, so this is no header action. */
+    private final JBLabel byline = new JBLabel();
 
     CreditsPanel(Project project) {
         super(true, true);
@@ -54,14 +58,14 @@ final class CreditsPanel extends SimpleToolWindowPanel implements Disposable {
         actions.add(new OpenSettingsAction());
         ActionToolbar toolbar = ActionManager.getInstance().createActionToolbar("DuoWatchdog", actions, true);
         toolbar.setTargetComponent(this);
-        updated.setFont(JBFont.small());
-        updated.setForeground(UIUtil.getContextHelpForeground());
-        updated.setBorder(JBUI.Borders.emptyRight(12));
+        byline.setFont(JBFont.small());
+        byline.setForeground(UIUtil.getContextHelpForeground());
+        byline.setBorder(JBUI.Borders.emptyRight(12));
         JPanel bar = new JPanel(new BorderLayout());
         bar.setOpaque(false);
         bar.setBorder(JBUI.Borders.customLineBottom(JBColor.border()));
         bar.add(toolbar.getComponent(), BorderLayout.WEST);
-        bar.add(updated, BorderLayout.EAST);
+        bar.add(byline, BorderLayout.EAST);
         setToolbar(bar);
 
         ApplicationManager.getApplication().getMessageBus().connect(this).subscribe(CreditsListener.TOPIC, this::render);
@@ -72,8 +76,19 @@ final class CreditsPanel extends SimpleToolWindowPanel implements Disposable {
     private void render(Snapshot snapshot) {
         CreditsSettings settings = CreditsSettings.getInstance();
         dashboard.show(snapshot, settings.getState().limit, settings.percents(), LocalDate.now());
-        updated.setText(snapshot.fetchedAt() == null ? ""
-                : "Updated " + TIME.format(snapshot.fetchedAt().atZone(ZoneId.systemDefault())));
+        List<String> parts = new ArrayList<>();
+        CreditsReport report = snapshot.report();
+        if (report != null && report.username() != null) {
+            parts.add("@" + report.username());
+        }
+        String group = settings.getState().namespace;
+        if (report != null && group != null && !group.isBlank()) {
+            parts.add(group.trim());
+        }
+        if (snapshot.fetchedAt() != null) {
+            parts.add("Updated " + TIME.format(snapshot.fetchedAt().atZone(ZoneId.systemDefault())));
+        }
+        byline.setText(String.join(" · ", parts));
     }
 
     private static void openSettings(Project project) {

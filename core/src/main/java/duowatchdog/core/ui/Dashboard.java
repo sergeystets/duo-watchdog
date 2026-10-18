@@ -122,6 +122,9 @@ public final class Dashboard extends JPanel implements Scrollable {
             FeatureBars bars = new FeatureBars(theme);
             bars.show(report.flows());
             features.add(bars);
+            if (report.flowsError() != null) {
+                features.add(text("Credits per feature did not load: " + report.flowsError(), 11, Tone.SECONDARY));
+            }
             place(features, 16);
         }
     }

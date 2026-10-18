@@ -10,8 +10,6 @@ import com.intellij.ui.content.ContentFactory;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.List;
-
 public final class CreditsToolWindowFactory implements ToolWindowFactory, DumbAware {
 
     /** Must match the {@code toolWindow id} in plugin.xml. */
@@ -23,7 +21,6 @@ public final class CreditsToolWindowFactory implements ToolWindowFactory, DumbAw
         Content content = ContentFactory.getInstance().createContent(panel, "", false);
         content.setDisposer(panel);
         toolWindow.getContentManager().addContent(content);
-        toolWindow.setTitleActions(List.of(new IdentityAction(toolWindow.getDisposable())));
     }
 
     static void show(@Nullable Project project) {

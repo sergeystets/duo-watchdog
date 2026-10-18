@@ -157,7 +157,7 @@ public final class DailyChart extends JComponent {
 
         if (todayIndex >= 0 && todayIndex < days - 1) {
             double todayX = p.left() + (todayIndex + 1) * slot;
-            g.setColor(theme.color(Tone.SHADE));
+            g.setColor(Draw.tint(this, theme, 0.045));
             g.fill(new Rectangle2D.Double(todayX, p.top(), p.right() - todayX, p.bottom() - p.top()));
             String rest = "rest of month";
             if (p.right() - todayX > fm.stringWidth(rest) + theme.px(8)) {

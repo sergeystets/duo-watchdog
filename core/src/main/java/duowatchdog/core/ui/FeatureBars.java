@@ -85,7 +85,7 @@ public final class FeatureBars extends JComponent {
             g.drawString(Draw.fit(flow.title(), fm, nameWidth), 0, baseline);
 
             int barY = y + (rowHeight - barHeight) / 2;
-            g.setColor(theme.color(Tone.FEATURE_TRACK));
+            g.setColor(Draw.tint(this, theme, 0.06));
             g.fill(new RoundRectangle2D.Double(barX, barY, barWidth, barHeight, barHeight, barHeight));
             Double credits = flow.credits();
             if (credits != null && credits > 0 && top > 0) {

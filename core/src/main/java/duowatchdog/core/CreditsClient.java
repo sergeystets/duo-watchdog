@@ -180,12 +180,13 @@ public final class CreditsClient {
         }
         return new CreditsReport(username, date(usage, "startDate"), date(usage, "endDate"),
                 orZero(num(usage, "creditsUsed")), bool(blocked, "blocked"), str(blocked, "capType"),
-                daily, flows(usage));
+                daily, flows(usage), null);
     }
 
     /**
      * Prices each feature the user spent on with one aliased query, {@code creditsUsage} filtered by flow type.
-     * The breakdown is a detail: when it fails, the total still stands and the features stay listed unpriced.
+     * The breakdown is a detail: when it fails, the total still stands, the features stay listed unpriced, and the
+     * report says why.
      */
     private CreditsReport withFlowCredits(CreditsReport report, String namespace) {
         List<FlowUsage> all = report.flows();
@@ -207,19 +208,24 @@ public final class CreditsClient {
         }
         String query = header + ") {\n  currentUser {\n" + fields + "  }\n}\n";
         try {
-            JsonObject user = obj(graphql(query, variables).data(), "currentUser");
+            Result result = graphql(query, variables);
+            JsonObject user = obj(result.data(), "currentUser");
+            String why = result.errors().isEmpty() ? "GitLab returned no figures" : String.join("; ", result.errors());
             if (user == null) {
-                return report;
+                return report.withFlows(all, why);
             }
             List<FlowUsage> flows = new ArrayList<>();
+            boolean missing = false;
             for (int i = 0; i < priced; i++) {
                 FlowUsage flow = all.get(i);
-                flows.add(new FlowUsage(flow.id(), flow.title(), num(obj(user, "f" + i), "creditsUsed")));
+                Double credits = num(obj(user, "f" + i), "creditsUsed");
+                missing |= credits == null;
+                flows.add(new FlowUsage(flow.id(), flow.title(), credits));
             }
             flows.addAll(all.subList(priced, all.size()));
-            return report.withFlows(flows);
+            return report.withFlows(flows, missing ? why : null);
         } catch (GitLabException e) {
-            return report;
+            return report.withFlows(all, e.getMessage());
         }
     }
 

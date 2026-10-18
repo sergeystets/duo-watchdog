@@ -3,7 +3,7 @@
 Плагін для IntelliJ IDEA (і будь-якої IDE JetBrains від 2024.3), який стежить за **вашими власними** витратами GitLab Credits (GitLab Duo) за поточний розрахунковий період і попереджає, коли ви наближаєтесь до ліміту.
 
 - **Status bar:** доберман, міні-шкала і `$21.5 / 300` — витрачено / ліміт ($ — кредити за прейскурантною ціною GitLab, $1 за кредит). Від найнижчого порогу алертів — бурштиновий колір і значок попередження, коли GitLab блокує Duo — червоний і `Blocked · $300 / 300`. У підказці: залишок, прогноз на кінець періоду, час оновлення. Клік відкриває вікно з деталями.
-- **Tool window «Duo Watchdog»:** у заголовку `@користувач · група`, кнопки Refresh і Settings та час оновлення; велике число витраченого зі статусом Active / Blocked, період і день; шкала з пунктирною позначкою прогнозу і поділками на порогах алертів; плитки Left, Forecast і Pace; стовпчики за кожен день місяця (решта місяця затінена, лінія «today», підказка на стовпчику); розбивка за фічами (Developer Flow, Code Review Flow…).
+- **Tool window «Duo Watchdog»:** кнопки Refresh і Settings, праворуч `@користувач · група · Updated HH:mm`; велике число витраченого зі статусом Active / Blocked, період і день; шкала з пунктирною позначкою прогнозу і поділками на порогах алертів; плитки Left, Forecast і Pace; стовпчики за кожен день місяця (решта місяця затінена, лінія «today», підказка на стовпчику); розбивка за фічами (Developer Flow, Code Review Flow…).
 - **Алерти** (balloon з посиланням Open Duo Watchdog, кожен — один раз за період):
   - прогноз на кінець місяця перевищує ліміт (можна вимкнути);
   - кожен поріг зі списку, за замовчуванням `80, 95` % ліміту;
@@ -44,11 +44,11 @@
 
 ```bash
 ./gradlew :core:test      # тести логіки (без IDE)
-./gradlew buildPlugin     # → build/distributions/duo-watchdog-0.2.0.zip
+./gradlew buildPlugin     # → build/distributions/duo-watchdog-0.2.1.zip
 ./gradlew runIde          # запуск IDE-пісочниці з плагіном
 ```
 
-Встановлення: *Settings → Plugins → ⚙ → Install Plugin from Disk…* → `build/distributions/duo-watchdog-0.2.0.zip`.
+Встановлення: *Settings → Plugins → ⚙ → Install Plugin from Disk…* → `build/distributions/duo-watchdog-0.2.1.zip`.
 
 ## Структура
 
