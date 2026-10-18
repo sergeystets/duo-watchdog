@@ -34,6 +34,12 @@ class CreditsViewTest {
         assertEquals(31, p.periodDays());
         assertEquals(62.0, p.project(36), 1e-9);
 
+        // GitLab reports the last day it has data for as endDate; the period still runs to the month's end.
+        BillingPeriod dataSoFar = BillingPeriod.of(LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 18), TODAY);
+        assertEquals(LocalDate.of(2026, 10, 31), dataSoFar.end());
+        assertEquals(31, dataSoFar.periodDays());
+        assertEquals(37.0, dataSoFar.project(21.5), 0.05);
+
         BillingPeriod unknown = BillingPeriod.of(null, null, TODAY);
         assertEquals(LocalDate.of(2026, 10, 1), unknown.start());
         assertEquals(LocalDate.of(2026, 10, 31), unknown.end());

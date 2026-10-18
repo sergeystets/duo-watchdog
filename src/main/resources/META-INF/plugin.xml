@@ -21,7 +21,7 @@
         <toolWindow id="Duo Watchdog"
                     anchor="right"
                     secondary="true"
-                    icon="AllIcons.General.Information"
+                    icon="/icons/duoWatchdog.svg"
                     factoryClass="duowatchdog.plugin.CreditsToolWindowFactory"/>
         <notificationGroup id="Duo Watchdog" displayType="BALLOON"/>
     </extensions>
