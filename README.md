@@ -116,8 +116,8 @@ Requests go through the IDE's proxy and trusted certificates
 | JDK (to run Gradle) | **17** | Gradle 9.8 needs Java 17+. Any JDK 17, 21 or 25 works. |
 | JDK (to compile) | 21 / 25 | Gradle downloads it for you: 21, or 25 when compiling against IDEA 2026.2+. |
 | Gradle | — | No install needed: the wrapper (`gradlew` / `gradlew.bat`) downloads Gradle 9.8.1. |
-| IntelliJ IDEA | optional | If one is installed, the build compiles against it. If not, Gradle downloads IDEA 2024.3 (~1 GB). |
-| Internet access | first build | Needed to download Gradle, the JDK and dependencies. They are cached afterwards. |
+| IntelliJ IDEA | **2024.3**, installed | The build compiles against your installed IDEA (Community or Ultimate) and never downloads one. |
+| Internet access | first build | Needed to download Gradle, the compile JDK and small dependencies. They are cached afterwards. |
 
 ## Installation
 
@@ -147,14 +147,14 @@ Open *Settings → Tools → Duo Watchdog*.
 against IDEA 2026.2 or later. The plugin's classes target Java 21 in both cases.
 
 ```bash
-./gradlew :core:test      # unit tests for the core logic (no IDE needed)
+./gradlew :core:test      # unit tests for the core logic
 ./gradlew buildPlugin     # → build/distributions/duo-watchdog-0.2.1.zip
 ./gradlew runIde          # launch a sandbox IDE with the plugin installed
 ```
 
 ### Which IDE it compiles against
 
-The build compiles against an IntelliJ IDEA **already installed** on your machine. It looks in the usual places
+The build compiles against the IntelliJ IDEA **already installed** on your machine and never downloads one. It looks in the usual places
 (`/Applications`, `~/Applications`, `C:/Program Files/JetBrains`, `%LOCALAPPDATA%/Programs`, `/opt`, and Toolbox on Linux)
 and logs which IDE it picked. To choose one yourself:
 
@@ -164,7 +164,8 @@ and logs which IDE it picked. To choose one yourself:
 export IDEA_HOME="/path/to/IntelliJ IDEA.app"
 ```
 
-Gradle downloads IntelliJ IDEA 2024.3 (~1 GB, cached after the first run) only when it finds no installed IDEA.
+If no IDEA is found, or `-PideaPath` points to a folder without `product-info.json`, the build stops with an error
+that says so. Install IntelliJ IDEA 2024.3 or later, or pass the right path.
 
 ### Step by step on Windows
 
@@ -250,7 +251,8 @@ dir build\distributions
 - **Gradle says it requires JVM 17 or later**: `java -version` is older than 17. Install a newer JDK as in step 1.
 - **`git clone` asks for credentials**: the repository is private. Sign in with your GitHub account in the window that Git
   Credential Manager opens, or run `winget install --id GitHub.cli -e`, then `gh auth login`.
-- **The build downloads IntelliJ IDEA although it is installed**: pass `-PideaPath=...` as in step 3.
+- **`no installed IntelliJ IDEA found`**: IDEA is installed somewhere the build doesn't look. Pass `-PideaPath=...` as in step 3.
+- **`no IntelliJ IDEA at ...`**: the path is wrong. Pass the IDEA install folder itself (the one with `bin` and `product-info.json`), not `bin\idea64.exe`.
 - **Corporate proxy**: Gradle doesn't use the IDE's proxy settings. Add your proxy to `%USERPROFILE%\.gradle\gradle.properties`:
   ```properties
   systemProp.https.proxyHost=proxy.example.com
