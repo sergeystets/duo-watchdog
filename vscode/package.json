@@ -1,0 +1,144 @@
+{
+  "name": "duo-watchdog",
+  "displayName": "Duo Watchdog",
+  "description": "Watches your own GitLab Credits (GitLab Duo) for the current billing period: used, left, the month-end forecast, usage by day and by feature, with alerts before you hit your limit.",
+  "version": "0.2.1",
+  "publisher": "local",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sergeystets/duo-watchdog"
+  },
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "gitlab",
+    "duo",
+    "credits",
+    "usage"
+  ],
+  "icon": "media/icon.png",
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "duoWatchdog",
+          "title": "Duo Watchdog",
+          "icon": "media/doberman.svg"
+        }
+      ]
+    },
+    "views": {
+      "duoWatchdog": [
+        {
+          "type": "webview",
+          "id": "duoWatchdog.dashboard",
+          "name": "Credits"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "duoWatchdog.refresh",
+        "title": "Refresh",
+        "category": "Duo Watchdog",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "duoWatchdog.openDashboard",
+        "title": "Open Dashboard",
+        "category": "Duo Watchdog"
+      },
+      {
+        "command": "duoWatchdog.openSettings",
+        "title": "Open Settings",
+        "category": "Duo Watchdog"
+      },
+      {
+        "command": "duoWatchdog.setToken",
+        "title": "Set GitLab Token",
+        "category": "Duo Watchdog"
+      },
+      {
+        "command": "duoWatchdog.findGroup",
+        "title": "Find My Group",
+        "category": "Duo Watchdog"
+      },
+      {
+        "command": "duoWatchdog.createToken",
+        "title": "Create the Token in GitLab",
+        "category": "Duo Watchdog"
+      }
+    ],
+    "configuration": {
+      "title": "Duo Watchdog",
+      "properties": {
+        "duoWatchdog.gitlabUrl": {
+          "type": "string",
+          "default": "https://gitlab.com",
+          "scope": "application",
+          "order": 0,
+          "markdownDescription": "`https://gitlab.com` or the address of your self-managed GitLab."
+        },
+        "duoWatchdog.groupPath": {
+          "type": "string",
+          "default": "",
+          "scope": "application",
+          "order": 1,
+          "markdownDescription": "The path of the top-level group that owns the Duo subscription, e.g. `my-company`: the path from the group's address, not the name GitLab shows on its pages. A pasted group URL works too. Run **Duo Watchdog: Find My Group** to fill it in.\n\nThe token is not a setting: run **Duo Watchdog: Set GitLab Token** (it is kept in VS Code's secret storage)."
+        },
+        "duoWatchdog.limit": {
+          "type": "number",
+          "default": 100,
+          "exclusiveMinimum": 0,
+          "scope": "application",
+          "order": 2,
+          "markdownDescription": "Your limit in credits: your GitLab cap, or a lower budget of your own. GitLab shows a user's cap only to the group owner, so you keep it here."
+        },
+        "duoWatchdog.alertPercents": {
+          "type": "string",
+          "default": "80, 95",
+          "scope": "application",
+          "order": 3,
+          "markdownDescription": "Percents of the limit to be alerted at, comma-separated, e.g. `50, 80, 95`. Each alert shows once per billing period."
+        },
+        "duoWatchdog.forecastAlert": {
+          "type": "boolean",
+          "default": true,
+          "scope": "application",
+          "order": 4,
+          "description": "Alert when the month-end forecast passes the limit."
+        },
+        "duoWatchdog.refreshMinutes": {
+          "type": "integer",
+          "default": 15,
+          "minimum": 1,
+          "maximum": 1440,
+          "scope": "application",
+          "order": 5,
+          "markdownDescription": "How often to read your credits, in minutes. GitLab's usage data can lag a few minutes behind actual use."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "vscode:prepublish": "npm run compile",
+    "test": "npm run compile && node --test \"out/test/**/*.test.js\"",
+    "package": "vsce package --no-dependencies --skip-license"
+  },
+  "devDependencies": {
+    "@types/node": "^18.19.0",
+    "@types/vscode": "1.74.0",
+    "@vscode/vsce": "^3.6.0",
+    "typescript": "~5.9.0"
+  }
+}
