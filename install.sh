@@ -4,7 +4,7 @@
 #   ./install.sh            pick from the IntelliJ IDEA and VS Code installs found
 #   ./install.sh <folder>   offer that IntelliJ IDEA or VS Code too, e.g. one in an unusual place
 #
-# IntelliJ IDEA gets the plugin built by intellij/gradlew installPlugin (needs JDK 17+), VS Code the extension
+# IntelliJ IDEA gets the plugin built by ./gradlew installPlugin (needs JDK 17+), VS Code the extension
 # packaged from vscode/ (needs Node.js 20+). Runs on the bash 3.2 that macOS ships.
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -487,16 +487,16 @@ install_idea() {
         esac
     done
     # A checkout made with core.autocrlf=true has CRLF in gradlew, which then fails with "/bin/sh^M: bad interpreter".
-    if grep -q "$(printf '\r')" intellij/gradlew; then
-        say "intellij/gradlew has Windows line endings (CRLF), so it can't run here. Your git wrote them:"
+    if grep -q "$(printf '\r')" gradlew; then
+        say "gradlew has Windows line endings (CRLF), so it can't run here. Your git wrote them:"
         say "it has core.autocrlf=true. Fix the setting and check the files out again (this discards local edits):"
         say "  git config --global core.autocrlf input"
         say "  git rm -r -q --cached . && git reset --hard"
-        RESULTS+=("FAILED   ${NAMES[$i]}: intellij/gradlew has CRLF line endings, see above.")
+        RESULTS+=("FAILED   ${NAMES[$i]}: gradlew has CRLF line endings, see above.")
         return
     fi
     say "Building the plugin for ${NAMES[$i]} (the first build downloads Gradle and a JDK and can take a few minutes)..."
-    if intellij/gradlew -p intellij installPlugin -PideaPath="$dir" --quiet --console=plain; then
+    if ./gradlew :intellij:installPlugin -PideaPath="$dir" --quiet --console=plain; then
         RESULTS+=("OK       ${NAMES[$i]}: Duo Watchdog $PLUGIN_VERSION installed.")
         yes_default "Start ${NAMES[$i]} now?" && start_idea "$dir"
     else

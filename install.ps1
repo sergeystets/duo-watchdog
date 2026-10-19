@@ -3,7 +3,7 @@
 #   install.bat              pick from the IntelliJ IDEA and VS Code installs found
 #   install.bat "<folder>"   offer that IntelliJ IDEA or VS Code too, e.g. one in an unusual place
 #
-# IntelliJ IDEA gets the plugin built by intellij\gradlew installPlugin (needs JDK 17+), VS Code the extension
+# IntelliJ IDEA gets the plugin built by gradlew installPlugin (needs JDK 17+), VS Code the extension
 # packaged from vscode\ (needs Node.js 20+). Runs on the Windows PowerShell 5.1 that Windows 10 and 11 ship.
 param([string]$Folder)
 
@@ -411,7 +411,7 @@ function Install-Idea($Target) {
         }
     }
     Say "Building the plugin for $($Target.Name) (the first build downloads Gradle and a JDK and can take a few minutes)..."
-    & .\intellij\gradlew.bat -p intellij installPlugin "-PideaPath=$dir" --quiet --console=plain
+    & .\gradlew.bat :intellij:installPlugin "-PideaPath=$dir" --quiet --console=plain
     if ($LASTEXITCODE -eq 0) {
         [void]$Results.Add("OK       $($Target.Name): Duo Watchdog $PluginVersion installed.")
         if (YesDefault "Start $($Target.Name) now?") { Start-Process (Join-Path $dir 'bin\idea64.exe') }
