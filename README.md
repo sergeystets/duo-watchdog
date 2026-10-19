@@ -156,7 +156,46 @@ against IDEA 2026.2 or later. The plugin's classes target Java 21 in both cases.
 
 The build compiles against the IntelliJ IDEA **already installed** on your machine and never downloads one. It looks in the usual places
 (`/Applications`, `~/Applications`, `C:/Program Files/JetBrains`, `%LOCALAPPDATA%/Programs`, `/opt`, and Toolbox on Linux)
-and logs which IDE it picked. To choose one yourself:
+and logs which IDE it picked. If it can't find yours, or picks the wrong one, give it the path yourself.
+
+#### Find your IntelliJ IDEA folder
+
+You need the IDEA **install folder**: the one that contains `product-info.json` (on macOS, the `.app` bundle itself).
+It is not `bin`, and not `idea64.exe` / `idea.sh`.
+
+**Windows (PowerShell):** list every IntelliJ install in the standard and Toolbox locations:
+
+```powershell
+Get-ChildItem "C:\Program Files\JetBrains", "$env:LOCALAPPDATA\Programs", "$env:LOCALAPPDATA\JetBrains\Toolbox\apps" `
+  -Filter product-info.json -Recurse -Depth 3 -ErrorAction SilentlyContinue |
+  Select-Object -ExpandProperty DirectoryName
+# e.g. C:\Program Files\JetBrains\IntelliJ IDEA 2025.3
+```
+
+Or use the Start menu: right-click **IntelliJ IDEA** → *More* → *Open file location*. If that opens a shortcut, right-click it →
+*Open file location* again. You end up in the IDE's `bin` folder. The folder you need is **its parent**.
+
+**macOS:**
+
+```bash
+mdfind "kMDItemCFBundleIdentifier == 'com.jetbrains.intellij*'"
+# e.g. /Applications/IntelliJ IDEA.app
+```
+
+**Linux:**
+
+```bash
+dirname "$(dirname "$(readlink -f "$(command -v idea || command -v idea.sh)")")"
+# or look in the usual places:
+ls -d /opt/idea* ~/.local/share/JetBrains/Toolbox/apps/*/ 2>/dev/null
+```
+
+**JetBrains Toolbox (any OS):** click **⋮** next to IntelliJ IDEA → *Settings* → *Configuration*. The *Install location* there is
+the path you need. *Show in Explorer / Finder* in the same menu opens the folder.
+
+#### Pass the path to the build
+
+To choose the IDE yourself:
 
 ```bash
 ./gradlew buildPlugin -PideaPath="/path/to/IntelliJ IDEA.app"
@@ -205,7 +244,8 @@ cd duo-watchdog
 ```
 
 The build finds IntelliJ IDEA in `C:\Program Files\JetBrains` or `%LOCALAPPDATA%\Programs` (Toolbox) on its own.
-If IDEA is installed somewhere else, pass its folder. Keep the quotes, because the path contains spaces:
+If IDEA is installed somewhere else, [find its folder](#find-your-intellij-idea-folder) and pass it. Keep the quotes,
+because the path contains spaces:
 
 ```powershell
 .\gradlew.bat buildPlugin "-PideaPath=D:\Tools\IntelliJ IDEA 2025.3"
