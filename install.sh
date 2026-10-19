@@ -302,15 +302,15 @@ logo() {
 
 widest() { awk '{ if (length > w) w = length } END { print w + 0 }'; }
 
-# Puts the lines of $2 to the right of the dog on stdin, starting at its row $1, 4 columns clear of the widest
-# dog line they sit beside. With "width" as $3, prints only how wide that would be.
+# Puts the lines of $2 to the right of the dog on stdin, starting at its row $1, $3 columns clear of the widest
+# dog line they sit beside. With "width" as $4, prints only how wide that would be.
 beside() {
-    BESIDE="$2" awk -v start="$1" -v mode="${3:-}" '
+    BESIDE="$2" awk -v start="$1" -v gap="$3" -v mode="${4:-}" '
         { dog[NR] = $0 }
         END {
             n = split(ENVIRON["BESIDE"], text, "\n")
             for (i = start; i < start + n; i++) if (length(dog[i]) > col) col = length(dog[i])
-            col += 4
+            col += gap
             for (k = 1; k <= n; k++) if (col + length(text[k]) > width) width = col + length(text[k])
             if (mode == "width") { print width; exit }
             for (i = 1; i <= NR; i++) {
@@ -325,7 +325,7 @@ beside() {
 # A terminal too narrow for the drawing gets the dog with a narrower title beside it, then the dog with the
 # title under it, then the title alone, since wrapped lines would tear the dog apart.
 banner() {
-    local art="" dog row title columns
+    local art="" dog row title columns gap
     columns=$(tput cols 2>/dev/null || say 80)
     [ -f "$LOGO" ] && art=$(logo)
     say
@@ -339,8 +339,11 @@ banner() {
     row=$(say "$art" | awk '/[^ ] {10,}[^ ]/ { print NR; exit }')
     title=$(printf '%s\n' "D U O   W A T C H D O G" "" "Guards your GitLab Duo credits" \
         "in IntelliJ IDEA and VS Code." "" "Installer, version $1")
-    if [ -n "$art" ] && [ "$(say "$dog" | beside "${row:-1}" "$title" width)" -le "$columns" ]; then
-        say "$dog" | beside "${row:-1}" "$title"
+    # As wide a gap between dog and title as the terminal allows, from 4 to 10 columns.
+    gap=$((columns - $(say "$dog" | beside "${row:-1}" "$title" 0 width)))
+    [ "$gap" -gt 10 ] && gap=10
+    if [ -n "$art" ] && [ "$gap" -ge 4 ]; then
+        say "$dog" | beside "${row:-1}" "$title" "$gap"
     else
         if [ -n "$art" ] && [ "$(say "$dog" | widest)" -le "$columns" ]; then
             say "$dog"
