@@ -121,29 +121,78 @@ extension_version() {
 
 node_major() { node --version 2>/dev/null | sed 's/^v//; s/\..*//'; }
 
-# --- What is on this machine -----------------------------------------------------------------------------
-
-state() { if [ -n "$1" ]; then say "Duo Watchdog $1 installed"; else say "not installed"; fi; }
-
-KINDS=()  # idea | code
-PLACES=() # the IDEA folder or the VS Code CLI
-LABELS=()
-
-add_idea() {
-    local dir=$1 label
-    label="IntelliJ IDEA $(info "$dir" version)  $dir"
-    if [ "$(branch "$dir")" -lt 243 ] 2>/dev/null; then
-        say "  Skipping $label: Duo Watchdog needs IntelliJ IDEA 2024.3 or later."
-        return
-    fi
-    local installed
-    installed=$(plugin_version "$dir")
-    label="$label  ($(state "$installed"))"
-    idea_running "$dir" && label="$label  [running]"
-    KINDS+=(idea) PLACES+=("$dir") LABELS+=("$label")
+# The folder VS Code is installed in, from its CLI: the .app on macOS, the folder above bin elsewhere.
+code_folder() {
+    local real
+    real=$(readlink -f "$1" 2>/dev/null || printf '%s' "$1")
+    case "$real" in
+        */Contents/Resources/app/bin/*) say "${real%%/Contents/Resources/app/bin/*}" ;;
+        */bin/code | */bin/code-insiders | */bin/codium | */bin/cursor) dirname "$(dirname "$real")" ;;
+        *) say "$1" ;;
+    esac
 }
 
-bold "Duo Watchdog installer: plugin $PLUGIN_VERSION, VS Code extension $EXTENSION_VERSION"
+# --- What is on this machine -----------------------------------------------------------------------------
+
+KINDS=()   # idea | code
+PLACES=()  # the IDEA folder or the VS Code CLI
+NAMES=()   # e.g. IntelliJ IDEA 2025.3.1
+FOLDERS=() # where the editor is installed
+CURRENT=() # the Duo Watchdog version it has, or empty
+
+new_version() { if [ "${KINDS[$1]}" = idea ]; then say "$PLUGIN_VERSION"; else say "$EXTENSION_VERSION"; fi; }
+
+# What installing does to target $1, e.g. "update Duo Watchdog 0.2.0 -> 0.2.1".
+plan() {
+    local current=${CURRENT[$1]} new
+    new=$(new_version "$1")
+    if [ -z "$current" ]; then
+        say "install Duo Watchdog $new"
+    elif [ "$current" = "$new" ]; then
+        say "reinstall Duo Watchdog $new"
+    else
+        say "update Duo Watchdog $current -> $new"
+    fi
+}
+
+status() {
+    local current=${CURRENT[$1]} new
+    new=$(new_version "$1")
+    if [ -z "$current" ]; then
+        say "Duo Watchdog is not installed yet."
+    elif [ "$current" = "$new" ]; then
+        say "Duo Watchdog $current is installed (up to date)."
+    else
+        say "Duo Watchdog $current is installed; $new is available."
+    fi
+}
+
+add_idea() {
+    local dir=$1 name
+    name="IntelliJ IDEA $(info "$dir" version)"
+    if [ "$(branch "$dir")" -lt 243 ] 2>/dev/null; then
+        say "  Skipping $name in $dir: Duo Watchdog needs IntelliJ IDEA 2024.3 or later."
+        return
+    fi
+    KINDS+=(idea) PLACES+=("$dir") NAMES+=("$name") FOLDERS+=("$dir") CURRENT+=("$(plugin_version "$dir")")
+}
+
+show() {
+    local i=$1
+    say
+    bold "  [$((i + 1))] ${NAMES[$i]}"
+    say "      ${FOLDERS[$i]}"
+    say "      $(status "$i")"
+    if [ "${KINDS[$i]}" = idea ] && idea_running "${PLACES[$i]}"; then
+        say "      It is running now; you'll be asked to close it before installing."
+    fi
+}
+
+if [ "$PLUGIN_VERSION" = "$EXTENSION_VERSION" ]; then
+    bold "Duo Watchdog $PLUGIN_VERSION installer"
+else
+    bold "Duo Watchdog installer (IntelliJ plugin $PLUGIN_VERSION, VS Code extension $EXTENSION_VERSION)"
+fi
 say "Looking for IntelliJ IDEA and VS Code..."
 
 ARGUMENT_IDEA=""
@@ -162,39 +211,41 @@ while IFS= read -r dir; do
 done < <(find_ideas)
 while IFS= read -r cli; do
     [ -n "$cli" ] || continue
-    installed=$(extension_version "$cli")
-    KINDS+=(code) PLACES+=("$cli")
-    LABELS+=("$(code_name "$cli") $("$cli" --version 2>/dev/null | head -n 1 || true)  $cli  ($(state "$installed"))")
+    KINDS+=(code) PLACES+=("$cli") FOLDERS+=("$(code_folder "$cli")") CURRENT+=("$(extension_version "$cli")")
+    NAMES+=("$(code_name "$cli") $("$cli" --version 2>/dev/null | head -n 1 || true)")
 done < <(find_codes)
 
-say
 if [ ${#KINDS[@]} -eq 0 ]; then
+    say
     say "No IntelliJ IDEA (2024.3+) or VS Code found."
     say "Run ./install.sh \"/path/to/IntelliJ IDEA\" for an IDEA in an unusual place,"
     say "or put VS Code's 'code' command on the PATH (VS Code: Shell Command: Install 'code' command in PATH)."
     exit 1
 fi
 
-bold "Where should Duo Watchdog go?"
-for i in "${!KINDS[@]}"; do say "  $((i + 1))) ${LABELS[$i]}"; done
-say "  a) all of the above"
-say "  p) another IntelliJ IDEA folder"
+say
+say "Found on this computer:"
+for i in "${!KINDS[@]}"; do show "$i"; done
+say
 
 CHOSEN=()
 while [ ${#CHOSEN[@]} -eq 0 ]; do
-    answer=$(ask "Numbers separated by spaces, a, p or q to quit [1]: ") || exit 1
-    answer=${answer:-1}
+    say "Install into: press Enter for all, or type numbers (e.g. 1 2). p = add an IntelliJ IDEA folder, q = quit."
+    answer=$(ask "Your choice: ") || exit 1
     case "$answer" in
+        "") CHOSEN=("${!KINDS[@]}") ;;
         q | Q) exit 0 ;;
-        a | A) CHOSEN=("${!KINDS[@]}") ;;
         p | P)
             dir=$(ask "IntelliJ IDEA folder (the one with product-info.json; on macOS the .app): ") || exit 1
             dir=${dir%/}
             [ "$(basename "$dir")" = bin ] && dir=$(dirname "$dir")
             if is_intellij "$dir"; then
                 count=${#KINDS[@]}
-                add_idea "$dir"
-                [ ${#KINDS[@]} -gt "$count" ] && CHOSEN=("$count")
+                add_idea "$(cd "$dir" && pwd -P)"
+                if [ ${#KINDS[@]} -gt "$count" ]; then
+                    show "$count"
+                    say
+                fi
             else
                 say "  $dir is not an IntelliJ IDEA folder."
             fi
@@ -204,7 +255,7 @@ while [ ${#CHOSEN[@]} -eq 0 ]; do
                 if [[ "$n" =~ ^[0-9]+$ ]] && [ "$n" -ge 1 ] && [ "$n" -le ${#KINDS[@]} ]; then
                     CHOSEN+=($((n - 1)))
                 else
-                    say "  No option $n."
+                    say "  There is no [$n]."
                     CHOSEN=()
                     break
                 fi
@@ -232,8 +283,12 @@ if needs code; then
 fi
 
 say
-bold "About to install:"
-for i in "${CHOSEN[@]}"; do say "  ${LABELS[$i]}"; done
+say "Plan:"
+for i in "${CHOSEN[@]}"; do
+    note=""
+    [ "${KINDS[$i]}" = idea ] && idea_running "${PLACES[$i]}" && note=" (you'll be asked to close it first)"
+    say "  - ${NAMES[$i]}: $(plan "$i")$note"
+done
 yes_default "Continue?" || exit 0
 
 # --- Install ---------------------------------------------------------------------------------------------
@@ -242,26 +297,26 @@ RESULTS=()
 VSIX=""
 
 install_idea() {
-    local dir=$1
+    local i=$1 dir=${PLACES[$1]}
     while idea_running "$dir"; do
-        say "IntelliJ IDEA at $dir is running. Plugins can be replaced only while it is closed."
-        answer=$(ask "Quit it (IntelliJ IDEA > Quit, or File > Exit), then press Enter. s to skip it: ") || exit 1
+        say "${NAMES[$i]} is running. Plugins can be replaced only while it is closed."
+        answer=$(ask "Quit it (IntelliJ IDEA > Quit, or File > Exit), then press Enter. s = skip it: ") || exit 1
         case "$answer" in
-            s | S) RESULTS+=("skipped   IntelliJ IDEA  $dir  (it was running)") && return ;;
+            s | S) RESULTS+=("SKIPPED  ${NAMES[$i]}: it was running.") && return ;;
         esac
     done
-    say "Building the plugin against $dir (the first build downloads Gradle and a JDK and can take a few minutes)..."
+    say "Building the plugin for ${NAMES[$i]} (the first build downloads Gradle and a JDK and can take a few minutes)..."
     if intellij/gradlew -p intellij installPlugin -PideaPath="$dir" --quiet --console=plain; then
-        RESULTS+=("installed IntelliJ IDEA  $dir  -> Duo Watchdog $PLUGIN_VERSION")
-        yes_default "Start IntelliJ IDEA now?" && start_idea "$dir"
+        RESULTS+=("OK       ${NAMES[$i]}: Duo Watchdog $PLUGIN_VERSION installed.")
+        yes_default "Start ${NAMES[$i]} now?" && start_idea "$dir"
     else
-        RESULTS+=("FAILED    IntelliJ IDEA  $dir  (see the Gradle output above)")
+        RESULTS+=("FAILED   ${NAMES[$i]}: the build failed, see the Gradle output above.")
     fi
 }
 
 package_extension() {
-    say "Packaging the VS Code extension (npm ci && npm run package)..."
-    if (cd vscode && npm ci --no-audit --no-fund --loglevel=error && npm run --silent package); then
+    say "Packaging the VS Code extension..."
+    if (cd vscode && npm ci --no-audit --no-fund --loglevel=error && npm run --silent package >/dev/null); then
         VSIX="vscode/duo-watchdog-$EXTENSION_VERSION.vsix"
     else
         VSIX="failed"
@@ -269,32 +324,33 @@ package_extension() {
 }
 
 install_code() {
-    local cli=$1 name
-    name=$(code_name "$cli")
+    local i=$1 cli=${PLACES[$1]}
     [ -n "$VSIX" ] || package_extension
     if [ "$VSIX" = failed ] || [ ! -f "$VSIX" ]; then
         VSIX=failed
-        RESULTS+=("FAILED    $name  $cli  (packaging failed, see the npm output above)")
+        RESULTS+=("FAILED   ${NAMES[$i]}: packaging the extension failed, see the npm output above.")
         return
     fi
-    if "$cli" --install-extension "$VSIX" --force; then
-        RESULTS+=("installed $name  $cli  -> Duo Watchdog $EXTENSION_VERSION (run 'Developer: Reload Window' in open windows)")
+    say "Installing into ${NAMES[$i]}..."
+    if "$cli" --install-extension "$VSIX" --force >/dev/null; then
+        RESULTS+=("OK       ${NAMES[$i]}: Duo Watchdog $EXTENSION_VERSION installed. In open windows run 'Developer: Reload Window'.")
     else
-        RESULTS+=("FAILED    $name  $cli")
+        RESULTS+=("FAILED   ${NAMES[$i]}: '$cli --install-extension' failed.")
     fi
 }
 
 for i in "${CHOSEN[@]}"; do
     say
     case "${KINDS[$i]}" in
-        idea) install_idea "${PLACES[$i]}" ;;
-        code) install_code "${PLACES[$i]}" ;;
+        idea) install_idea "$i" ;;
+        code) install_code "$i" ;;
     esac
 done
 
 say
-bold "Done:"
+bold "Summary"
 for result in "${RESULTS[@]}"; do say "  $result"; done
 for result in "${RESULTS[@]}"; do case "$result" in FAILED*) exit 1 ;; esac; done
 say
-say "Next: open Settings > Tools > Duo Watchdog in IntelliJ IDEA, or run 'Duo Watchdog: Set GitLab Token' in VS Code."
+say "Next: set your GitLab token. IntelliJ IDEA: Settings > Tools > Duo Watchdog."
+say "VS Code: Ctrl/Cmd+Shift+P > 'Duo Watchdog: Set GitLab Token'."

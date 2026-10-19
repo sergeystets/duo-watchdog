@@ -105,25 +105,60 @@ function Get-NodeMajor {
     if (Get-Command node -ErrorAction SilentlyContinue) { [int]((& node --version) -replace '^v(\d+).*', '$1') } else { 0 }
 }
 
+# The folder VS Code is installed in, from its CLI: the folder above bin\code.cmd.
+function Get-CodeFolder([string]$Cli) {
+    $bin = Split-Path $Cli -Parent
+    if ((Split-Path $bin -Leaf) -eq 'bin') { Split-Path $bin -Parent } else { $Cli }
+}
+
 # --- What is on this machine -----------------------------------------------------------------------------
 
 $Targets = New-Object System.Collections.ArrayList
 
-function Add-Idea([string]$Dir) {
-    $info = Get-ProductInfo $Dir
-    $label = "IntelliJ IDEA $($info.version)  $Dir"
-    $branch = [int](($info.buildNumber -replace '^[A-Z]+-', '') -replace '\..*', '')
-    if ($branch -lt 243) {
-        Say "  Skipping ${label}: Duo Watchdog needs IntelliJ IDEA 2024.3 or later."
-        return
-    }
-    $installed = Get-PluginVersion $Dir
-    if ($installed) { $label += "  (Duo Watchdog $installed installed)" } else { $label += '  (not installed)' }
-    if (Test-IdeaRunning $Dir) { $label += '  [running]' }
-    [void]$Targets.Add([pscustomobject]@{ Kind = 'idea'; Place = $Dir; Label = $label })
+function Get-NewVersion($Target) { if ($Target.Kind -eq 'idea') { $PluginVersion } else { $ExtensionVersion } }
+
+# What installing does to the target, e.g. "update Duo Watchdog 0.2.0 -> 0.2.1".
+function Get-Plan($Target) {
+    $new = Get-NewVersion $Target
+    if (-not $Target.Current) { "install Duo Watchdog $new" }
+    elseif ($Target.Current -eq $new) { "reinstall Duo Watchdog $new" }
+    else { "update Duo Watchdog $($Target.Current) -> $new" }
 }
 
-Bold "Duo Watchdog installer: plugin $PluginVersion, VS Code extension $ExtensionVersion"
+function Get-Status($Target) {
+    $new = Get-NewVersion $Target
+    if (-not $Target.Current) { 'Duo Watchdog is not installed yet.' }
+    elseif ($Target.Current -eq $new) { "Duo Watchdog $($Target.Current) is installed (up to date)." }
+    else { "Duo Watchdog $($Target.Current) is installed; $new is available." }
+}
+
+function Add-Idea([string]$Dir) {
+    $info = Get-ProductInfo $Dir
+    $name = "IntelliJ IDEA $($info.version)"
+    $branch = [int](($info.buildNumber -replace '^[A-Z]+-', '') -replace '\..*', '')
+    if ($branch -lt 243) {
+        Say "  Skipping $name in ${Dir}: Duo Watchdog needs IntelliJ IDEA 2024.3 or later."
+        return
+    }
+    [void]$Targets.Add([pscustomobject]@{ Kind = 'idea'; Place = $Dir; Name = $name; Folder = $Dir; Current = (Get-PluginVersion $Dir) })
+}
+
+function Show-Target([int]$Index) {
+    $target = $Targets[$Index]
+    Say
+    Bold "  [$($Index + 1)] $($target.Name)"
+    Say "      $($target.Folder)"
+    Say "      $(Get-Status $target)"
+    if ($target.Kind -eq 'idea' -and (Test-IdeaRunning $target.Place)) {
+        Say "      It is running now; you'll be asked to close it before installing."
+    }
+}
+
+if ($PluginVersion -eq $ExtensionVersion) {
+    Bold "Duo Watchdog $PluginVersion installer"
+} else {
+    Bold "Duo Watchdog installer (IntelliJ plugin $PluginVersion, VS Code extension $ExtensionVersion)"
+}
 Say 'Looking for IntelliJ IDEA and VS Code...'
 
 $ArgumentIdea = ''
@@ -135,39 +170,40 @@ foreach ($dir in Find-Ideas) {
     if ($dir -ne $ArgumentIdea) { Add-Idea $dir }
 }
 foreach ($cli in Find-Codes) {
-    $installed = Get-ExtensionVersion $cli
-    $state = if ($installed) { "Duo Watchdog $installed installed" } else { 'not installed' }
     $version = (& $cli --version 2>$null | Select-Object -First 1)
-    [void]$Targets.Add([pscustomobject]@{ Kind = 'code'; Place = $cli; Label = "$(Get-CodeName $cli) $version  $cli  ($state)" })
+    [void]$Targets.Add([pscustomobject]@{
+            Kind = 'code'; Place = $cli; Name = "$(Get-CodeName $cli) $version"; Folder = (Get-CodeFolder $cli)
+            Current = (Get-ExtensionVersion $cli)
+        })
 }
 
-Say
 if ($Targets.Count -eq 0) {
+    Say
     Say 'No IntelliJ IDEA (2024.3+) or VS Code found.'
     Say 'Run install.bat "C:\path\to\IntelliJ IDEA" for an IDEA in an unusual place,'
     Say "or reinstall VS Code with 'Add to PATH' checked."
     exit 1
 }
 
-Bold 'Where should Duo Watchdog go?'
-for ($i = 0; $i -lt $Targets.Count; $i++) { Say "  $($i + 1)) $($Targets[$i].Label)" }
-Say '  a) all of the above'
-Say '  p) another IntelliJ IDEA folder'
+Say
+Say 'Found on this computer:'
+for ($i = 0; $i -lt $Targets.Count; $i++) { Show-Target $i }
+Say
 
 $Chosen = @()
 while ($Chosen.Count -eq 0) {
-    $answer = Ask 'Numbers separated by spaces, a, p or q to quit [1]'
-    if (-not $answer) { $answer = '1' }
+    Say 'Install into: press Enter for all, or type numbers (e.g. 1 2). p = add an IntelliJ IDEA folder, q = quit.'
+    $answer = (Ask 'Your choice').Trim()
     switch -Regex ($answer) {
+        '^$' { $Chosen = @(0..($Targets.Count - 1)) }
         '^[qQ]$' { exit 0 }
-        '^[aA]$' { $Chosen = @(0..($Targets.Count - 1)) }
         '^[pP]$' {
             $typed = Ask 'IntelliJ IDEA folder (the one with product-info.json)'
             $dir = Resolve-IdeaFolder $typed
             if ($dir) {
                 $count = $Targets.Count
                 Add-Idea $dir
-                if ($Targets.Count -gt $count) { $Chosen = @($count) }
+                if ($Targets.Count -gt $count) { Show-Target $count; Say }
             } else {
                 Say "  $typed is not an IntelliJ IDEA folder."
             }
@@ -178,7 +214,7 @@ while ($Chosen.Count -eq 0) {
                 if ($n -match '^\d+$' -and [int]$n -ge 1 -and [int]$n -le $Targets.Count) {
                     $picked += [int]$n - 1
                 } else {
-                    Say "  No option $n."
+                    Say "  There is no [$n]."
                     $picked = @()
                     break
                 }
@@ -205,8 +241,12 @@ if (($Selected | Where-Object Kind -eq 'code') -and ((Get-NodeMajor) -lt 20 -or 
 }
 
 Say
-Bold 'About to install:'
-$Selected | ForEach-Object { Say "  $($_.Label)" }
+Say 'Plan:'
+foreach ($target in $Selected) {
+    $note = ''
+    if ($target.Kind -eq 'idea' -and (Test-IdeaRunning $target.Place)) { $note = " (you'll be asked to close it first)" }
+    Say "  - $($target.Name): $(Get-Plan $target)$note"
+}
 if (-not (YesDefault 'Continue?')) { exit 0 }
 
 # --- Install ---------------------------------------------------------------------------------------------
@@ -214,30 +254,31 @@ if (-not (YesDefault 'Continue?')) { exit 0 }
 $Results = New-Object System.Collections.ArrayList
 $script:Vsix = ''
 
-function Install-Idea([string]$Dir) {
-    while (Test-IdeaRunning $Dir) {
-        Say "IntelliJ IDEA at $Dir is running. Plugins can be replaced only while it is closed."
-        if ((Ask 'Close it (File > Exit), then press Enter. s to skip it') -match '^[sS]$') {
-            [void]$Results.Add("skipped   IntelliJ IDEA  $Dir  (it was running)")
+function Install-Idea($Target) {
+    $dir = $Target.Place
+    while (Test-IdeaRunning $dir) {
+        Say "$($Target.Name) is running. Plugins can be replaced only while it is closed."
+        if ((Ask 'Close it (File > Exit), then press Enter. s = skip it') -match '^[sS]$') {
+            [void]$Results.Add("SKIPPED  $($Target.Name): it was running.")
             return
         }
     }
-    Say "Building the plugin against $Dir (the first build downloads Gradle and a JDK and can take a few minutes)..."
-    & .\intellij\gradlew.bat -p intellij installPlugin "-PideaPath=$Dir" --quiet --console=plain
+    Say "Building the plugin for $($Target.Name) (the first build downloads Gradle and a JDK and can take a few minutes)..."
+    & .\intellij\gradlew.bat -p intellij installPlugin "-PideaPath=$dir" --quiet --console=plain
     if ($LASTEXITCODE -eq 0) {
-        [void]$Results.Add("installed IntelliJ IDEA  $Dir  -> Duo Watchdog $PluginVersion")
-        if (YesDefault 'Start IntelliJ IDEA now?') { Start-Process (Join-Path $Dir 'bin\idea64.exe') }
+        [void]$Results.Add("OK       $($Target.Name): Duo Watchdog $PluginVersion installed.")
+        if (YesDefault "Start $($Target.Name) now?") { Start-Process (Join-Path $dir 'bin\idea64.exe') }
     } else {
-        [void]$Results.Add("FAILED    IntelliJ IDEA  $Dir  (see the Gradle output above)")
+        [void]$Results.Add("FAILED   $($Target.Name): the build failed, see the Gradle output above.")
     }
 }
 
 function Build-Extension {
-    Say 'Packaging the VS Code extension (npm ci && npm run package)...'
+    Say 'Packaging the VS Code extension...'
     Push-Location vscode
     try {
         & npm.cmd ci --no-audit --no-fund --loglevel=error
-        if ($LASTEXITCODE -eq 0) { & npm.cmd run --silent package }
+        if ($LASTEXITCODE -eq 0) { & npm.cmd run --silent package | Out-Null }
         if ($LASTEXITCODE -eq 0 -and (Test-Path "duo-watchdog-$ExtensionVersion.vsix")) {
             $script:Vsix = (Resolve-Path "duo-watchdog-$ExtensionVersion.vsix").Path
         } else {
@@ -248,29 +289,30 @@ function Build-Extension {
     }
 }
 
-function Install-Code([string]$Cli) {
-    $name = Get-CodeName $Cli
+function Install-Code($Target) {
     if (-not $script:Vsix) { Build-Extension }
     if ($script:Vsix -eq 'failed') {
-        [void]$Results.Add("FAILED    $name  $Cli  (packaging failed, see the npm output above)")
+        [void]$Results.Add("FAILED   $($Target.Name): packaging the extension failed, see the npm output above.")
         return
     }
-    & $Cli --install-extension $script:Vsix --force
+    Say "Installing into $($Target.Name)..."
+    & $Target.Place --install-extension $script:Vsix --force | Out-Null
     if ($LASTEXITCODE -eq 0) {
-        [void]$Results.Add("installed $name  $Cli  -> Duo Watchdog $ExtensionVersion (run 'Developer: Reload Window' in open windows)")
+        [void]$Results.Add("OK       $($Target.Name): Duo Watchdog $ExtensionVersion installed. In open windows run 'Developer: Reload Window'.")
     } else {
-        [void]$Results.Add("FAILED    $name  $Cli")
+        [void]$Results.Add("FAILED   $($Target.Name): '$($Target.Place) --install-extension' failed.")
     }
 }
 
 foreach ($target in $Selected) {
     Say
-    if ($target.Kind -eq 'idea') { Install-Idea $target.Place } else { Install-Code $target.Place }
+    if ($target.Kind -eq 'idea') { Install-Idea $target } else { Install-Code $target }
 }
 
 Say
-Bold 'Done:'
+Bold 'Summary'
 $Results | ForEach-Object { Say "  $_" }
 if ($Results | Where-Object { $_ -like 'FAILED*' }) { exit 1 }
 Say
-Say "Next: open Settings > Tools > Duo Watchdog in IntelliJ IDEA, or run 'Duo Watchdog: Set GitLab Token' in VS Code."
+Say 'Next: set your GitLab token. IntelliJ IDEA: Settings > Tools > Duo Watchdog.'
+Say "VS Code: Ctrl+Shift+P > 'Duo Watchdog: Set GitLab Token'."
