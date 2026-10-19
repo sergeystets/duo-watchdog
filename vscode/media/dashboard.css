@@ -1,0 +1,380 @@
+/* Every colour comes from the VS Code theme, so the page follows light, dark and high contrast. */
+:root {
+    --text: var(--vscode-foreground);
+    --secondary: var(--vscode-descriptionForeground);
+    --accent: var(--vscode-charts-blue);
+    --warning: var(--vscode-charts-orange);
+    --error: var(--vscode-charts-red);
+    --ok: var(--vscode-charts-green);
+    --border: var(--vscode-widget-border, var(--vscode-panel-border, rgba(128, 128, 128, 0.35)));
+    --background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+    --popup: var(--vscode-editorHoverWidget-background, var(--background));
+    --popup-border: var(--vscode-editorHoverWidget-border, var(--border));
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    color: var(--text);
+    background: var(--background);
+    font-family: var(--vscode-font-family);
+    font-size: 13px;
+}
+
+.toolbar {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--border);
+}
+
+.toolbar .byline {
+    margin-left: auto;
+    color: var(--secondary);
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+button.icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 22px;
+    padding: 0;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--vscode-icon-foreground, var(--text));
+    cursor: pointer;
+}
+
+button.icon:hover {
+    background: var(--vscode-toolbar-hoverBackground);
+}
+
+button.icon:focus-visible,
+button.link:focus-visible {
+    outline: 1px solid var(--vscode-focusBorder);
+}
+
+button.icon svg {
+    width: 16px;
+    height: 16px;
+}
+
+main {
+    padding: 16px 16px 12px;
+}
+
+.error {
+    color: var(--vscode-errorForeground, var(--error));
+    font-size: 12px;
+    margin: 0 0 12px;
+    overflow-wrap: anywhere;
+}
+
+.secondary {
+    color: var(--secondary);
+}
+
+p {
+    margin: 0;
+}
+
+.actions {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    margin-top: 10px;
+}
+
+button.link {
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--vscode-textLink-foreground);
+    font: inherit;
+    cursor: pointer;
+}
+
+button.link:hover {
+    color: var(--vscode-textLink-activeForeground);
+    text-decoration: underline;
+}
+
+/* "21.5 of 300 credits used" and the Active or Blocked pill. */
+.headline {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+}
+
+.headline .big {
+    font-size: 34px;
+    font-weight: 700;
+    line-height: 1.15;
+}
+
+.headline .caption {
+    flex: 1;
+    min-width: 0;
+    font-size: 14px;
+    color: var(--secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pill {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-size: 12px;
+    color: var(--ok);
+    white-space: nowrap;
+    align-self: center;
+}
+
+.pill::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: currentColor;
+    opacity: 0.14;
+}
+
+.pill.blocked {
+    color: var(--error);
+}
+
+.pill svg {
+    width: 12px;
+    height: 12px;
+}
+
+.pill svg path {
+    stroke: var(--background);
+}
+
+.period {
+    margin-top: 4px;
+    font-size: 12px;
+}
+
+.meter {
+    margin-top: 14px;
+    height: 50px;
+}
+
+.tiles {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 14px;
+}
+
+.tile {
+    padding: 9px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    min-width: 0;
+}
+
+.tile .caption {
+    font-size: 11px;
+    color: var(--secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tile .value {
+    margin-top: 2px;
+    font-size: 17px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.tile .unit {
+    margin-left: 4px;
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--secondary);
+}
+
+section {
+    margin-top: 16px;
+}
+
+h2 {
+    margin: 0 0 6px;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+h2 .caption {
+    margin-left: 6px;
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--secondary);
+}
+
+.chart {
+    height: 172px;
+    position: relative;
+}
+
+.features {
+    display: grid;
+    grid-template-columns: minmax(0, min(130px, 40%)) minmax(0, 1fr) 44px;
+    align-items: center;
+    column-gap: 8px;
+    row-gap: 8px;
+    margin-top: 8px;
+    font-size: 12px;
+}
+
+.features .name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.features .track {
+    position: relative;
+    height: 8px;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.features .track::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--text);
+    opacity: 0.08;
+}
+
+.features .fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    min-width: 8px;
+    border-radius: 4px;
+    background: var(--accent);
+}
+
+.features .value {
+    text-align: right;
+    font-weight: 700;
+}
+
+.small {
+    margin-top: 8px;
+    font-size: 11px;
+}
+
+.note {
+    margin-top: 16px;
+    font-size: 11px;
+}
+
+/* SVG pieces of the meter and the daily chart. */
+svg text {
+    font-family: var(--vscode-font-family);
+    font-size: 11px;
+    fill: var(--secondary);
+}
+
+svg text.today {
+    font-size: 10px;
+}
+
+svg text.over {
+    fill: var(--warning);
+}
+
+svg .track {
+    fill: var(--text);
+    fill-opacity: 0.12;
+}
+
+svg .accent {
+    fill: var(--accent);
+}
+
+svg .warning {
+    fill: var(--warning);
+}
+
+svg .error {
+    fill: var(--error);
+}
+
+svg .gap {
+    fill: var(--background);
+}
+
+svg .marker {
+    stroke: var(--accent);
+    stroke-width: 2;
+    stroke-dasharray: 3 2;
+}
+
+svg .marker.over {
+    stroke: var(--warning);
+}
+
+svg .shade {
+    fill: var(--text);
+    fill-opacity: 0.045;
+}
+
+svg .grid {
+    stroke: var(--text);
+    stroke-opacity: 0.1;
+}
+
+svg .axis {
+    stroke: var(--text);
+    stroke-opacity: 0.3;
+}
+
+svg .today-line {
+    stroke: var(--secondary);
+    stroke-dasharray: 3 3;
+}
+
+svg .bar {
+    fill: var(--accent);
+    fill-opacity: 0.85;
+}
+
+svg .bar.hovered {
+    fill-opacity: 1;
+}
+
+svg .callout {
+    fill: var(--popup);
+    stroke: var(--popup-border);
+}
+
+svg text.callout-date {
+    fill: var(--secondary);
+}
+
+svg text.callout-amount {
+    fill: var(--text);
+    font-size: 12px;
+    font-weight: 700;
+}
