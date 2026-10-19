@@ -281,9 +281,9 @@ function Show-Banner([string]$Version) {
     $row = 1
     for ($i = 0; $i -lt $art.Count; $i++) { if ($art[$i] -match '[^ ] {10,}[^ ]') { $row = $i + 1; break } }
     $title = @('D U O   W A T C H D O G', '', 'Guards your GitLab Duo credits', 'in IntelliJ IDEA and VS Code.', '', "Installer, version $Version")
-    # As wide a gap between dog and title as the console allows, from 4 to 10 columns.
+    # As wide a gap between dog and title as the console allows, from 4 to 30 columns.
     $gap = 0
-    if ($art.Count -gt 0) { $gap = [Math]::Min(10, $columns - (Get-Widest @(Join-Beside $dog $row $title 0))) }
+    if ($art.Count -gt 0) { $gap = [Math]::Min(30, $columns - (Get-Widest @(Join-Beside $dog $row $title 0))) }
     if ($art.Count -gt 0 -and $gap -ge 4) {
         Join-Beside $dog $row $title $gap | ForEach-Object { Say $_ }
     } else {
