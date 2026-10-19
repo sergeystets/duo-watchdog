@@ -241,22 +241,31 @@ function Show-All {
     if (-not ($hasIdea -and $hasCode)) { Say }
 }
 
+# The logo without the margin all its lines share and without blank lines above and below it.
+function Get-Logo {
+    $lines = @(Get-Content "$PSScriptRoot/docs/images/logo.ascii" -ErrorAction SilentlyContinue | ForEach-Object { $_.TrimEnd() })
+    $drawn = @(for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i]) { $i } })
+    if ($drawn.Count -eq 0) { return @() }
+    $margin = ($lines[$drawn] | ForEach-Object { $_.Length - $_.TrimStart().Length } | Measure-Object -Minimum).Minimum
+    @($lines[$drawn[0]..$drawn[-1]] | ForEach-Object { if ($_.Length -gt $margin) { $_.Substring($margin) } else { '' } })
+}
+
+# The dog from docs\images\logo.ascii with the title centred under it; only the title when the
+# console is too narrow for the dog, since wrapped lines would tear it apart.
 function Show-Banner([string]$Version) {
-    $dog = @'
-
-       /\            /\
-      /  \__________/  \
-     |                  |      D U O   W A T C H D O G
-     |    (o)    (o)    |
-      \       __       /       Guards your GitLab Duo credits
-       \     (oo)     /        in IntelliJ IDEA and VS Code.
-        \    \__/    /
-         \__________/          Installer, version @VERSION@
-          |        |
-         _|        |_    woof!
-
-'@
-    Write-Host $dog.Replace('@VERSION@', $Version)
+    $columns = 80
+    try { $columns = $Host.UI.RawUI.WindowSize.Width } catch { }
+    if (-not $columns) { $columns = 80 }
+    $art = Get-Logo
+    $width = ($art | ForEach-Object { $_.Length } | Measure-Object -Maximum).Maximum
+    if (-not $width -or $width -gt $columns) { $art = @(); $width = 60 }
+    Say
+    if ($art.Count -gt 0) { $art | ForEach-Object { Say $_ }; Say }
+    foreach ($line in 'D U O   W A T C H D O G', '', 'Guards your GitLab Duo credits in IntelliJ IDEA and VS Code.', "Installer, version $Version") {
+        $pad = [Math]::Max(0, [int][Math]::Floor(($width - $line.Length) / 2))
+        if ($line) { Say ((' ' * $pad) + $line) } else { Say }
+    }
+    Say
 }
 
 if ($PluginVersion -eq $ExtensionVersion) { Show-Banner $PluginVersion } else { Show-Banner "$PluginVersion (VS Code $ExtensionVersion)" }
