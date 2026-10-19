@@ -252,9 +252,19 @@ function Get-Logo {
 
 function Get-Widest($Lines) { [int]($Lines | ForEach-Object { $_.Length } | Measure-Object -Maximum).Maximum }
 
+# The dog's lines with $Text to their right, starting at its row $Row (from 1), 4 columns clear of the widest
+# dog line the text sits beside.
+function Join-Beside([string[]]$Dog, [int]$Row, [string[]]$Text) {
+    $column = 4 + (Get-Widest @(for ($k = 0; $k -lt $Text.Count; $k++) { if ($Row - 1 + $k -lt $Dog.Count) { $Dog[$Row - 1 + $k] } }))
+    for ($i = 0; $i -lt $Dog.Count; $i++) {
+        $k = $i - ($Row - 1)
+        if ($k -ge 0 -and $k -lt $Text.Count -and $Text[$k]) { $Dog[$i].PadRight($column) + $Text[$k] } else { $Dog[$i] }
+    }
+}
+
 # docs\images\logo.ascii, the dog with the title beside it, with "version x.y.z" in it set to this version.
-# A console too narrow for all of it gets the dog alone with the title under it, and one too narrow for the
-# dog the title alone, since wrapped lines would tear the dog apart.
+# A console too narrow for the drawing gets the dog with a narrower title beside it, then the dog with the
+# title under it, then the title alone, since wrapped lines would tear the dog apart.
 function Show-Banner([string]$Version) {
     $columns = 80
     try { $columns = $Host.UI.RawUI.WindowSize.Width } catch { }
@@ -268,13 +278,21 @@ function Show-Banner([string]$Version) {
     }
     # The text beside the dog starts after a gap of 10 spaces or more; gaps inside the dog are narrower.
     $dog = @($art | ForEach-Object { ($_ -replace '(?<=[^ ]) {10,}[^ ].*$', '').TrimEnd() })
-    if ($dog.Count -gt 0 -and (Get-Widest $dog) -le $columns) {
-        $dog | ForEach-Object { Say $_ }
-        Say
+    $row = 1
+    for ($i = 0; $i -lt $art.Count; $i++) { if ($art[$i] -match '[^ ] {10,}[^ ]') { $row = $i + 1; break } }
+    $title = @('D U O   W A T C H D O G', '', 'Guards your GitLab Duo credits', 'in IntelliJ IDEA and VS Code.', '', "Installer, version $Version")
+    $joined = @(if ($art.Count -gt 0) { Join-Beside $dog $row $title })
+    if ($joined.Count -gt 0 -and (Get-Widest $joined) -le $columns) {
+        $joined | ForEach-Object { Say $_ }
+    } else {
+        if ($dog.Count -gt 0 -and (Get-Widest $dog) -le $columns) {
+            $dog | ForEach-Object { Say $_ }
+            Say
+        }
+        Say 'D U O   W A T C H D O G'
+        Say 'Guards your GitLab Duo credits in IntelliJ IDEA and VS Code.'
+        Say "Installer, version $Version"
     }
-    Say 'D U O   W A T C H D O G'
-    Say 'Guards your GitLab Duo credits in IntelliJ IDEA and VS Code.'
-    Say "Installer, version $Version"
     Say
 }
 
