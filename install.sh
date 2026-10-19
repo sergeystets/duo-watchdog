@@ -300,28 +300,20 @@ logo() {
         FNR >= first && FNR <= last { line = substr($0, min + 1); sub(/ +$/, "", line); print line }' "$LOGO" "$LOGO"
 }
 
-# Centres every line of the input in $1 columns.
-centre() { awk -v w="$1" '{ pad = int((w - length) / 2); if (pad < 0 || length == 0) pad = 0; printf "%" pad "s%s\n", "", $0 }'; }
-
-widest() { awk '{ if (length > w) w = length } END { print w + 0 }'; }
-
-# The dog from docs/images/logo.ascii with the title under it, both centred on the wider of the two; only the
-# title when the terminal is too narrow for the dog, since wrapped lines would tear it apart.
+# docs/images/logo.ascii, the dog with the title beside it, with "version x.y.z" in it set to this version. A
+# terminal narrower than the drawing gets the title alone, since wrapped lines would tear the dog apart.
 banner() {
-    local title art="" width columns
-    title=$(printf '%s\n' "D U O   W A T C H D O G" "" \
-        "Guards your GitLab Duo credits in IntelliJ IDEA and VS Code." "Installer, version $1")
-    width=$(say "$title" | widest)
+    local art="" columns
     columns=$(tput cols 2>/dev/null || say 80)
     [ -f "$LOGO" ] && art=$(logo)
-    if [ -n "$art" ] && [ "$(say "$art" | widest)" -le "$columns" ]; then
-        [ "$(say "$art" | widest)" -gt "$width" ] && width=$(say "$art" | widest)
-        say
-        # The dog is centred as one block, so its lines keep their places relative to each other.
-        say "$art" | awk -v pad="$(((width - $(say "$art" | widest)) / 2))" '{ printf "%" pad "s%s\n", "", $0 }'
-    fi
     say
-    say "$title" | centre "$width"
+    if [ -n "$art" ] && [ "$(say "$art" | awk '{ if (length > w) w = length } END { print w + 0 }')" -le "$columns" ]; then
+        say "$art" | sed "s/version [0-9][0-9.]*/version $1/"
+    else
+        say "D U O   W A T C H D O G"
+        say "Guards your GitLab Duo credits in IntelliJ IDEA and VS Code."
+        say "Installer, version $1"
+    fi
     say
 }
 

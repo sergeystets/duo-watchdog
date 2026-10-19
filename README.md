@@ -175,16 +175,13 @@ The script is interactive:
 6. **VS Code**: it packages the extension once and installs it with `code --install-extension`. Run
    *Developer: Reload Window* in open VS Code windows to load the new version.
 
-The script greets you with the Duo Watchdog doberman from [`docs/images/logo.ascii`](docs/images/logo.ascii); edit that
-file to change it. In a terminal narrower than the drawing it shows only the title, so the dog doesn't wrap.
+The script greets you with the Duo Watchdog doberman and title from [`docs/images/logo.ascii`](docs/images/logo.ascii),
+printed as drawn; edit that file to change it. Any `version x.y.z` in it is replaced with the version being installed.
+In a terminal narrower than the drawing it shows only the title, so the dog doesn't wrap.
 
 ```
-               (the doberman from docs/images/logo.ascii)
-
-                                    D U O   W A T C H D O G
-
-                 Guards your GitLab Duo credits in IntelliJ IDEA and VS Code.
-                                   Installer, version 0.2.1
+   (docs/images/logo.ascii: the doberman, with "D U O   W A T C H D O G", the subtitle and
+    "Installer, version 0.2.1" beside it)
 
 Looking for IntelliJ IDEA and VS Code...
 
