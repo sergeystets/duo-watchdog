@@ -176,10 +176,10 @@ The script is interactive:
    *Developer: Reload Window* in open VS Code windows to load the new version.
 
 The script greets you with the Duo Watchdog doberman from [`docs/images/logo.ascii`](docs/images/logo.ascii); edit that
-file to change it. In a terminal narrower than the drawing (95 columns) it shows only the title, so the dog doesn't wrap.
+file to change it. In a terminal narrower than the drawing it shows only the title, so the dog doesn't wrap.
 
 ```
-          (the doberman from docs/images/logo.ascii, 95 x 62 characters)
+               (the doberman from docs/images/logo.ascii)
 
                                     D U O   W A T C H D O G
 
