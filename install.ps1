@@ -279,13 +279,8 @@ function Show-Banner([string]$Version) {
     # The text beside the dog starts after a gap of 10 spaces or more; gaps inside the dog are narrower.
     $dog = @($art | ForEach-Object { ($_ -replace '(?<=[^ ]) {10,}[^ ].*$', '').TrimEnd() })
     $title = @('D U O   W A T C H D O G', '', 'Guards your GitLab Duo credits', 'in IntelliJ IDEA and VS Code.', '', "Installer, version $Version")
-    # The title goes beside the rows where the dog is narrowest, the ears, well clear of its nose.
-    $row = 1
-    $least = -1
-    for ($r = 0; $r + $title.Count -le $dog.Count; $r++) {
-        $widest = Get-Widest $dog[$r..($r + $title.Count - 1)]
-        if ($least -lt 0 -or $widest -lt $least) { $least = $widest; $row = $r + 1 }
-    }
+    # The title goes beside the dog's head, from its 8th row: below the ears, above the nose.
+    $row = 8
     # As wide a gap between dog and title as the console allows, from 4 to 30 columns.
     $gap = 0
     if ($art.Count -gt 0) { $gap = [Math]::Min(30, $columns - (Get-Widest @(Join-Beside $dog $row $title 0))) }
