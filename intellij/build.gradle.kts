@@ -90,14 +90,26 @@ tasks.withType<JavaCompile>().configureEach {
 }
 
 dependencies {
-    implementation(project(":core"))
+    implementation(project(":intellij:core"))
     intellijPlatform {
         logger.lifecycle("Duo Watchdog: compiling against the installed IDE at $installedIdea with JDK $compileJdk")
         local(installedIdea)
     }
 }
 
+// The jar and the plugin zip keep the product's name rather than this module's (intellij); the installers
+// look for duo-watchdog-<version>.jar and a duo-watchdog folder.
+base {
+    archivesName = "duo-watchdog"
+}
+
+// The plugin's final jar takes its whole file name from the module, not from archivesName.
+tasks.named<AbstractArchiveTask>("composedJar") {
+    archiveFileName = "duo-watchdog-${project.version}.jar"
+}
+
 intellijPlatform {
+    projectName = "duo-watchdog"
     pluginConfiguration {
         ideaVersion {
             // Installs on 2024.3 and every later IDE, whichever IDE it was compiled against.

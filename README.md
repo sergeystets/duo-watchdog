@@ -224,7 +224,6 @@ For IntelliJ IDEA that's the folder with `product-info.json`; for VS Code, the f
 Close the IDE first:
 
 ```bash
-cd intellij
 ./gradlew installPlugin                                      # the IDEA the build finds
 ./gradlew installPlugin -PideaPath="/path/to/IntelliJ IDEA"  # a specific one
 ```
@@ -274,11 +273,11 @@ Open *Settings → Tools → Duo Watchdog*.
 **Requirements:** JDK 17+ to run Gradle. Gradle downloads the compile JDK itself: 21, or 25 when building
 against IDEA 2026.2 or later. The plugin's classes target Java 21 in both cases.
 
-The IntelliJ plugin lives in [`intellij/`](intellij), a Gradle project of its own; run Gradle there:
+The repository root is a Gradle build with the IntelliJ plugin as its modules (`:intellij` and `:intellij:core`);
+open the root folder in IntelliJ IDEA and run Gradle from it:
 
 ```bash
-cd intellij
-./gradlew :core:test      # unit tests for the core logic
+./gradlew test            # unit tests for the core logic
 ./gradlew buildPlugin     # → intellij/build/distributions/duo-watchdog-0.2.1.zip
 ./gradlew runIde          # launch a sandbox IDE with the plugin installed
 ```
@@ -329,7 +328,6 @@ the path you need. *Show in Explorer / Finder* in the same menu opens the folder
 To choose the IDE yourself:
 
 ```bash
-cd intellij
 ./gradlew buildPlugin -PideaPath="/path/to/IntelliJ IDEA.app"
 # or
 export IDEA_HOME="/path/to/IntelliJ IDEA.app"
@@ -383,7 +381,6 @@ That's all. Steps 4 and 5 are for building by hand instead.
 **4. Build the plugin by hand:**
 
 ```powershell
-cd intellij
 .\gradlew.bat buildPlugin
 ```
 
@@ -398,16 +395,16 @@ because the path contains spaces:
 **5. Find the result:**
 
 ```powershell
-dir build\distributions    # → duo-watchdog-0.2.1.zip (in intellij\)
+dir intellij\build\distributions    # → duo-watchdog-0.2.1.zip
 ```
 
 Then follow [Installation](#installation): *Settings → Plugins → ⚙ → Install Plugin from Disk…* and pick
 `intellij\build\distributions\duo-watchdog-0.2.1.zip`.
 
-**Optional:** run the tests or try the plugin in a sandbox IDE (still in `intellij\`):
+**Optional:** run the tests or try the plugin in a sandbox IDE:
 
 ```powershell
-.\gradlew.bat :core:test
+.\gradlew.bat test
 .\gradlew.bat runIde
 ```
 
@@ -422,9 +419,8 @@ cd duo-watchdog
 rem Only if IDEA is not in a standard location (no quotes around the value in "set"):
 set IDEA_HOME=D:\Tools\IntelliJ IDEA 2025.3
 
-cd intellij
 gradlew.bat buildPlugin
-dir build\distributions
+dir intellij\build\distributions
 ```
 </details>
 
@@ -453,8 +449,10 @@ dir build\distributions
 
 ```
 duo-watchdog/
-├── intellij/                 IntelliJ plugin (Java, Gradle)
-│   ├── core/                 Plain Java, no IntelliJ dependencies
+├── settings.gradle.kts       Root Gradle build: the modules :intellij and :intellij:core
+├── gradlew, gradle/          Gradle wrapper (run everything from the root)
+├── intellij/                 IntelliJ plugin, module :intellij (Java)
+│   ├── core/                 Module :intellij:core: plain Java, no IntelliJ dependencies
 │   │   ├── src/main/…/core/  GraphQL client, billing period & forecast, alert rules, texts
 │   │   ├── src/main/…/ui/    Pure Swing components: dashboard, meter, chart, feature bars, status chip
 │   │   └── src/test/         JUnit 5 tests; also paints the UI headless to core/build/ui-previews/*.png
@@ -472,7 +470,7 @@ duo-watchdog/
 ```
 
 The UI components get their colors from the plugin as light/dark pairs, so they follow the IDE theme.
-Running `./gradlew :core:test` in `intellij/` also renders every dashboard state to PNG. You can review UI changes from those images without starting an IDE.
+Running `./gradlew test` also renders every dashboard state to PNG (in `intellij/core/build/ui-previews/`). You can review UI changes from those images without starting an IDE.
 
 The VS Code extension builds and tests on its own:
 
