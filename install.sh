@@ -300,20 +300,30 @@ logo() {
         FNR >= first && FNR <= last { line = substr($0, min + 1); sub(/ +$/, "", line); print line }' "$LOGO" "$LOGO"
 }
 
-# docs/images/logo.ascii, the dog with the title beside it, with "version x.y.z" in it set to this version. A
-# terminal narrower than the drawing gets the title alone, since wrapped lines would tear the dog apart.
+widest() { awk '{ if (length > w) w = length } END { print w + 0 }'; }
+
+# docs/images/logo.ascii, the dog with the title beside it, with "version x.y.z" in it set to this version.
+# A terminal too narrow for all of it gets the dog alone with the title under it, and one too narrow for the
+# dog the title alone, since wrapped lines would tear the dog apart.
 banner() {
-    local art="" columns
+    local art="" dog columns
     columns=$(tput cols 2>/dev/null || say 80)
     [ -f "$LOGO" ] && art=$(logo)
     say
-    if [ -n "$art" ] && [ "$(say "$art" | awk '{ if (length > w) w = length } END { print w + 0 }')" -le "$columns" ]; then
+    if [ -n "$art" ] && [ "$(say "$art" | widest)" -le "$columns" ]; then
         say "$art" | sed "s/version [0-9][0-9.]*/version $1/"
-    else
-        say "D U O   W A T C H D O G"
-        say "Guards your GitLab Duo credits in IntelliJ IDEA and VS Code."
-        say "Installer, version $1"
+        say
+        return
     fi
+    # The text beside the dog starts after a gap of 10 spaces or more; gaps inside the dog are narrower.
+    dog=$(say "$art" | sed -E 's/([^ ]) {10,}[^ ].*$/\1/; s/ +$//')
+    if [ -n "$art" ] && [ "$(say "$dog" | widest)" -le "$columns" ]; then
+        say "$dog"
+        say
+    fi
+    say "D U O   W A T C H D O G"
+    say "Guards your GitLab Duo credits in IntelliJ IDEA and VS Code."
+    say "Installer, version $1"
     say
 }
 
