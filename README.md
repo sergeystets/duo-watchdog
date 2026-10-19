@@ -31,6 +31,7 @@ forecasts where the month will end, and warns you before you hit your limit.
 
 - [Features](#features)
 - [How it works](#how-it-works)
+- [Requirements](#requirements)
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [Building from source](#building-from-source)
@@ -96,6 +97,28 @@ Enter your cap, or a smaller budget of your own.
 Requests go through the IDE's proxy and trusted certificates
 (*Settings → Appearance & Behavior → System Settings → HTTP Proxy / Server Certificates*).
 
+## Requirements
+
+### Using the plugin
+
+| Component | Minimum version | Notes |
+|---|---|---|
+| JetBrains IDE | **2024.3** (build `243`) | IntelliJ IDEA Community or Ultimate, or any other JetBrains IDE. There is no upper bound. |
+| GitLab | **19.4** | The first version with `currentUser.creditsUsage`. Works on GitLab.com and self-managed. |
+| GitLab account | Member of the top-level group | The group must own a GitLab Duo subscription. You don't need the Owner role. |
+| Personal access token | Scopes `read_api` + `ai_features` | No other scopes are needed. |
+| OS | Windows, macOS, Linux | Any OS the IDE runs on. |
+
+### Building from source
+
+| Tool | Minimum version | Notes |
+|---|---|---|
+| JDK (to run Gradle) | **17** | Gradle 9.8 needs Java 17+. Any JDK 17, 21 or 25 works. |
+| JDK (to compile) | 21 / 25 | Gradle downloads it for you: 21, or 25 when compiling against IDEA 2026.2+. |
+| Gradle | — | No install needed: the wrapper (`gradlew` / `gradlew.bat`) downloads Gradle 9.8.1. |
+| IntelliJ IDEA | optional | If one is installed, the build compiles against it. If not, Gradle downloads IDEA 2024.3 (~1 GB). |
+| Internet access | first build | Needed to download Gradle, the JDK and dependencies. They are cached afterwards. |
+
 ## Installation
 
 1. [Build the plugin](#building-from-source), or get `duo-watchdog-<version>.zip` from a teammate.
@@ -142,6 +165,98 @@ export IDEA_HOME="/path/to/IntelliJ IDEA.app"
 ```
 
 Gradle downloads IntelliJ IDEA 2024.3 (~1 GB, cached after the first run) only when it finds no installed IDEA.
+
+### Step by step on Windows
+
+Run these commands in **PowerShell** (Windows 10 or 11). Each step says what to do when you already have that tool.
+
+**1. Install Git and a JDK** (skip if `git --version` and `java -version` already work, with Java 17 or later):
+
+```powershell
+winget install --id Git.Git -e
+winget install --id EclipseAdoptium.Temurin.21.JDK -e
+```
+
+Then **close the terminal and open a new one** so it picks up the new `PATH`. Check:
+
+```powershell
+git --version
+java -version      # must print 17 or later
+```
+
+> [!TIP]
+> If `java -version` shows an old Java (8 or 11) first, point Gradle at the new JDK for this session:
+> `$env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-21.<version>-hotspot"` (use the folder name you actually have:
+> `dir "C:\Program Files\Eclipse Adoptium"`).
+
+**2. Clone the repository:**
+
+```powershell
+cd $HOME\IdeaProjects     # or any folder you like
+git clone https://github.com/sergeystets/duo-watchdog.git
+cd duo-watchdog
+```
+
+**3. Build the plugin:**
+
+```powershell
+.\gradlew.bat buildPlugin
+```
+
+The build finds IntelliJ IDEA in `C:\Program Files\JetBrains` or `%LOCALAPPDATA%\Programs` (Toolbox) on its own.
+If IDEA is installed somewhere else, pass its folder. Keep the quotes, because the path contains spaces:
+
+```powershell
+.\gradlew.bat buildPlugin "-PideaPath=D:\Tools\IntelliJ IDEA 2025.3"
+```
+
+**4. Find the result:**
+
+```powershell
+dir build\distributions    # → duo-watchdog-0.2.1.zip
+```
+
+Then follow [Installation](#installation): *Settings → Plugins → ⚙ → Install Plugin from Disk…* and pick
+`build\distributions\duo-watchdog-0.2.1.zip`.
+
+**Optional:** run the tests or try the plugin in a sandbox IDE:
+
+```powershell
+.\gradlew.bat :core:test
+.\gradlew.bat runIde
+```
+
+<details>
+<summary>Using the classic Command Prompt (<code>cmd.exe</code>) instead of PowerShell</summary>
+
+```bat
+cd %USERPROFILE%\IdeaProjects
+git clone https://github.com/sergeystets/duo-watchdog.git
+cd duo-watchdog
+
+rem Only if IDEA is not in a standard location (no quotes around the value in "set"):
+set IDEA_HOME=D:\Tools\IntelliJ IDEA 2025.3
+
+gradlew.bat buildPlugin
+dir build\distributions
+```
+</details>
+
+<details>
+<summary>Windows troubleshooting</summary>
+
+- **`'java' is not recognized` / `JAVA_HOME is set to an invalid directory`**: open a new terminal after installing the JDK, or set
+  `$env:JAVA_HOME` to the JDK folder (the one that contains `bin\java.exe`).
+- **Gradle says it requires JVM 17 or later**: `java -version` is older than 17. Install a newer JDK as in step 1.
+- **`git clone` asks for credentials**: the repository is private. Sign in with your GitHub account in the window that Git
+  Credential Manager opens, or run `winget install --id GitHub.cli -e`, then `gh auth login`.
+- **The build downloads IntelliJ IDEA although it is installed**: pass `-PideaPath=...` as in step 3.
+- **Corporate proxy**: Gradle doesn't use the IDE's proxy settings. Add your proxy to `%USERPROFILE%\.gradle\gradle.properties`:
+  ```properties
+  systemProp.https.proxyHost=proxy.example.com
+  systemProp.https.proxyPort=8080
+  ```
+</details>
 
 ## Project structure
 
