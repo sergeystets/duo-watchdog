@@ -162,8 +162,12 @@ The script is interactive:
 
 1. It finds every **IntelliJ IDEA** (2024.3+) and **VS Code** (also VS Code Insiders, VSCodium and Cursor) on the machine
    and shows, for each, where it is installed, which Duo Watchdog version it has, and whether the IDE is running.
+   If it finds no IntelliJ IDEA or no VS Code, it says so.
 2. Press **Enter** to install into all of them, or type the numbers of the ones you want (`1 2`). Type `p` to add an
    IntelliJ IDEA or VS Code it didn't find (you type its folder), or `q` to quit without installing.
+   A folder you add is **remembered** and listed again on the next run; `f` forgets it, and `p` adds another
+   whenever the editor moves. The list is kept in `~/.config/duo-watchdog/folders` (macOS, Linux) or
+   `%APPDATA%\duo-watchdog\folders.txt` (Windows).
 3. It checks that the tools it needs are installed: a JDK 17+ for IntelliJ IDEA, Node.js 20+ for VS Code.
 4. It shows the plan (install, update from one version to another, or reinstall) and asks you to confirm.
 5. **IntelliJ IDEA**: if the IDE is running, it asks you to close it and waits. Then it builds the plugin against that IDE,
@@ -172,34 +176,47 @@ The script is interactive:
    *Developer: Reload Window* in open VS Code windows to load the new version.
 
 ```
-Duo Watchdog 0.2.1 installer
+
+       /\            /\
+      /  \__________/  \
+     |                  |      D U O   W A T C H D O G
+     |    (o)    (o)    |
+      \       __       /       Guards your GitLab Duo credits
+       \     (oo)     /        in IntelliJ IDEA and VS Code.
+        \    \__/    /
+         \__________/          Installer, version 0.2.1
+          |        |
+         _|        |_    woof!
+
 Looking for IntelliJ IDEA and VS Code...
 
 Found on this computer:
 
-  [1] IntelliJ IDEA 2026.2.0.1
+  [1] VS Code 1.130.0
+      D:\Tools\Microsoft VS Code
+      Duo Watchdog is not installed yet.
+      You added this folder; it is remembered (f forgets it).
+
+  [2] IntelliJ IDEA 2026.2.0.1
       C:\Program Files\JetBrains\IntelliJ IDEA 2026.2
       Duo Watchdog 0.2.0 is installed; 0.2.1 is available.
       It is running now; you'll be asked to close it before installing.
 
-  [2] VS Code 1.130.0
-      C:\Program Files\Microsoft VS Code
-      Duo Watchdog is not installed yet.
-
 Which of these should get Duo Watchdog?
   Enter   all of them
   1 2     only the ones with these numbers
-  p       an IntelliJ IDEA or VS Code that isn't listed (you'll type its folder)
+  p       an IntelliJ IDEA or VS Code that isn't listed (you'll type its folder; it's remembered)
+  f       forget a folder you added
   q       quit without installing
 Your choice:
 
 Plan:
-  - IntelliJ IDEA 2026.2.0.1: update Duo Watchdog 0.2.0 -> 0.2.1 (you'll be asked to close it first)
   - VS Code 1.130.0: install Duo Watchdog 0.2.1
+  - IntelliJ IDEA 2026.2.0.1: update Duo Watchdog 0.2.0 -> 0.2.1 (you'll be asked to close it first)
 Continue? [Y/n]
 ```
 
-You can also pass the folder of an IntelliJ IDEA or VS Code that the script doesn't find on its own:
+You can also pass the folder of an IntelliJ IDEA or VS Code that the script doesn't find on its own (it's remembered too):
 `./install.sh "/path/to/IntelliJ IDEA"`, `install.bat "D:\Tools\IntelliJ IDEA 2025.3"` or `install.bat "D:\Tools\Microsoft VS Code"`.
 For IntelliJ IDEA that's the folder with `product-info.json`; for VS Code, the folder with `bin\code.cmd` (Windows),
 `bin/code` (Linux) or the `.app` (macOS).
