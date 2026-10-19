@@ -1,57 +1,188 @@
+<div align="center">
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/logo-dark.svg">
+  <img src="docs/images/logo.svg" alt="Duo Watchdog logo" width="120" height="120">
+</picture>
+
 # Duo Watchdog
 
-Плагін для IntelliJ IDEA (і будь-якої IDE JetBrains від 2024.3), який стежить за **вашими власними** витратами GitLab Credits (GitLab Duo) за поточний розрахунковий період і попереджає, коли ви наближаєтесь до ліміту.
+**Keep an eye on your GitLab Duo credits without leaving the IDE.**
 
-- **Status bar:** доберман, міні-шкала і `$21.5 / 300` — витрачено / ліміт ($ — кредити за прейскурантною ціною GitLab, $1 за кредит). Від найнижчого порогу алертів — бурштиновий колір і значок попередження, коли GitLab блокує Duo — червоний і `Blocked · $300 / 300`. У підказці: залишок, прогноз на кінець періоду, час оновлення. Клік відкриває вікно з деталями.
-- **Tool window «Duo Watchdog»:** кнопки Refresh і Settings, праворуч `@користувач · група · Updated HH:mm`; велике число витраченого зі статусом Active / Blocked, період і день; шкала з пунктирною позначкою прогнозу і поділками на порогах алертів; плитки Left, Forecast і Pace; стовпчики за кожен день місяця (решта місяця затінена, лінія «today», підказка на стовпчику); розбивка за фічами (Developer Flow, Code Review Flow…).
-- **Алерти** (balloon з посиланням Open Duo Watchdog, кожен — один раз за період):
-  - прогноз на кінець місяця перевищує ліміт (можна вимкнути);
-  - кожен поріг зі списку, за замовчуванням `80, 95` % ліміту;
-  - ліміт досягнуто;
-  - GitLab заблокував Duo через cap.
+An IntelliJ Platform plugin that tracks **your own** GitLab Credits usage for the current billing period,
+forecasts where the month will end, and warns you before you hit your limit.
 
-## Звідки дані
+![IntelliJ Platform](https://img.shields.io/badge/IntelliJ_Platform-2024.3%2B-000000?logo=intellijidea&logoColor=white)
+![Java](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk&logoColor=white)
+![GitLab](https://img.shields.io/badge/GitLab-Duo-FC6D26?logo=gitlab&logoColor=white)
+![Version](https://img.shields.io/badge/version-0.2.1-blue)
 
-`currentUser.creditsUsage(namespacePath:)` — витрати власника токена. Достатньо бути членом top-level групи, права Owner не потрібні. У GitLab це поле має статус *Experiment* (з 19.4).
+</div>
 
-Якщо GitLab відповідає «resource … does not exist or you don't have permission», найчастіше в полі групи стоїть назва групи, а не її шлях з адреси (`gitlab.com/<шлях>`). Кнопка **Find my group** у налаштуваннях знайде шлях сама.
+<p align="center">
+  <img src="docs/images/dashboard-light.png" alt="Duo Watchdog dashboard, light theme" width="420">
+  &nbsp;&nbsp;
+  <img src="docs/images/dashboard-dark.png" alt="Duo Watchdog dashboard, dark theme" width="420">
+</p>
 
-Прогноз — проста екстраполяція на кінець періоду: `used / elapsed_days * period_days`.
+---
 
-**Ліміт задаєте ви.** GitLab показує cap користувача лише власнику групи, тому плагін його не знає. Впишіть свій cap або менший власний бюджет.
+## Contents
 
-## Налаштування
+- [Features](#features)
+- [How it works](#how-it-works)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Building from source](#building-from-source)
+- [Project structure](#project-structure)
+- [Troubleshooting](#troubleshooting)
 
-*Settings → Tools → Duo Watchdog*
+## Features
 
-| Поле | Що вписати |
+### Status bar meter
+
+The status bar shows a doberman icon, a small meter and `$21.5 / 300`: credits used out of your limit
+(GitLab's list price is $1 per credit).
+
+- **Normal:** neutral colors while usage is below your lowest alert threshold.
+- **Warning:** amber with a warning icon once usage reaches the lowest threshold.
+- **Blocked:** red `Blocked · $300 / 300` when GitLab blocks Duo because you hit the cap.
+
+The tooltip shows the remaining credits, the month-end forecast and when the data was last updated.
+Clicking the meter opens the dashboard.
+
+### Dashboard tool window
+
+<img align="right" src="docs/images/dashboard-warning.png" alt="Dashboard in the warning state" width="300">
+
+- A toolbar with **Refresh** and **Settings**, plus `@user · group · Updated HH:mm`
+- The headline: credits used, an **Active** / **Blocked** status and the period with the current day
+- A usage bar with a dashed forecast marker and ticks at each alert threshold
+- Tiles for **Left**, **Forecast** and **Pace** (credits per day)
+- A **daily usage** chart covering the whole month, with the rest of the month shaded, a "today" line and tooltips on the bars
+- A **by feature** breakdown (Developer Flow, Code Review Flow, …)
+
+<br clear="right">
+
+### Alerts
+
+Balloon notifications with an **Open Duo Watchdog** link. Each one fires **at most once per billing period**:
+
+| Alert | When it fires |
 |---|---|
-| GitLab URL | `https://gitlab.com` або адреса вашого GitLab |
-| Group path | шлях top-level групи, якій належить підписка Duo, напр. `my-company`. **Find my group** перебирає ваші групи і питає GitLab, у якій є ваші кредити. Можна вставити й адресу групи — плагін залишить лише шлях |
-| Personal access token | токен зі scopes **`read_api`** і **`ai_features`**, більше нічого. Посилання *Create the token in GitLab* відкриває сторінку нового токена з обома scopes. Зберігається в Password Safe IDE, а не в налаштуваннях |
-| Limit (credits) | ваш ліміт, за замовчуванням 100 |
-| Alert at % of limit | пороги через кому, напр. `50, 80, 95` |
-| Alert when the month-end forecast passes the limit | попередження за прогнозом |
-| Refresh every … minutes | як часто оновлювати, за замовчуванням 15. Дані GitLab можуть запізнюватися |
+| Forecast | the month-end forecast goes over your limit (you can turn this one off) |
+| Threshold | usage reaches each configured percentage of the limit (default `80, 95`) |
+| Limit reached | usage reaches 100% of the limit |
+| Blocked | GitLab has blocked Duo because of the cap |
 
-Запити йдуть через проксі та довірені сертифікати IDE (*Settings → Appearance & Behavior → System Settings → HTTP Proxy / Server Certificates*).
+## How it works
 
-## Збірка й встановлення
+Duo Watchdog queries GitLab's GraphQL API for
+`currentUser.creditsUsage(namespacePath:)`, which returns the spend of the user who owns the token.
+You only need to be a **member** of the top-level group; the **Owner** role is not required.
 
-Потрібен JDK 17+ для запуску Gradle. JDK для компіляції Gradle завантажить сам: 21, а для IDEA 2026.2 і новіших — 25 (класи плагіна однаково залишаються Java 21).
+> [!NOTE]
+> GitLab marks `creditsUsage` as an **Experiment** (available since GitLab 19.4), so its shape may change.
 
-Збірка компілює плагін проти IntelliJ IDEA, яка вже встановлена: вона шукає її у стандартних місцях (`/Applications`, `~/Applications`, `C:/Program Files/JetBrains`, `%LOCALAPPDATA%/Programs`, `/opt`, Toolbox на Linux) і пише в лог, яку саме знайшла. Шлях можна вказати явно: `-PideaPath="/шлях/до/IDEA"` або змінна `IDEA_HOME`. Лише якщо IDEA не знайдено, Gradle завантажує IntelliJ IDEA 2024.3 (~1 ГБ, один раз, далі з кешу). Готовий плагін ставиться на будь-яку IDE від 2024.3, хоч би проти якої версії його зібрали.
+**Forecast** is a straight run-rate projection to the end of the billing period:
 
-```bash
-./gradlew :core:test      # тести логіки (без IDE)
-./gradlew buildPlugin     # → build/distributions/duo-watchdog-0.2.1.zip
-./gradlew runIde          # запуск IDE-пісочниці з плагіном
+```
+forecast = used / elapsed_days × period_days
 ```
 
-Встановлення: *Settings → Plugins → ⚙ → Install Plugin from Disk…* → `build/distributions/duo-watchdog-0.2.1.zip`.
+**You set the limit.** GitLab shows a user's cap only to group owners, so the plugin can't read it.
+Enter your cap, or a smaller budget of your own.
 
-## Структура
+Requests go through the IDE's proxy and trusted certificates
+(*Settings → Appearance & Behavior → System Settings → HTTP Proxy / Server Certificates*).
 
-- `core/` — чиста Java без залежностей від IntelliJ: GraphQL-клієнт, період і прогноз, правила алертів, тексти. Покрито тестами.
-- `core/…/ui/` — компоненти на чистому Swing: панель вікна, шкала, графік, смуги фіч, чип для status bar. Кольори приходять від плагіна парами для світлої і темної теми. `./gradlew :core:test` малює їх без екрана в `core/build/ui-previews/*.png`.
-- `src/` — тонкий шар IntelliJ: налаштування, сервіс оновлення, status bar widget, tool window, сповіщення.
+## Installation
+
+1. [Build the plugin](#building-from-source), or get `duo-watchdog-<version>.zip` from a teammate.
+2. In the IDE, open *Settings → Plugins → ⚙ → Install Plugin from Disk…*
+3. Select `build/distributions/duo-watchdog-0.2.1.zip` and restart if the IDE asks you to.
+
+**Compatibility:** IntelliJ IDEA and any other JetBrains IDE from **2024.3** onward. This holds whichever IDE version the plugin was built against.
+
+## Configuration
+
+Open *Settings → Tools → Duo Watchdog*.
+
+| Setting | What to enter |
+|---|---|
+| **GitLab URL** | `https://gitlab.com` or the address of your self-managed GitLab |
+| **Group path** | The path of the top-level group that owns the Duo subscription, e.g. `my-company`. **Find my group** goes through your groups and asks GitLab which one holds your credits. Pasting the group's URL also works; the plugin keeps only the path. |
+| **Personal access token** | A token with the **`read_api`** and **`ai_features`** scopes and nothing more. The *Create the token in GitLab* link opens GitLab's new-token page with both scopes already selected. The token is stored in the IDE's **Password Safe**, not in plain settings. |
+| **Limit (credits)** | Your limit. Default: `100` |
+| **Alert at % of limit** | Comma-separated thresholds, e.g. `50, 80, 95` |
+| **Alert when the month-end forecast passes the limit** | Turns the forecast alert on or off |
+| **Refresh every … minutes** | Polling interval. Default: `15`. GitLab's data can lag a few minutes behind actual use. |
+
+## Building from source
+
+**Requirements:** JDK 17+ to run Gradle. Gradle downloads the compile JDK itself: 21, or 25 when building
+against IDEA 2026.2 or later. The plugin's classes target Java 21 in both cases.
+
+```bash
+./gradlew :core:test      # unit tests for the core logic (no IDE needed)
+./gradlew buildPlugin     # → build/distributions/duo-watchdog-0.2.1.zip
+./gradlew runIde          # launch a sandbox IDE with the plugin installed
+```
+
+### Which IDE it compiles against
+
+The build compiles against an IntelliJ IDEA **already installed** on your machine. It looks in the usual places
+(`/Applications`, `~/Applications`, `C:/Program Files/JetBrains`, `%LOCALAPPDATA%/Programs`, `/opt`, and Toolbox on Linux)
+and logs which IDE it picked. To choose one yourself:
+
+```bash
+./gradlew buildPlugin -PideaPath="/path/to/IntelliJ IDEA.app"
+# or
+export IDEA_HOME="/path/to/IntelliJ IDEA.app"
+```
+
+Gradle downloads IntelliJ IDEA 2024.3 (~1 GB, cached after the first run) only when it finds no installed IDEA.
+
+## Project structure
+
+```
+duo-watchdog/
+├── core/                 Plain Java, no IntelliJ dependencies
+│   ├── src/main/…/core/  GraphQL client, billing period & forecast, alert rules, texts
+│   ├── src/main/…/ui/    Pure Swing components: dashboard, meter, chart, feature bars, status chip
+│   └── src/test/         JUnit 5 tests; also paints the UI headless to core/build/ui-previews/*.png
+└── src/                  Thin IntelliJ layer: settings, refresh service, status bar widget,
+                          tool window, notifications
+```
+
+The UI components get their colors from the plugin as light/dark pairs, so they follow the IDE theme.
+Running `./gradlew :core:test` also renders every dashboard state to PNG. You can review UI changes from those images without starting an IDE.
+
+## Troubleshooting
+
+<details>
+<summary><b>"resource … does not exist or you don't have permission"</b></summary>
+
+The **Group path** field most likely holds the group's display *name* instead of its *path* (the part after
+`gitlab.com/` in the URL). Click **Find my group** in the settings and the plugin will find the right path.
+</details>
+
+<details>
+<summary><b>The numbers are behind what I just used</b></summary>
+
+GitLab's usage data can lag a few minutes behind actual use. Click **Refresh** in the tool window, or use
+*Tools → Refresh Duo Credits*, to fetch again now.
+</details>
+
+<details>
+<summary><b>Requests time out behind a corporate proxy</b></summary>
+
+Duo Watchdog uses the IDE's own HTTP proxy and certificate settings. Check
+*Settings → Appearance & Behavior → System Settings → HTTP Proxy* and *Server Certificates*.
+</details>
+
+<details>
+<summary><b>The plugin doesn't show my cap</b></summary>
+
+That's expected: GitLab shows a user's cap only to group owners. Enter your limit in the settings.
+</details>
