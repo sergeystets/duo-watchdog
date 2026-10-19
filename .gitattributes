@@ -1,3 +1,10 @@
-install.bat text eol=crlf
-install.ps1 text eol=crlf
-*.sh text eol=lf
+# Line endings are fixed here, whatever core.autocrlf says, so a clone on Windows, WSL, Linux or macOS
+# shows no changes: LF everywhere, CRLF only for the scripts cmd.exe and Windows PowerShell run.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+*.png binary
+*.jar binary
+*.vsix binary
