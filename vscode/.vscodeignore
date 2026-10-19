@@ -5,3 +5,6 @@ tsconfig.json
 .gitignore
 **/*.map
 **/*.ts
+build.gradle.kts
+build/**
+.gradle/**
