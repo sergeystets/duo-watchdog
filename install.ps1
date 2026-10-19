@@ -250,20 +250,26 @@ function Get-Logo {
     @($lines[$drawn[0]..$drawn[-1]] | ForEach-Object { if ($_.Length -gt $margin) { $_.Substring($margin) } else { '' } })
 }
 
-# The dog from docs\images\logo.ascii with the title centred under it; only the title when the
-# console is too narrow for the dog, since wrapped lines would tear it apart.
+# The dog from docs\images\logo.ascii with the title under it, both centred on the wider of the two; only the
+# title when the console is too narrow for the dog, since wrapped lines would tear it apart.
 function Show-Banner([string]$Version) {
+    $title = @('D U O   W A T C H D O G', '', 'Guards your GitLab Duo credits in IntelliJ IDEA and VS Code.', "Installer, version $Version")
+    $width = ($title | ForEach-Object { $_.Length } | Measure-Object -Maximum).Maximum
     $columns = 80
     try { $columns = $Host.UI.RawUI.WindowSize.Width } catch { }
     if (-not $columns) { $columns = 80 }
     $art = Get-Logo
-    $width = ($art | ForEach-Object { $_.Length } | Measure-Object -Maximum).Maximum
-    if (-not $width -or $width -gt $columns) { $art = @(); $width = 60 }
+    $artWidth = ($art | ForEach-Object { $_.Length } | Measure-Object -Maximum).Maximum
     Say
-    if ($art.Count -gt 0) { $art | ForEach-Object { Say $_ }; Say }
-    foreach ($line in 'D U O   W A T C H D O G', '', 'Guards your GitLab Duo credits in IntelliJ IDEA and VS Code.', "Installer, version $Version") {
-        $pad = [Math]::Max(0, [int][Math]::Floor(($width - $line.Length) / 2))
-        if ($line) { Say ((' ' * $pad) + $line) } else { Say }
+    if ($artWidth -and $artWidth -le $columns) {
+        $width = [Math]::Max($width, $artWidth)
+        # The dog is centred as one block, so its lines keep their places relative to each other.
+        $pad = ' ' * [int][Math]::Floor(($width - $artWidth) / 2)
+        $art | ForEach-Object { if ($_) { Say ($pad + $_) } else { Say } }
+        Say
+    }
+    foreach ($line in $title) {
+        if ($line) { Say ((' ' * [Math]::Max(0, [int][Math]::Floor(($width - $line.Length) / 2))) + $line) } else { Say }
     }
     Say
 }

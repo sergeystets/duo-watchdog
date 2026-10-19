@@ -300,27 +300,28 @@ logo() {
         FNR >= first && FNR <= last { line = substr($0, min + 1); sub(/ +$/, "", line); print line }' "$LOGO" "$LOGO"
 }
 
-# The dog from docs/images/logo.ascii with the title centred under it; only the title when the
-# terminal is too narrow for the dog, since wrapped lines would tear it apart.
+# Centres every line of the input in $1 columns.
+centre() { awk -v w="$1" '{ pad = int((w - length) / 2); if (pad < 0 || length == 0) pad = 0; printf "%" pad "s%s\n", "", $0 }'; }
+
+widest() { awk '{ if (length > w) w = length } END { print w + 0 }'; }
+
+# The dog from docs/images/logo.ascii with the title under it, both centred on the wider of the two; only the
+# title when the terminal is too narrow for the dog, since wrapped lines would tear it apart.
 banner() {
-    local width=60 columns art=""
+    local title art="" width columns
+    title=$(printf '%s\n' "D U O   W A T C H D O G" "" \
+        "Guards your GitLab Duo credits in IntelliJ IDEA and VS Code." "Installer, version $1")
+    width=$(say "$title" | widest)
     columns=$(tput cols 2>/dev/null || say 80)
-    if [ -f "$LOGO" ]; then
-        art=$(logo)
-        width=$(say "$art" | awk '{ if (length > w) w = length } END { print w + 0 }')
-        if [ "$width" -gt "$columns" ]; then
-            art=""
-            width=60
-        fi
+    [ -f "$LOGO" ] && art=$(logo)
+    if [ -n "$art" ] && [ "$(say "$art" | widest)" -le "$columns" ]; then
+        [ "$(say "$art" | widest)" -gt "$width" ] && width=$(say "$art" | widest)
+        say
+        # The dog is centred as one block, so its lines keep their places relative to each other.
+        say "$art" | awk -v pad="$(((width - $(say "$art" | widest)) / 2))" '{ printf "%" pad "s%s\n", "", $0 }'
     fi
     say
-    [ -n "$art" ] && say "$art" && say
-    {
-        say "D U O   W A T C H D O G"
-        say ""
-        say "Guards your GitLab Duo credits in IntelliJ IDEA and VS Code."
-        say "Installer, version $1"
-    } | awk -v w="$width" '{ pad = int((w - length) / 2); if (pad < 0 || length == 0) pad = 0; printf "%" pad "s%s\n", "", $0 }'
+    say "$title" | centre "$width"
     say
 }
 
