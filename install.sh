@@ -230,7 +230,11 @@ say
 
 CHOSEN=()
 while [ ${#CHOSEN[@]} -eq 0 ]; do
-    say "Install into: press Enter for all, or type numbers (e.g. 1 2). p = add an IntelliJ IDEA folder, q = quit."
+    say "Which of these should get Duo Watchdog?"
+    say "  Enter   all of them"
+    say "  1 2     only the ones with these numbers"
+    say "  p       an IntelliJ IDEA that isn't listed (you'll type its folder)"
+    say "  q       quit without installing"
     answer=$(ask "Your choice: ") || exit 1
     case "$answer" in
         "") CHOSEN=("${!KINDS[@]}") ;;
