@@ -115,6 +115,23 @@ function Get-CodeFolder([string]$Cli) {
 
 $Targets = New-Object System.Collections.ArrayList
 
+# Folders added with p or as the argument, listed again on the next run until forgotten with f.
+$Remembered = Join-Path $env:APPDATA 'duo-watchdog\folders.txt'
+
+function Get-Remembered { if (Test-Path $Remembered) { @(Get-Content $Remembered | Where-Object { $_ }) } else { @() } }
+
+function Add-Remembered([string]$Place) {
+    $places = Get-Remembered
+    if ($places -notcontains $Place) {
+        New-Item -ItemType Directory -Force (Split-Path $Remembered -Parent) | Out-Null
+        Set-Content -Path $Remembered -Value (@($places) + $Place)
+    }
+}
+
+function Remove-Remembered([string]$Place) {
+    Set-Content -Path $Remembered -Value @(Get-Remembered | Where-Object { $_ -ne $Place })
+}
+
 function Get-NewVersion($Target) { if ($Target.Kind -eq 'idea') { $PluginVersion } else { $ExtensionVersion } }
 
 # What installing does to the target, e.g. "update Duo Watchdog 0.2.0 -> 0.2.1".
@@ -138,34 +155,19 @@ function Add-Idea([string]$Dir) {
     $branch = [int](($info.buildNumber -replace '^[A-Z]+-', '') -replace '\..*', '')
     if ($branch -lt 243) {
         Say "  Skipping $name in ${Dir}: Duo Watchdog needs IntelliJ IDEA 2024.3 or later."
-        return
+        return $false
     }
-    [void]$Targets.Add([pscustomobject]@{ Kind = 'idea'; Place = $Dir; Name = $name; Folder = $Dir; Current = (Get-PluginVersion $Dir) })
+    [void]$Targets.Add([pscustomobject]@{
+            Kind = 'idea'; Place = $Dir; Name = $name; Folder = $Dir; Current = (Get-PluginVersion $Dir); Added = $false
+        })
+    $true
 }
-
-function Show-Target([int]$Index) {
-    $target = $Targets[$Index]
-    Say
-    Bold "  [$($Index + 1)] $($target.Name)"
-    Say "      $($target.Folder)"
-    Say "      $(Get-Status $target)"
-    if ($target.Kind -eq 'idea' -and (Test-IdeaRunning $target.Place)) {
-        Say "      It is running now; you'll be asked to close it before installing."
-    }
-}
-
-if ($PluginVersion -eq $ExtensionVersion) {
-    Bold "Duo Watchdog $PluginVersion installer"
-} else {
-    Bold "Duo Watchdog installer (IntelliJ plugin $PluginVersion, VS Code extension $ExtensionVersion)"
-}
-Say 'Looking for IntelliJ IDEA and VS Code...'
 
 function Add-Code([string]$Cli) {
     $version = (& $Cli --version 2>$null | Select-Object -First 1)
     [void]$Targets.Add([pscustomobject]@{
             Kind = 'code'; Place = $Cli; Name = "$(Get-CodeName $Cli) $version"; Folder = (Get-CodeFolder $Cli)
-            Current = (Get-ExtensionVersion $Cli)
+            Current = (Get-ExtensionVersion $Cli); Added = $false
         })
 }
 
@@ -181,63 +183,138 @@ function Test-Listed([string]$Place) {
     [bool]($Targets | Where-Object { $_.Place -eq $Place })
 }
 
-# Adds the IntelliJ IDEA or VS Code in a folder someone typed; returns whether it did, saying why not.
-function Add-Folder([string]$Typed) {
+# Adds and remembers the IntelliJ IDEA or VS Code in a folder someone typed; returns whether it did, saying why
+# not. With -Quiet, an editor listed already is no news (a remembered folder the search found too).
+function Add-Folder([string]$Typed, [switch]$Quiet) {
     $path = $Typed.Trim().Trim('"').TrimEnd('\')
     if (-not $path) { return $false }
-    $dir = Resolve-IdeaFolder $path
-    if ($dir) {
-        if (Test-Listed $dir) { Say "  $dir is listed already."; return $false }
-        Add-Idea $dir
-        return $true
+    $place = Resolve-IdeaFolder $path
+    $kind = 'idea'
+    if (-not $place) {
+        $kind = 'code'
+        $place = Find-CodeCli $path
+        if (-not $place -and (Split-Path $path -Leaf) -eq 'bin') { $place = Find-CodeCli (Split-Path $path -Parent) }
     }
-    $cli = Find-CodeCli $path
-    if (-not $cli -and (Split-Path $path -Leaf) -eq 'bin') { $cli = Find-CodeCli (Split-Path $path -Parent) }
-    if ($cli) {
-        if (Test-Listed $cli) { Say "  $(Get-CodeFolder $cli) is listed already."; return $false }
-        Add-Code $cli
-        return $true
+    if (-not $place) {
+        Say "  $path is neither an IntelliJ IDEA folder (with product-info.json) nor a VS Code folder (with bin\code.cmd)."
+        return $false
     }
-    Say "  $path is neither an IntelliJ IDEA folder (with product-info.json) nor a VS Code folder (with bin\code.cmd)."
-    $false
+    if (Test-Listed $place) {
+        if (-not $Quiet) { Say '  That one is listed already.' }
+        return $false
+    }
+    if ($kind -eq 'idea') {
+        if (-not (Add-Idea $place)) { return $false }
+    } else {
+        Add-Code $place
+    }
+    $Targets[$Targets.Count - 1].Added = $true
+    Add-Remembered $place
+    $true
 }
 
+function Show-Target([int]$Index) {
+    $target = $Targets[$Index]
+    Say
+    Bold "  [$($Index + 1)] $($target.Name)"
+    Say "      $($target.Folder)"
+    Say "      $(Get-Status $target)"
+    if ($target.Kind -eq 'idea' -and (Test-IdeaRunning $target.Place)) {
+        Say "      It is running now; you'll be asked to close it before installing."
+    }
+    if ($target.Added) { Say '      You added this folder; it is remembered (f forgets it).' }
+}
+
+function Show-All {
+    Say
+    if ($Targets.Count -eq 0) {
+        Say 'Found on this computer: nothing yet.'
+    } else {
+        Say 'Found on this computer:'
+        for ($i = 0; $i -lt $Targets.Count; $i++) { Show-Target $i }
+    }
+    Say
+    $hasIdea = [bool]($Targets | Where-Object Kind -eq 'idea')
+    $hasCode = [bool]($Targets | Where-Object Kind -eq 'code')
+    if (-not $hasIdea) { Say '  IntelliJ IDEA: none found in the usual places. If you have one, type p and its folder.' }
+    if (-not $hasCode) { Say '  VS Code: none found on the PATH or in the usual places. If you have it, type p and its folder.' }
+    if (-not ($hasIdea -and $hasCode)) { Say }
+}
+
+function Show-Banner([string]$Version) {
+    $dog = @'
+
+       /\            /\
+      /  \__________/  \
+     |                  |      D U O   W A T C H D O G
+     |    (o)    (o)    |
+      \       __       /       Guards your GitLab Duo credits
+       \     (oo)     /        in IntelliJ IDEA and VS Code.
+        \    \__/    /
+         \__________/          Installer, version @VERSION@
+          |        |
+         _|        |_    woof!
+
+'@
+    Write-Host $dog.Replace('@VERSION@', $Version)
+}
+
+if ($PluginVersion -eq $ExtensionVersion) { Show-Banner $PluginVersion } else { Show-Banner "$PluginVersion (VS Code $ExtensionVersion)" }
+Say 'Looking for IntelliJ IDEA and VS Code...'
+
+foreach ($place in Get-Remembered) {
+    if (Test-Path $place) {
+        [void](Add-Folder $place -Quiet)
+    } else {
+        Say "  $place, which you added earlier, is gone; forgetting it."
+        Remove-Remembered $place
+    }
+}
 if ($Folder) { [void](Add-Folder $Folder) }
 foreach ($dir in Find-Ideas) {
-    if (-not (Test-Listed $dir)) { Add-Idea $dir }
+    if (-not (Test-Listed $dir)) { [void](Add-Idea $dir) }
 }
 foreach ($cli in Find-Codes) {
     if (-not (Test-Listed $cli)) { Add-Code $cli }
 }
 
-if ($Targets.Count -eq 0) {
-    Say
-    Say 'No IntelliJ IDEA (2024.3+) or VS Code found.'
-    Say 'For an editor in an unusual place, pass its folder:'
-    Say '  install.bat "C:\path\to\IntelliJ IDEA"   or   install.bat "C:\path\to\Microsoft VS Code"'
-    exit 1
-}
-
-Say
-Say 'Found on this computer:'
-for ($i = 0; $i -lt $Targets.Count; $i++) { Show-Target $i }
-Say
+Show-All
 
 $Chosen = @()
 while ($Chosen.Count -eq 0) {
     Say 'Which of these should get Duo Watchdog?'
-    Say '  Enter   all of them'
-    Say '  1 2     only the ones with these numbers'
-    Say "  p       an IntelliJ IDEA or VS Code that isn't listed (you'll type its folder)"
+    if ($Targets.Count -gt 0) {
+        Say '  Enter   all of them'
+        Say '  1 2     only the ones with these numbers'
+    }
+    Say "  p       an IntelliJ IDEA or VS Code that isn't listed (you'll type its folder; it's remembered)"
+    $added = @(for ($i = 0; $i -lt $Targets.Count; $i++) { if ($Targets[$i].Added) { $i } })
+    if ($added.Count -gt 0) { Say '  f       forget a folder you added' }
     Say '  q       quit without installing'
     $answer = (Ask 'Your choice').Trim()
     switch -Regex ($answer) {
-        '^$' { $Chosen = @(0..($Targets.Count - 1)) }
+        '^$' {
+            if ($Targets.Count -gt 0) { $Chosen = @(0..($Targets.Count - 1)) }
+            else { Say '  Nothing is listed yet: type p to add a folder, or q.' }
+        }
         '^[qQ]$' { exit 0 }
         '^[pP]$' {
             $count = $Targets.Count
             if ((Add-Folder (Ask 'Folder of the IntelliJ IDEA or VS Code')) -and $Targets.Count -gt $count) { Show-Target $count }
             Say
+        }
+        '^[fF]$' {
+            if ($added.Count -eq 0) { Say "  You haven't added any folder."; break }
+            if ($added.Count -eq 1) { $number = "$($added[0] + 1)" } else { $number = (Ask 'Number of the one to forget').Trim() }
+            if ($number -match '^\d+$' -and $added -contains ([int]$number - 1)) {
+                $target = $Targets[[int]$number - 1]
+                Remove-Remembered $target.Place
+                Say "  Forgot $($target.Folder)."
+                $Targets.RemoveAt([int]$number - 1)
+                Show-All
+            } else {
+                Say "  [$number] isn't a folder you added."
+            }
         }
         default {
             $picked = @()

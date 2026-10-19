@@ -139,6 +139,21 @@ PLACES=()  # the IDEA folder or the VS Code CLI
 NAMES=()   # e.g. IntelliJ IDEA 2025.3.1
 FOLDERS=() # where the editor is installed
 CURRENT=() # the Duo Watchdog version it has, or empty
+ADDED=()   # yes when someone typed its folder, which is then remembered
+
+# Folders added with p or as the argument, listed again on the next run until forgotten with f.
+REMEMBERED="${XDG_CONFIG_HOME:-$HOME/.config}/duo-watchdog/folders"
+
+remember() {
+    mkdir -p "$(dirname "$REMEMBERED")"
+    grep -qxF "$1" "$REMEMBERED" 2>/dev/null || say "$1" >>"$REMEMBERED"
+}
+
+forget() {
+    [ -f "$REMEMBERED" ] || return 0
+    grep -vxF "$1" "$REMEMBERED" >"$REMEMBERED.new" || true
+    mv "$REMEMBERED.new" "$REMEMBERED"
+}
 
 new_version() { if [ "${KINDS[$1]}" = idea ]; then say "$PLUGIN_VERSION"; else say "$EXTENSION_VERSION"; fi; }
 
@@ -172,32 +187,14 @@ add_idea() {
     name="IntelliJ IDEA $(info "$dir" version)"
     if [ "$(branch "$dir")" -lt 243 ] 2>/dev/null; then
         say "  Skipping $name in $dir: Duo Watchdog needs IntelliJ IDEA 2024.3 or later."
-        return
+        return 1
     fi
-    KINDS+=(idea) PLACES+=("$dir") NAMES+=("$name") FOLDERS+=("$dir") CURRENT+=("$(plugin_version "$dir")")
+    KINDS+=(idea) PLACES+=("$dir") NAMES+=("$name") FOLDERS+=("$dir") CURRENT+=("$(plugin_version "$dir")") ADDED+=("")
 }
-
-show() {
-    local i=$1
-    say
-    bold "  [$((i + 1))] ${NAMES[$i]}"
-    say "      ${FOLDERS[$i]}"
-    say "      $(status "$i")"
-    if [ "${KINDS[$i]}" = idea ] && idea_running "${PLACES[$i]}"; then
-        say "      It is running now; you'll be asked to close it before installing."
-    fi
-}
-
-if [ "$PLUGIN_VERSION" = "$EXTENSION_VERSION" ]; then
-    bold "Duo Watchdog $PLUGIN_VERSION installer"
-else
-    bold "Duo Watchdog installer (IntelliJ plugin $PLUGIN_VERSION, VS Code extension $EXTENSION_VERSION)"
-fi
-say "Looking for IntelliJ IDEA and VS Code..."
 
 add_code() {
     local cli=$1
-    KINDS+=(code) PLACES+=("$cli") FOLDERS+=("$(code_folder "$cli")") CURRENT+=("$(extension_version "$cli")")
+    KINDS+=(code) PLACES+=("$cli") FOLDERS+=("$(code_folder "$cli")") CURRENT+=("$(extension_version "$cli")") ADDED+=("")
     NAMES+=("$(code_name "$cli") $("$cli" --version 2>/dev/null | head -n 1 || true)")
 }
 
@@ -213,74 +210,177 @@ code_cli_in() {
     done
 }
 
+real_path() { readlink -f "$1" 2>/dev/null || say "$1"; }
+
 # Whether the editor is listed already: the same IDEA folder, or a CLI that is the same file.
 listed() {
     local i
     for i in "${!KINDS[@]}"; do
-        [ "$(readlink -f "${PLACES[$i]}" 2>/dev/null || say "${PLACES[$i]}")" = "$(readlink -f "$1" 2>/dev/null || say "$1")" ] && return 0
+        [ "$(real_path "${PLACES[$i]}")" = "$(real_path "$1")" ] && return 0
     done
     return 1
 }
 
-# Adds the IntelliJ IDEA or VS Code in a folder someone typed; fails, saying why, when there is none.
+# Adds and remembers the IntelliJ IDEA or VS Code in a folder someone typed; fails, saying why, when there is
+# none. With quiet, an editor listed already is no news (a remembered folder the search found too).
 add_folder() {
-    local dir=${1%/} cli
+    local dir=${1%/} cli place=""
     [ "$(basename "$dir")" = bin ] && dir=$(dirname "$dir")
     if is_intellij "$dir"; then
-        dir=$(cd "$dir" && pwd -P)
-        if listed "$dir"; then say "  $dir is listed already."; return 1; fi
-        add_idea "$dir"
-        return 0
+        place=$(cd "$dir" && pwd -P)
+    else
+        cli=$(code_cli_in "$dir")
+        [ -n "$cli" ] || cli=$(code_cli_in "$1")
+        place=$cli
     fi
-    cli=$(code_cli_in "$dir")
-    [ -n "$cli" ] || cli=$(code_cli_in "$1")
-    if [ -n "$cli" ]; then
-        if listed "$cli"; then say "  $(code_folder "$cli") is listed already."; return 1; fi
-        add_code "$cli"
-        return 0
+    if [ -z "$place" ]; then
+        say "  $1 is neither an IntelliJ IDEA folder (with product-info.json) nor a VS Code folder (with bin/code)."
+        return 1
     fi
-    say "  $1 is neither an IntelliJ IDEA folder (with product-info.json) nor a VS Code folder (with bin/code)."
-    return 1
+    if listed "$place"; then
+        [ "${2:-}" = quiet ] || say "  That one is listed already."
+        return 1
+    fi
+    if [ "$(kind_of "$place")" = idea ]; then add_idea "$place" || return 1; else add_code "$place"; fi
+    ADDED[${#ADDED[@]} - 1]=yes
+    remember "$place"
 }
 
+kind_of() { if is_intellij "$1"; then say idea; else say code; fi; }
+
+show() {
+    local i=$1
+    say
+    bold "  [$((i + 1))] ${NAMES[$i]}"
+    say "      ${FOLDERS[$i]}"
+    say "      $(status "$i")"
+    if [ "${KINDS[$i]}" = idea ] && idea_running "${PLACES[$i]}"; then
+        say "      It is running now; you'll be asked to close it before installing."
+    fi
+    [ "${ADDED[$i]}" = yes ] && say "      You added this folder; it is remembered (f forgets it)."
+    return 0
+}
+
+has() { local i; for i in "${!KINDS[@]}"; do [ "${KINDS[$i]}" = "$1" ] && return 0; done; return 1; }
+
+show_all() {
+    local i
+    say
+    if [ ${#KINDS[@]} -eq 0 ]; then
+        say "Found on this computer: nothing yet."
+    else
+        say "Found on this computer:"
+        for i in "${!KINDS[@]}"; do show "$i"; done
+    fi
+    say
+    has idea || say "  IntelliJ IDEA: none found in the usual places. If you have one, type p and its folder."
+    has code || say "  VS Code: none found on the PATH or in the usual places. If you have it, type p and its folder."
+    has idea && has code || say
+}
+
+# Takes target $1 off the list.
+drop() {
+    local i k=() p=() names=() f=() c=() a=()
+    for i in "${!KINDS[@]}"; do
+        [ "$i" = "$1" ] && continue
+        k+=("${KINDS[$i]}") p+=("${PLACES[$i]}") names+=("${NAMES[$i]}") f+=("${FOLDERS[$i]}") c+=("${CURRENT[$i]}") a+=("${ADDED[$i]}")
+    done
+    KINDS=("${k[@]+"${k[@]}"}") PLACES=("${p[@]+"${p[@]}"}") NAMES=("${names[@]+"${names[@]}"}")
+    FOLDERS=("${f[@]+"${f[@]}"}") CURRENT=("${c[@]+"${c[@]}"}") ADDED=("${a[@]+"${a[@]}"}")
+}
+
+any_added() { local i; for i in "${!ADDED[@]}"; do [ "${ADDED[$i]}" = yes ] && return 0; done; return 1; }
+
+banner() {
+    sed "s/@VERSION@/$1/" <<'EOF'
+
+       /\            /\
+      /  \__________/  \
+     |                  |      D U O   W A T C H D O G
+     |    (o)    (o)    |
+      \       __       /       Guards your GitLab Duo credits
+       \     (oo)     /        in IntelliJ IDEA and VS Code.
+        \    \__/    /
+         \__________/          Installer, version @VERSION@
+          |        |
+         _|        |_    woof!
+
+EOF
+}
+
+if [ "$PLUGIN_VERSION" = "$EXTENSION_VERSION" ]; then
+    banner "$PLUGIN_VERSION"
+else
+    banner "$PLUGIN_VERSION (VS Code $EXTENSION_VERSION)"
+fi
+say "Looking for IntelliJ IDEA and VS Code..."
+
+if [ -f "$REMEMBERED" ]; then
+    while IFS= read -r place; do
+        [ -n "$place" ] || continue
+        if [ -e "$place" ]; then
+            add_folder "$place" quiet || true
+        else
+            say "  $place, which you added earlier, is gone; forgetting it."
+            forget "$place"
+        fi
+    done <"$REMEMBERED"
+fi
 [ $# -ge 1 ] && { add_folder "$1" || true; }
 while IFS= read -r dir; do
-    [ -n "$dir" ] && ! listed "$dir" && add_idea "$dir"
+    [ -n "$dir" ] && ! listed "$dir" && { add_idea "$dir" || true; }
 done < <(find_ideas)
 while IFS= read -r cli; do
     [ -n "$cli" ] && ! listed "$cli" && add_code "$cli"
 done < <(find_codes)
 
-if [ ${#KINDS[@]} -eq 0 ]; then
-    say
-    say "No IntelliJ IDEA (2024.3+) or VS Code found."
-    say "For an editor in an unusual place, pass its folder: ./install.sh \"/path/to/IntelliJ IDEA\" or \"/path/to/VS Code\"."
-    exit 1
-fi
-
-say
-say "Found on this computer:"
-for i in "${!KINDS[@]}"; do show "$i"; done
-say
+show_all
 
 CHOSEN=()
 while [ ${#CHOSEN[@]} -eq 0 ]; do
     say "Which of these should get Duo Watchdog?"
-    say "  Enter   all of them"
-    say "  1 2     only the ones with these numbers"
-    say "  p       an IntelliJ IDEA or VS Code that isn't listed (you'll type its folder)"
+    if [ ${#KINDS[@]} -gt 0 ]; then
+        say "  Enter   all of them"
+        say "  1 2     only the ones with these numbers"
+    fi
+    say "  p       an IntelliJ IDEA or VS Code that isn't listed (you'll type its folder; it's remembered)"
+    any_added && say "  f       forget a folder you added"
     say "  q       quit without installing"
     answer=$(ask "Your choice: ") || exit 1
     case "$answer" in
-        "") CHOSEN=("${!KINDS[@]}") ;;
+        "")
+            if [ ${#KINDS[@]} -gt 0 ]; then CHOSEN=("${!KINDS[@]}"); else say "  Nothing is listed yet: type p to add a folder, or q."; fi
+            ;;
         q | Q) exit 0 ;;
         p | P)
             dir=$(ask "Folder of the IntelliJ IDEA or VS Code (on macOS, the .app): ") || exit 1
             count=${#KINDS[@]}
-            if add_folder "$dir" && [ ${#KINDS[@]} -gt "$count" ]; then
+            if [ -n "$dir" ] && add_folder "$dir" && [ ${#KINDS[@]} -gt "$count" ]; then
                 show "$count"
             fi
             say
+            ;;
+        f | F)
+            if ! any_added; then
+                say "  You haven't added any folder."
+                continue
+            fi
+            added=()
+            for i in "${!ADDED[@]}"; do [ "${ADDED[$i]}" = yes ] && added+=("$i"); done
+            if [ ${#added[@]} -eq 1 ]; then
+                number=$((added[0] + 1))
+            else
+                number=$(ask "Number of the one to forget: ") || exit 1
+            fi
+            if [[ "$number" =~ ^[0-9]+$ ]] && [ "$number" -ge 1 ] && [ "$number" -le ${#KINDS[@]} ] &&
+                [ "${ADDED[$((number - 1))]}" = yes ]; then
+                forget "${PLACES[$((number - 1))]}"
+                say "  Forgot ${FOLDERS[$((number - 1))]}."
+                drop $((number - 1))
+                show_all
+            else
+                say "  [$number] isn't a folder you added."
+            fi
             ;;
         *)
             for n in ${answer//,/ }; do
