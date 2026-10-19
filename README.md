@@ -7,13 +7,15 @@
 
 # Duo Watchdog
 
-**Keep an eye on your GitLab Duo credits without leaving the IDE.**
+**Keep an eye on your GitLab Duo credits without leaving the editor.**
 
-An IntelliJ Platform plugin that tracks **your own** GitLab Credits usage for the current billing period,
-forecasts where the month will end, and warns you before you hit your limit.
+A plugin for **IntelliJ IDEA** (and other JetBrains IDEs) and an extension for **VS Code** that track **your own**
+GitLab Credits usage for the current billing period, forecast where the month will end, and warn you before you hit your limit.
 
 ![IntelliJ Platform](https://img.shields.io/badge/IntelliJ_Platform-2024.3%2B-000000?logo=intellijidea&logoColor=white)
+![VS Code](https://img.shields.io/badge/VS_Code-1.74%2B-007ACC?logo=visualstudiocode&logoColor=white)
 ![Java](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-VS_Code_extension-3178C6?logo=typescript&logoColor=white)
 ![GitLab](https://img.shields.io/badge/GitLab-Duo-FC6D26?logo=gitlab&logoColor=white)
 ![Version](https://img.shields.io/badge/version-0.2.1-blue)
 
@@ -30,6 +32,7 @@ forecasts where the month will end, and warns you before you hit your limit.
 ## Contents
 
 - [Features](#features)
+- [VS Code](#vs-code)
 - [How it works](#how-it-works)
 - [Requirements](#requirements)
 - [Installation](#installation)
@@ -76,6 +79,25 @@ Balloon notifications with an **Open Duo Watchdog** link. Each one fires **at mo
 | Limit reached | usage reaches 100% of the limit |
 | Blocked | GitLab has blocked Duo because of the cap |
 
+## VS Code
+
+The VS Code extension in [`vscode/`](vscode) is a port of the same features, with the same GitLab query, forecast,
+alerts and texts:
+
+| | IntelliJ IDEA | VS Code |
+|---|---|---|
+| Status bar | Doberman icon, meter, `$21.5 / 300` | `▰▰▱▱▱▱ $21.5 / 300` with a pulse / warning / error icon and VS Code's warning and error backgrounds |
+| Dashboard | *Duo Watchdog* tool window | *Duo Watchdog* view in the activity bar (doberman icon) |
+| Settings | *Settings → Tools → Duo Watchdog* | VS Code Settings, search for `duoWatchdog` |
+| Token storage | IDE Password Safe | VS Code Secret Storage (the OS keychain) |
+| Alerts | Balloon notifications | Notifications with an **Open Duo Watchdog** button |
+
+Commands (*Ctrl/Cmd+Shift+P*, type "Duo Watchdog"): **Set GitLab Token**, **Create the Token in GitLab**, **Find My Group**,
+**Refresh**, **Open Dashboard**, **Open Settings**.
+
+The extension has no runtime dependencies. Its requests use Node's `https` module, so they go through VS Code's
+proxy settings (`http.proxy`) and the system certificates.
+
 ## How it works
 
 Duo Watchdog queries GitLab's GraphQL API for
@@ -104,10 +126,11 @@ Requests go through the IDE's proxy and trusted certificates
 | Component | Minimum version | Notes |
 |---|---|---|
 | JetBrains IDE | **2024.3** (build `243`) | IntelliJ IDEA Community or Ultimate, or any other JetBrains IDE. There is no upper bound. |
+| VS Code | **1.74** | Also VS Code Insiders, VSCodium and Cursor. |
 | GitLab | **19.4** | The first version with `currentUser.creditsUsage`. Works on GitLab.com and self-managed. |
 | GitLab account | Member of the top-level group | The group must own a GitLab Duo subscription. You don't need the Owner role. |
 | Personal access token | Scopes `read_api` + `ai_features` | No other scopes are needed. |
-| OS | Windows, macOS, Linux | Any OS the IDE runs on. |
+| OS | Windows, macOS, Linux | Any OS the editor runs on. |
 
 ### Building from source
 
@@ -117,9 +140,64 @@ Requests go through the IDE's proxy and trusted certificates
 | JDK (to compile) | 21 / 25 | Gradle downloads it for you: 21, or 25 when compiling against IDEA 2026.2+. |
 | Gradle | — | No install needed: the wrapper (`gradlew` / `gradlew.bat`) downloads Gradle 9.8.1. |
 | IntelliJ IDEA | **2024.3**, installed | The build compiles against your installed IDEA (Community or Ultimate) and never downloads one. |
+| Node.js + npm | **20** | VS Code extension only. The packaging tool (`@vscode/vsce` 3) needs Node.js 20+. |
 | Internet access | first build | Needed to download Gradle, the compile JDK and small dependencies. They are cached afterwards. |
 
 ## Installation
+
+### With the install script (recommended)
+
+Clone the repository and run the script for your OS. It installs Duo Watchdog for the first time, and also updates it later
+(run `git pull` first to get the latest version).
+
+```bash
+./install.sh                 # macOS / Linux
+```
+
+```bat
+install.bat                  :: Windows (or double-click it in Explorer)
+```
+
+The script is interactive:
+
+1. It finds every **IntelliJ IDEA** (2024.3+) and **VS Code** (also VS Code Insiders, VSCodium and Cursor) on the machine and lists them,
+   with the Duo Watchdog version each one already has and whether the IDE is running.
+2. You pick one or more by number (`1 2`), `a` for all, or `p` to type the folder of an IntelliJ IDEA it didn't find.
+3. It checks that the tools it needs are installed: a JDK 17+ for IntelliJ IDEA, Node.js 20+ for VS Code.
+4. It shows what it will install and asks you to confirm.
+5. **IntelliJ IDEA**: if the IDE is running, it asks you to close it and waits. Then it builds the plugin against that IDE,
+   puts it into the IDE's plugins folder (replacing an older Duo Watchdog) and offers to start the IDE.
+6. **VS Code**: it packages the extension once and installs it with `code --install-extension`. Run
+   *Developer: Reload Window* in open VS Code windows to load the new version.
+
+```
+Duo Watchdog installer: plugin 0.2.1, VS Code extension 0.2.1
+Looking for IntelliJ IDEA and VS Code...
+
+Where should Duo Watchdog go?
+  1) IntelliJ IDEA 2025.3.1  /Applications/IntelliJ IDEA.app  (Duo Watchdog 0.2.0 installed)  [running]
+  2) VS Code 1.130.0  /usr/local/bin/code  (not installed)
+  a) all of the above
+  p) another IntelliJ IDEA folder
+Numbers separated by spaces, a, p or q to quit [1]:
+```
+
+You can also pass an IntelliJ IDEA folder the script doesn't find on its own:
+`./install.sh "/path/to/IntelliJ IDEA"` or `install.bat "D:\Tools\IntelliJ IDEA 2025.3"`.
+
+### Without the script
+
+**IntelliJ IDEA**, in one command: build the plugin and put it into the plugins folder of the IDE it was compiled against.
+Close the IDE first:
+
+```bash
+./gradlew installPlugin                                      # the IDEA the build finds
+./gradlew installPlugin -PideaPath="/path/to/IntelliJ IDEA"  # a specific one
+```
+
+Add `-PpluginsDir=...` if your IDE keeps its plugins somewhere else (`idea.plugins.path` in `idea.properties`).
+
+Or the IDE's own way:
 
 1. [Build the plugin](#building-from-source), or get `duo-watchdog-<version>.zip` from a teammate.
 2. In the IDE, open *Settings → Plugins → ⚙ → Install Plugin from Disk…*
@@ -140,6 +218,22 @@ Open *Settings → Tools → Duo Watchdog*.
 | **Alert at % of limit** | Comma-separated thresholds, e.g. `50, 80, 95` |
 | **Alert when the month-end forecast passes the limit** | Turns the forecast alert on or off |
 | **Refresh every … minutes** | Polling interval. Default: `15`. GitLab's data can lag a few minutes behind actual use. |
+
+### VS Code
+
+1. Run **Duo Watchdog: Create the Token in GitLab** to open GitLab's new-token page with both scopes selected. Then run
+   **Duo Watchdog: Set GitLab Token** and paste the token.
+2. Run **Duo Watchdog: Find My Group**, or set `duoWatchdog.groupPath` yourself.
+3. Adjust the rest in Settings if you need to:
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `duoWatchdog.gitlabUrl` | `https://gitlab.com` | Your GitLab address |
+| `duoWatchdog.groupPath` | — | Path of the top-level group that owns the Duo subscription |
+| `duoWatchdog.limit` | `100` | Your limit in credits |
+| `duoWatchdog.alertPercents` | `"80, 95"` | Thresholds in percent of the limit, comma-separated |
+| `duoWatchdog.forecastAlert` | `true` | Alert when the month-end forecast passes the limit |
+| `duoWatchdog.refreshMinutes` | `15` | Polling interval in minutes |
 
 ## Building from source
 
@@ -210,11 +304,13 @@ that says so. Install IntelliJ IDEA 2024.3 or later, or pass the right path.
 
 Run these commands in **PowerShell** (Windows 10 or 11). Each step says what to do when you already have that tool.
 
-**1. Install Git and a JDK** (skip if `git --version` and `java -version` already work, with Java 17 or later):
+**1. Install Git, a JDK and Node.js** (skip the ones you already have: `git --version`, `java -version` with Java 17 or later,
+`node --version` with Node.js 20 or later). The JDK is for IntelliJ IDEA, Node.js for VS Code; skip what you don't need.
 
 ```powershell
 winget install --id Git.Git -e
 winget install --id EclipseAdoptium.Temurin.21.JDK -e
+winget install --id OpenJS.NodeJS.LTS -e
 ```
 
 Then **close the terminal and open a new one** so it picks up the new `PATH`. Check:
@@ -222,6 +318,7 @@ Then **close the terminal and open a new one** so it picks up the new `PATH`. Ch
 ```powershell
 git --version
 java -version      # must print 17 or later
+node --version     # must print v20 or later
 ```
 
 > [!TIP]
@@ -237,7 +334,15 @@ git clone https://github.com/sergeystets/duo-watchdog.git
 cd duo-watchdog
 ```
 
-**3. Build the plugin:**
+**3. Run the installer** and answer its questions (see [With the install script](#with-the-install-script-recommended)):
+
+```powershell
+.\install.bat
+```
+
+That's all. Steps 4 and 5 are for building by hand instead.
+
+**4. Build the plugin by hand:**
 
 ```powershell
 .\gradlew.bat buildPlugin
@@ -251,7 +356,7 @@ because the path contains spaces:
 .\gradlew.bat buildPlugin "-PideaPath=D:\Tools\IntelliJ IDEA 2025.3"
 ```
 
-**4. Find the result:**
+**5. Find the result:**
 
 ```powershell
 dir build\distributions    # → duo-watchdog-0.2.1.zip
@@ -293,6 +398,10 @@ dir build\distributions
   Credential Manager opens, or run `winget install --id GitHub.cli -e`, then `gh auth login`.
 - **`no installed IntelliJ IDEA found`**: IDEA is installed somewhere the build doesn't look. Pass `-PideaPath=...` as in step 3.
 - **`no IntelliJ IDEA at ...`**: the path is wrong. Pass the IDEA install folder itself (the one with `bin` and `product-info.json`), not `bin\idea64.exe`.
+- **`running scripts is disabled on this system`**: run `install.bat`, not `install.ps1` directly. The `.bat` starts PowerShell
+  with `-ExecutionPolicy Bypass` for that one run.
+- **The script can't find VS Code**: it looks for `code` on the `PATH` and in the default install folders. Reinstall VS Code with
+  *Add to PATH* checked, or open a new terminal after installing.
 - **Corporate proxy**: Gradle doesn't use the IDE's proxy settings. Add your proxy to `%USERPROFILE%\.gradle\gradle.properties`:
   ```properties
   systemProp.https.proxyHost=proxy.example.com
@@ -308,12 +417,29 @@ duo-watchdog/
 │   ├── src/main/…/core/  GraphQL client, billing period & forecast, alert rules, texts
 │   ├── src/main/…/ui/    Pure Swing components: dashboard, meter, chart, feature bars, status chip
 │   └── src/test/         JUnit 5 tests; also paints the UI headless to core/build/ui-previews/*.png
-└── src/                  Thin IntelliJ layer: settings, refresh service, status bar widget,
-                          tool window, notifications
+├── src/                  Thin IntelliJ layer: settings, refresh service, status bar widget,
+│                         tool window, notifications
+├── vscode/               VS Code extension (TypeScript, no runtime dependencies)
+│   ├── src/core/         Port of core/: GraphQL client, period & forecast, alerts, texts, dashboard data
+│   ├── src/              Extension layer: status bar, webview dashboard, settings, secret storage
+│   ├── src/test/         node:test tests mirroring the Java tests
+│   └── media/            Dashboard script and styles, icons
+├── install.sh            Interactive installer for macOS / Linux
+└── install.bat           Interactive installer for Windows (runs install.ps1)
 ```
 
 The UI components get their colors from the plugin as light/dark pairs, so they follow the IDE theme.
 Running `./gradlew :core:test` also renders every dashboard state to PNG. You can review UI changes from those images without starting an IDE.
+
+The VS Code extension builds and tests on its own:
+
+```bash
+cd vscode
+npm ci
+npm test          # 32 tests, no VS Code needed
+npm run package   # → vscode/duo-watchdog-0.2.1.vsix
+code --install-extension duo-watchdog-0.2.1.vsix
+```
 
 ## Troubleshooting
 
