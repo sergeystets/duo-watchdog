@@ -163,7 +163,7 @@ The script is interactive:
 1. It finds every **IntelliJ IDEA** (2024.3+) and **VS Code** (also VS Code Insiders, VSCodium and Cursor) on the machine
    and shows, for each, where it is installed, which Duo Watchdog version it has, and whether the IDE is running.
 2. Press **Enter** to install into all of them, or type the numbers of the ones you want (`1 2`). Type `p` to add an
-   IntelliJ IDEA it didn't find (you type its folder), or `q` to quit without installing.
+   IntelliJ IDEA or VS Code it didn't find (you type its folder), or `q` to quit without installing.
 3. It checks that the tools it needs are installed: a JDK 17+ for IntelliJ IDEA, Node.js 20+ for VS Code.
 4. It shows the plan (install, update from one version to another, or reinstall) and asks you to confirm.
 5. **IntelliJ IDEA**: if the IDE is running, it asks you to close it and waits. Then it builds the plugin against that IDE,
@@ -189,7 +189,7 @@ Found on this computer:
 Which of these should get Duo Watchdog?
   Enter   all of them
   1 2     only the ones with these numbers
-  p       an IntelliJ IDEA that isn't listed (you'll type its folder)
+  p       an IntelliJ IDEA or VS Code that isn't listed (you'll type its folder)
   q       quit without installing
 Your choice:
 
@@ -199,8 +199,10 @@ Plan:
 Continue? [Y/n]
 ```
 
-You can also pass an IntelliJ IDEA folder the script doesn't find on its own:
-`./install.sh "/path/to/IntelliJ IDEA"` or `install.bat "D:\Tools\IntelliJ IDEA 2025.3"`.
+You can also pass the folder of an IntelliJ IDEA or VS Code that the script doesn't find on its own:
+`./install.sh "/path/to/IntelliJ IDEA"`, `install.bat "D:\Tools\IntelliJ IDEA 2025.3"` or `install.bat "D:\Tools\Microsoft VS Code"`.
+For IntelliJ IDEA that's the folder with `product-info.json`; for VS Code, the folder with `bin\code.cmd` (Windows),
+`bin/code` (Linux) or the `.app` (macOS).
 
 ### Without the script
 
@@ -424,8 +426,8 @@ dir build\distributions
 - **`no IntelliJ IDEA at ...`**: the path is wrong. Pass the IDEA install folder itself (the one with `bin` and `product-info.json`), not `bin\idea64.exe`.
 - **`running scripts is disabled on this system`**: run `install.bat`, not `install.ps1` directly. The `.bat` starts PowerShell
   with `-ExecutionPolicy Bypass` for that one run.
-- **The script can't find VS Code**: it looks for `code` on the `PATH` and in the default install folders. Reinstall VS Code with
-  *Add to PATH* checked, or open a new terminal after installing.
+- **The script can't find VS Code**: it looks for `code` on the `PATH` and in the default install folders. Type `p` and the
+  VS Code folder (e.g. `D:\Tools\Microsoft VS Code`), or reinstall VS Code with *Add to PATH* checked.
 - **Corporate proxy**: Gradle doesn't use the IDE's proxy settings. Add your proxy to `%USERPROFILE%\.gradle\gradle.properties`:
   ```properties
   systemProp.https.proxyHost=proxy.example.com

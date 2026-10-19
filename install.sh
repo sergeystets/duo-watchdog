@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Installs or updates Duo Watchdog in IntelliJ IDEA and VS Code on this machine, asking where.
 #
-#   ./install.sh               pick from the IntelliJ IDEA installs and VS Code CLIs found
-#   ./install.sh <IDEA folder> offer that IntelliJ IDEA too, e.g. one in an unusual place
+#   ./install.sh            pick from the IntelliJ IDEA and VS Code installs found
+#   ./install.sh <folder>   offer that IntelliJ IDEA or VS Code too, e.g. one in an unusual place
 #
 # IntelliJ IDEA gets the plugin built by intellij/gradlew installPlugin (needs JDK 17+), VS Code the extension
 # packaged from vscode/ (needs Node.js 20+). Runs on the bash 3.2 that macOS ships.
@@ -195,31 +195,66 @@ else
 fi
 say "Looking for IntelliJ IDEA and VS Code..."
 
-ARGUMENT_IDEA=""
-if [ $# -ge 1 ]; then
-    dir=${1%/}
-    [ "$(basename "$dir")" = bin ] && dir=$(dirname "$dir")
-    if is_intellij "$dir"; then
-        ARGUMENT_IDEA=$(cd "$dir" && pwd -P)
-        add_idea "$ARGUMENT_IDEA"
-    else
-        say "  $1 is not an IntelliJ IDEA folder (no product-info.json)."
-    fi
-fi
-while IFS= read -r dir; do
-    [ -n "$dir" ] && [ "$dir" != "$ARGUMENT_IDEA" ] && add_idea "$dir"
-done < <(find_ideas)
-while IFS= read -r cli; do
-    [ -n "$cli" ] || continue
+add_code() {
+    local cli=$1
     KINDS+=(code) PLACES+=("$cli") FOLDERS+=("$(code_folder "$cli")") CURRENT+=("$(extension_version "$cli")")
     NAMES+=("$(code_name "$cli") $("$cli" --version 2>/dev/null | head -n 1 || true)")
+}
+
+# The CLI of the VS Code (or Insiders, VSCodium, Cursor) in a folder, or that CLI itself, or nothing.
+code_cli_in() {
+    local candidate
+    for candidate in "$1" "$1"/bin/code "$1"/bin/code-insiders "$1"/bin/codium "$1"/bin/cursor \
+        "$1"/Contents/Resources/app/bin/code "$1"/Contents/Resources/app/bin/codium "$1"/Contents/Resources/app/bin/cursor; do
+        if [ -f "$candidate" ] && [ -x "$candidate" ]; then
+            say "$candidate"
+            return
+        fi
+    done
+}
+
+# Whether the editor is listed already: the same IDEA folder, or a CLI that is the same file.
+listed() {
+    local i
+    for i in "${!KINDS[@]}"; do
+        [ "$(readlink -f "${PLACES[$i]}" 2>/dev/null || say "${PLACES[$i]}")" = "$(readlink -f "$1" 2>/dev/null || say "$1")" ] && return 0
+    done
+    return 1
+}
+
+# Adds the IntelliJ IDEA or VS Code in a folder someone typed; fails, saying why, when there is none.
+add_folder() {
+    local dir=${1%/} cli
+    [ "$(basename "$dir")" = bin ] && dir=$(dirname "$dir")
+    if is_intellij "$dir"; then
+        dir=$(cd "$dir" && pwd -P)
+        if listed "$dir"; then say "  $dir is listed already."; return 1; fi
+        add_idea "$dir"
+        return 0
+    fi
+    cli=$(code_cli_in "$dir")
+    [ -n "$cli" ] || cli=$(code_cli_in "$1")
+    if [ -n "$cli" ]; then
+        if listed "$cli"; then say "  $(code_folder "$cli") is listed already."; return 1; fi
+        add_code "$cli"
+        return 0
+    fi
+    say "  $1 is neither an IntelliJ IDEA folder (with product-info.json) nor a VS Code folder (with bin/code)."
+    return 1
+}
+
+[ $# -ge 1 ] && { add_folder "$1" || true; }
+while IFS= read -r dir; do
+    [ -n "$dir" ] && ! listed "$dir" && add_idea "$dir"
+done < <(find_ideas)
+while IFS= read -r cli; do
+    [ -n "$cli" ] && ! listed "$cli" && add_code "$cli"
 done < <(find_codes)
 
 if [ ${#KINDS[@]} -eq 0 ]; then
     say
     say "No IntelliJ IDEA (2024.3+) or VS Code found."
-    say "Run ./install.sh \"/path/to/IntelliJ IDEA\" for an IDEA in an unusual place,"
-    say "or put VS Code's 'code' command on the PATH (VS Code: Shell Command: Install 'code' command in PATH)."
+    say "For an editor in an unusual place, pass its folder: ./install.sh \"/path/to/IntelliJ IDEA\" or \"/path/to/VS Code\"."
     exit 1
 fi
 
@@ -233,26 +268,19 @@ while [ ${#CHOSEN[@]} -eq 0 ]; do
     say "Which of these should get Duo Watchdog?"
     say "  Enter   all of them"
     say "  1 2     only the ones with these numbers"
-    say "  p       an IntelliJ IDEA that isn't listed (you'll type its folder)"
+    say "  p       an IntelliJ IDEA or VS Code that isn't listed (you'll type its folder)"
     say "  q       quit without installing"
     answer=$(ask "Your choice: ") || exit 1
     case "$answer" in
         "") CHOSEN=("${!KINDS[@]}") ;;
         q | Q) exit 0 ;;
         p | P)
-            dir=$(ask "IntelliJ IDEA folder (the one with product-info.json; on macOS the .app): ") || exit 1
-            dir=${dir%/}
-            [ "$(basename "$dir")" = bin ] && dir=$(dirname "$dir")
-            if is_intellij "$dir"; then
-                count=${#KINDS[@]}
-                add_idea "$(cd "$dir" && pwd -P)"
-                if [ ${#KINDS[@]} -gt "$count" ]; then
-                    show "$count"
-                    say
-                fi
-            else
-                say "  $dir is not an IntelliJ IDEA folder."
+            dir=$(ask "Folder of the IntelliJ IDEA or VS Code (on macOS, the .app): ") || exit 1
+            count=${#KINDS[@]}
+            if add_folder "$dir" && [ ${#KINDS[@]} -gt "$count" ]; then
+                show "$count"
             fi
+            say
             ;;
         *)
             for n in ${answer//,/ }; do
