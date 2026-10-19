@@ -192,7 +192,11 @@ Say
 
 $Chosen = @()
 while ($Chosen.Count -eq 0) {
-    Say 'Install into: press Enter for all, or type numbers (e.g. 1 2). p = add an IntelliJ IDEA folder, q = quit.'
+    Say 'Which of these should get Duo Watchdog?'
+    Say '  Enter   all of them'
+    Say '  1 2     only the ones with these numbers'
+    Say "  p       an IntelliJ IDEA that isn't listed (you'll type its folder)"
+    Say '  q       quit without installing'
     $answer = (Ask 'Your choice').Trim()
     switch -Regex ($answer) {
         '^$' { $Chosen = @(0..($Targets.Count - 1)) }

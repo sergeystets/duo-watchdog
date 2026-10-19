@@ -162,8 +162,8 @@ The script is interactive:
 
 1. It finds every **IntelliJ IDEA** (2024.3+) and **VS Code** (also VS Code Insiders, VSCodium and Cursor) on the machine
    and shows, for each, where it is installed, which Duo Watchdog version it has, and whether the IDE is running.
-2. Press **Enter** to install into all of them, or type the numbers you want (`1 2`). `p` adds an IntelliJ IDEA folder it
-   didn't find, `q` quits.
+2. Press **Enter** to install into all of them, or type the numbers of the ones you want (`1 2`). Type `p` to add an
+   IntelliJ IDEA it didn't find (you type its folder), or `q` to quit without installing.
 3. It checks that the tools it needs are installed: a JDK 17+ for IntelliJ IDEA, Node.js 20+ for VS Code.
 4. It shows the plan (install, update from one version to another, or reinstall) and asks you to confirm.
 5. **IntelliJ IDEA**: if the IDE is running, it asks you to close it and waits. Then it builds the plugin against that IDE,
@@ -186,7 +186,11 @@ Found on this computer:
       C:\Program Files\Microsoft VS Code
       Duo Watchdog is not installed yet.
 
-Install into: press Enter for all, or type numbers (e.g. 1 2). p = add an IntelliJ IDEA folder, q = quit.
+Which of these should get Duo Watchdog?
+  Enter   all of them
+  1 2     only the ones with these numbers
+  p       an IntelliJ IDEA that isn't listed (you'll type its folder)
+  q       quit without installing
 Your choice:
 
 Plan:
