@@ -3,7 +3,7 @@
 #   install.bat                 pick from the IntelliJ IDEA installs and VS Code CLIs found
 #   install.bat "<IDEA folder>" offer that IntelliJ IDEA too, e.g. one in an unusual place
 #
-# IntelliJ IDEA gets the plugin built by gradlew installPlugin (needs JDK 17+), VS Code the extension
+# IntelliJ IDEA gets the plugin built by intellij\gradlew installPlugin (needs JDK 17+), VS Code the extension
 # packaged from vscode\ (needs Node.js 20+). Runs on the Windows PowerShell 5.1 that Windows 10 and 11 ship.
 param([string]$IdeaPath)
 
@@ -21,7 +21,7 @@ function Ask([string]$Prompt) {
 }
 function YesDefault([string]$Prompt) { (Ask "$Prompt [Y/n]") -notmatch '^[nN]' }
 
-$PluginVersion = (Select-String -Path build.gradle.kts -Pattern '^version = "(.*)"$').Matches[0].Groups[1].Value
+$PluginVersion = (Select-String -Path intellij\build.gradle.kts -Pattern '^version = "(.*)"$').Matches[0].Groups[1].Value
 $ExtensionVersion = ''
 if (Test-Path vscode\package.json) { $ExtensionVersion = (Get-Content -Raw vscode\package.json | ConvertFrom-Json).version }
 
@@ -223,7 +223,7 @@ function Install-Idea([string]$Dir) {
         }
     }
     Say "Building the plugin against $Dir (the first build downloads Gradle and a JDK and can take a few minutes)..."
-    & .\gradlew.bat installPlugin "-PideaPath=$Dir" --quiet --console=plain
+    & .\intellij\gradlew.bat -p intellij installPlugin "-PideaPath=$Dir" --quiet --console=plain
     if ($LASTEXITCODE -eq 0) {
         [void]$Results.Add("installed IntelliJ IDEA  $Dir  -> Duo Watchdog $PluginVersion")
         if (YesDefault 'Start IntelliJ IDEA now?') { Start-Process (Join-Path $Dir 'bin\idea64.exe') }

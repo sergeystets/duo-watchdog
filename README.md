@@ -191,6 +191,7 @@ You can also pass an IntelliJ IDEA folder the script doesn't find on its own:
 Close the IDE first:
 
 ```bash
+cd intellij
 ./gradlew installPlugin                                      # the IDEA the build finds
 ./gradlew installPlugin -PideaPath="/path/to/IntelliJ IDEA"  # a specific one
 ```
@@ -201,7 +202,7 @@ Or the IDE's own way:
 
 1. [Build the plugin](#building-from-source), or get `duo-watchdog-<version>.zip` from a teammate.
 2. In the IDE, open *Settings → Plugins → ⚙ → Install Plugin from Disk…*
-3. Select `build/distributions/duo-watchdog-0.2.1.zip` and restart if the IDE asks you to.
+3. Select `intellij/build/distributions/duo-watchdog-0.2.1.zip` and restart if the IDE asks you to.
 
 **Compatibility:** IntelliJ IDEA and any other JetBrains IDE from **2024.3** onward. This holds whichever IDE version the plugin was built against.
 
@@ -240,9 +241,12 @@ Open *Settings → Tools → Duo Watchdog*.
 **Requirements:** JDK 17+ to run Gradle. Gradle downloads the compile JDK itself: 21, or 25 when building
 against IDEA 2026.2 or later. The plugin's classes target Java 21 in both cases.
 
+The IntelliJ plugin lives in [`intellij/`](intellij), a Gradle project of its own; run Gradle there:
+
 ```bash
+cd intellij
 ./gradlew :core:test      # unit tests for the core logic
-./gradlew buildPlugin     # → build/distributions/duo-watchdog-0.2.1.zip
+./gradlew buildPlugin     # → intellij/build/distributions/duo-watchdog-0.2.1.zip
 ./gradlew runIde          # launch a sandbox IDE with the plugin installed
 ```
 
@@ -292,6 +296,7 @@ the path you need. *Show in Explorer / Finder* in the same menu opens the folder
 To choose the IDE yourself:
 
 ```bash
+cd intellij
 ./gradlew buildPlugin -PideaPath="/path/to/IntelliJ IDEA.app"
 # or
 export IDEA_HOME="/path/to/IntelliJ IDEA.app"
@@ -345,6 +350,7 @@ That's all. Steps 4 and 5 are for building by hand instead.
 **4. Build the plugin by hand:**
 
 ```powershell
+cd intellij
 .\gradlew.bat buildPlugin
 ```
 
@@ -359,13 +365,13 @@ because the path contains spaces:
 **5. Find the result:**
 
 ```powershell
-dir build\distributions    # → duo-watchdog-0.2.1.zip
+dir build\distributions    # → duo-watchdog-0.2.1.zip (in intellij\)
 ```
 
 Then follow [Installation](#installation): *Settings → Plugins → ⚙ → Install Plugin from Disk…* and pick
-`build\distributions\duo-watchdog-0.2.1.zip`.
+`intellij\build\distributions\duo-watchdog-0.2.1.zip`.
 
-**Optional:** run the tests or try the plugin in a sandbox IDE:
+**Optional:** run the tests or try the plugin in a sandbox IDE (still in `intellij\`):
 
 ```powershell
 .\gradlew.bat :core:test
@@ -383,6 +389,7 @@ cd duo-watchdog
 rem Only if IDEA is not in a standard location (no quotes around the value in "set"):
 set IDEA_HOME=D:\Tools\IntelliJ IDEA 2025.3
 
+cd intellij
 gradlew.bat buildPlugin
 dir build\distributions
 ```
@@ -413,23 +420,26 @@ dir build\distributions
 
 ```
 duo-watchdog/
-├── core/                 Plain Java, no IntelliJ dependencies
-│   ├── src/main/…/core/  GraphQL client, billing period & forecast, alert rules, texts
-│   ├── src/main/…/ui/    Pure Swing components: dashboard, meter, chart, feature bars, status chip
-│   └── src/test/         JUnit 5 tests; also paints the UI headless to core/build/ui-previews/*.png
-├── src/                  Thin IntelliJ layer: settings, refresh service, status bar widget,
-│                         tool window, notifications
-├── vscode/               VS Code extension (TypeScript, no runtime dependencies)
-│   ├── src/core/         Port of core/: GraphQL client, period & forecast, alerts, texts, dashboard data
-│   ├── src/              Extension layer: status bar, webview dashboard, settings, secret storage
-│   ├── src/test/         node:test tests mirroring the Java tests
-│   └── media/            Dashboard script and styles, icons
-├── install.sh            Interactive installer for macOS / Linux
-└── install.bat           Interactive installer for Windows (runs install.ps1)
+├── intellij/                 IntelliJ plugin (Java, Gradle)
+│   ├── core/                 Plain Java, no IntelliJ dependencies
+│   │   ├── src/main/…/core/  GraphQL client, billing period & forecast, alert rules, texts
+│   │   ├── src/main/…/ui/    Pure Swing components: dashboard, meter, chart, feature bars, status chip
+│   │   └── src/test/         JUnit 5 tests; also paints the UI headless to core/build/ui-previews/*.png
+│   ├── src/                  Thin IntelliJ layer: settings, refresh service, status bar widget,
+│   │                         tool window, notifications
+│   └── build.gradle.kts      Finds the installed IDEA; buildPlugin, installPlugin, runIde
+├── vscode/                   VS Code extension (TypeScript, npm, no runtime dependencies)
+│   ├── src/core/             Port of intellij/core: GraphQL client, period & forecast, alerts, texts
+│   ├── src/                  Extension layer: status bar, webview dashboard, settings, secret storage
+│   ├── src/test/             node:test tests mirroring the Java tests
+│   └── media/                Dashboard script and styles, icons
+├── docs/images/              Logo and screenshots for this README
+├── install.sh                Interactive installer for macOS / Linux
+└── install.bat               Interactive installer for Windows (runs install.ps1)
 ```
 
 The UI components get their colors from the plugin as light/dark pairs, so they follow the IDE theme.
-Running `./gradlew :core:test` also renders every dashboard state to PNG. You can review UI changes from those images without starting an IDE.
+Running `./gradlew :core:test` in `intellij/` also renders every dashboard state to PNG. You can review UI changes from those images without starting an IDE.
 
 The VS Code extension builds and tests on its own:
 

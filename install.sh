@@ -4,7 +4,7 @@
 #   ./install.sh               pick from the IntelliJ IDEA installs and VS Code CLIs found
 #   ./install.sh <IDEA folder> offer that IntelliJ IDEA too, e.g. one in an unusual place
 #
-# IntelliJ IDEA gets the plugin built by ./gradlew installPlugin (needs JDK 17+), VS Code the extension
+# IntelliJ IDEA gets the plugin built by intellij/gradlew installPlugin (needs JDK 17+), VS Code the extension
 # packaged from vscode/ (needs Node.js 20+). Runs on the bash 3.2 that macOS ships.
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -26,7 +26,7 @@ yes_default() {
     case "$answer" in [nN]*) return 1 ;; *) return 0 ;; esac
 }
 
-PLUGIN_VERSION=$(sed -n 's/^version = "\(.*\)"$/\1/p' build.gradle.kts)
+PLUGIN_VERSION=$(sed -n 's/^version = "\(.*\)"$/\1/p' intellij/build.gradle.kts)
 EXTENSION_VERSION=$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' vscode/package.json 2>/dev/null | head -n 1 || true)
 
 # --- IntelliJ IDEA ---------------------------------------------------------------------------------------
@@ -251,7 +251,7 @@ install_idea() {
         esac
     done
     say "Building the plugin against $dir (the first build downloads Gradle and a JDK and can take a few minutes)..."
-    if ./gradlew installPlugin -PideaPath="$dir" --quiet --console=plain; then
+    if intellij/gradlew -p intellij installPlugin -PideaPath="$dir" --quiet --console=plain; then
         RESULTS+=("installed IntelliJ IDEA  $dir  -> Duo Watchdog $PLUGIN_VERSION")
         yes_default "Start IntelliJ IDEA now?" && start_idea "$dir"
     else
