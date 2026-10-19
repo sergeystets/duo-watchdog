@@ -339,9 +339,9 @@ banner() {
     row=$(say "$art" | awk '/[^ ] {10,}[^ ]/ { print NR; exit }')
     title=$(printf '%s\n' "D U O   W A T C H D O G" "" "Guards your GitLab Duo credits" \
         "in IntelliJ IDEA and VS Code." "" "Installer, version $1")
-    # As wide a gap between dog and title as the terminal allows, from 4 to 10 columns.
+    # As wide a gap between dog and title as the terminal allows, from 4 to 30 columns.
     gap=$((columns - $(say "$dog" | beside "${row:-1}" "$title" 0 width)))
-    [ "$gap" -gt 10 ] && gap=10
+    [ "$gap" -gt 30 ] && gap=30
     if [ -n "$art" ] && [ "$gap" -ge 4 ]; then
         say "$dog" | beside "${row:-1}" "$title" "$gap"
     else
