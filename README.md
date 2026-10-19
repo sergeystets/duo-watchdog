@@ -480,6 +480,20 @@ The **Group path** field most likely holds the group's display *name* instead of
 </details>
 
 <details>
+<summary><b>WSL / Linux: <code>/bin/sh^M: bad interpreter</code>, or every file shows as changed right after cloning</b></summary>
+
+Your git has `core.autocrlf=true` and checked the files out with Windows line endings (CRLF). Linux can't run
+`gradlew` like that. Switch the setting off and check the files out again (this discards local edits in that clone):
+
+```bash
+git config --global core.autocrlf input
+git rm -r -q --cached .
+git reset --hard
+git status        # nothing to commit, working tree clean
+```
+</details>
+
+<details>
 <summary><b>The numbers are behind what I just used</b></summary>
 
 GitLab's usage data can lag a few minutes behind actual use. Click **Refresh** in the tool window, or use

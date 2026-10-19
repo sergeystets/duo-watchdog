@@ -337,6 +337,15 @@ install_idea() {
             s | S) RESULTS+=("SKIPPED  ${NAMES[$i]}: it was running.") && return ;;
         esac
     done
+    # A checkout made with core.autocrlf=true has CRLF in gradlew, which then fails with "/bin/sh^M: bad interpreter".
+    if grep -q "$(printf '\r')" intellij/gradlew; then
+        say "intellij/gradlew has Windows line endings (CRLF), so it can't run here. Your git wrote them:"
+        say "it has core.autocrlf=true. Fix the setting and check the files out again (this discards local edits):"
+        say "  git config --global core.autocrlf input"
+        say "  git rm -r -q --cached . && git reset --hard"
+        RESULTS+=("FAILED   ${NAMES[$i]}: intellij/gradlew has CRLF line endings, see above.")
+        return
+    fi
     say "Building the plugin for ${NAMES[$i]} (the first build downloads Gradle and a JDK and can take a few minutes)..."
     if intellij/gradlew -p intellij installPlugin -PideaPath="$dir" --quiet --console=plain; then
         RESULTS+=("OK       ${NAMES[$i]}: Duo Watchdog $PLUGIN_VERSION installed.")
