@@ -250,22 +250,31 @@ function Get-Logo {
     @($lines[$drawn[0]..$drawn[-1]] | ForEach-Object { if ($_.Length -gt $margin) { $_.Substring($margin) } else { '' } })
 }
 
-# docs\images\logo.ascii, the dog with the title beside it, with "version x.y.z" in it set to this version. A
-# console narrower than the drawing gets the title alone, since wrapped lines would tear the dog apart.
+function Get-Widest($Lines) { [int]($Lines | ForEach-Object { $_.Length } | Measure-Object -Maximum).Maximum }
+
+# docs\images\logo.ascii, the dog with the title beside it, with "version x.y.z" in it set to this version.
+# A console too narrow for all of it gets the dog alone with the title under it, and one too narrow for the
+# dog the title alone, since wrapped lines would tear the dog apart.
 function Show-Banner([string]$Version) {
     $columns = 80
     try { $columns = $Host.UI.RawUI.WindowSize.Width } catch { }
     if (-not $columns) { $columns = 80 }
-    $art = Get-Logo
-    $artWidth = ($art | ForEach-Object { $_.Length } | Measure-Object -Maximum).Maximum
+    $art = @(Get-Logo)
     Say
-    if ($artWidth -and $artWidth -le $columns) {
+    if ($art.Count -gt 0 -and (Get-Widest $art) -le $columns) {
         $art | ForEach-Object { Say ($_ -replace 'version [0-9][0-9.]*', "version $Version") }
-    } else {
-        Say 'D U O   W A T C H D O G'
-        Say 'Guards your GitLab Duo credits in IntelliJ IDEA and VS Code.'
-        Say "Installer, version $Version"
+        Say
+        return
     }
+    # The text beside the dog starts after a gap of 10 spaces or more; gaps inside the dog are narrower.
+    $dog = @($art | ForEach-Object { ($_ -replace '(?<=[^ ]) {10,}[^ ].*$', '').TrimEnd() })
+    if ($dog.Count -gt 0 -and (Get-Widest $dog) -le $columns) {
+        $dog | ForEach-Object { Say $_ }
+        Say
+    }
+    Say 'D U O   W A T C H D O G'
+    Say 'Guards your GitLab Duo credits in IntelliJ IDEA and VS Code.'
+    Say "Installer, version $Version"
     Say
 }
 
