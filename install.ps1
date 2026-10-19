@@ -1,11 +1,11 @@
 # Installs or updates Duo Watchdog in IntelliJ IDEA and VS Code on this machine, asking where.
 #
-#   install.bat                 pick from the IntelliJ IDEA installs and VS Code CLIs found
-#   install.bat "<IDEA folder>" offer that IntelliJ IDEA too, e.g. one in an unusual place
+#   install.bat              pick from the IntelliJ IDEA and VS Code installs found
+#   install.bat "<folder>"   offer that IntelliJ IDEA or VS Code too, e.g. one in an unusual place
 #
 # IntelliJ IDEA gets the plugin built by intellij\gradlew installPlugin (needs JDK 17+), VS Code the extension
 # packaged from vscode\ (needs Node.js 20+). Runs on the Windows PowerShell 5.1 that Windows 10 and 11 ship.
-param([string]$IdeaPath)
+param([string]$Folder)
 
 # No $ErrorActionPreference = 'Stop': on PowerShell 5.1 it turns any stderr of code, npm or gradlew into a
 # terminating error. Each call is checked by its result instead.
@@ -161,27 +161,60 @@ if ($PluginVersion -eq $ExtensionVersion) {
 }
 Say 'Looking for IntelliJ IDEA and VS Code...'
 
-$ArgumentIdea = ''
-if ($IdeaPath) {
-    $ArgumentIdea = Resolve-IdeaFolder $IdeaPath
-    if ($ArgumentIdea) { Add-Idea $ArgumentIdea } else { Say "  $IdeaPath is not an IntelliJ IDEA folder (no product-info.json)." }
+function Add-Code([string]$Cli) {
+    $version = (& $Cli --version 2>$null | Select-Object -First 1)
+    [void]$Targets.Add([pscustomobject]@{
+            Kind = 'code'; Place = $Cli; Name = "$(Get-CodeName $Cli) $version"; Folder = (Get-CodeFolder $Cli)
+            Current = (Get-ExtensionVersion $Cli)
+        })
 }
+
+# The CLI of the VS Code (or Insiders, VSCodium, Cursor) in a folder, or that CLI itself, or nothing.
+function Find-CodeCli([string]$Dir) {
+    $candidates = @($Dir) + ('code', 'code-insiders', 'codium', 'cursor' | ForEach-Object { Join-Path $Dir "bin\$_.cmd" })
+    foreach ($candidate in $candidates) {
+        if ($candidate -like '*.cmd' -and (Test-Path $candidate -PathType Leaf)) { return (Resolve-Path $candidate).Path }
+    }
+}
+
+function Test-Listed([string]$Place) {
+    [bool]($Targets | Where-Object { $_.Place -eq $Place })
+}
+
+# Adds the IntelliJ IDEA or VS Code in a folder someone typed; returns whether it did, saying why not.
+function Add-Folder([string]$Typed) {
+    $path = $Typed.Trim().Trim('"').TrimEnd('\')
+    if (-not $path) { return $false }
+    $dir = Resolve-IdeaFolder $path
+    if ($dir) {
+        if (Test-Listed $dir) { Say "  $dir is listed already."; return $false }
+        Add-Idea $dir
+        return $true
+    }
+    $cli = Find-CodeCli $path
+    if (-not $cli -and (Split-Path $path -Leaf) -eq 'bin') { $cli = Find-CodeCli (Split-Path $path -Parent) }
+    if ($cli) {
+        if (Test-Listed $cli) { Say "  $(Get-CodeFolder $cli) is listed already."; return $false }
+        Add-Code $cli
+        return $true
+    }
+    Say "  $path is neither an IntelliJ IDEA folder (with product-info.json) nor a VS Code folder (with bin\code.cmd)."
+    $false
+}
+
+if ($Folder) { [void](Add-Folder $Folder) }
 foreach ($dir in Find-Ideas) {
-    if ($dir -ne $ArgumentIdea) { Add-Idea $dir }
+    if (-not (Test-Listed $dir)) { Add-Idea $dir }
 }
 foreach ($cli in Find-Codes) {
-    $version = (& $cli --version 2>$null | Select-Object -First 1)
-    [void]$Targets.Add([pscustomobject]@{
-            Kind = 'code'; Place = $cli; Name = "$(Get-CodeName $cli) $version"; Folder = (Get-CodeFolder $cli)
-            Current = (Get-ExtensionVersion $cli)
-        })
+    if (-not (Test-Listed $cli)) { Add-Code $cli }
 }
 
 if ($Targets.Count -eq 0) {
     Say
     Say 'No IntelliJ IDEA (2024.3+) or VS Code found.'
-    Say 'Run install.bat "C:\path\to\IntelliJ IDEA" for an IDEA in an unusual place,'
-    Say "or reinstall VS Code with 'Add to PATH' checked."
+    Say 'For an editor in an unusual place, pass its folder:'
+    Say '  install.bat "C:\path\to\IntelliJ IDEA"   or   install.bat "C:\path\to\Microsoft VS Code"'
     exit 1
 }
 
@@ -195,22 +228,16 @@ while ($Chosen.Count -eq 0) {
     Say 'Which of these should get Duo Watchdog?'
     Say '  Enter   all of them'
     Say '  1 2     only the ones with these numbers'
-    Say "  p       an IntelliJ IDEA that isn't listed (you'll type its folder)"
+    Say "  p       an IntelliJ IDEA or VS Code that isn't listed (you'll type its folder)"
     Say '  q       quit without installing'
     $answer = (Ask 'Your choice').Trim()
     switch -Regex ($answer) {
         '^$' { $Chosen = @(0..($Targets.Count - 1)) }
         '^[qQ]$' { exit 0 }
         '^[pP]$' {
-            $typed = Ask 'IntelliJ IDEA folder (the one with product-info.json)'
-            $dir = Resolve-IdeaFolder $typed
-            if ($dir) {
-                $count = $Targets.Count
-                Add-Idea $dir
-                if ($Targets.Count -gt $count) { Show-Target $count; Say }
-            } else {
-                Say "  $typed is not an IntelliJ IDEA folder."
-            }
+            $count = $Targets.Count
+            if ((Add-Folder (Ask 'Folder of the IntelliJ IDEA or VS Code')) -and $Targets.Count -gt $count) { Show-Target $count }
+            Say
         }
         default {
             $picked = @()
