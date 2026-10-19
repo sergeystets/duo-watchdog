@@ -250,11 +250,9 @@ function Get-Logo {
     @($lines[$drawn[0]..$drawn[-1]] | ForEach-Object { if ($_.Length -gt $margin) { $_.Substring($margin) } else { '' } })
 }
 
-# The dog from docs\images\logo.ascii with the title under it, both centred on the wider of the two; only the
-# title when the console is too narrow for the dog, since wrapped lines would tear it apart.
+# docs\images\logo.ascii, the dog with the title beside it, with "version x.y.z" in it set to this version. A
+# console narrower than the drawing gets the title alone, since wrapped lines would tear the dog apart.
 function Show-Banner([string]$Version) {
-    $title = @('D U O   W A T C H D O G', '', 'Guards your GitLab Duo credits in IntelliJ IDEA and VS Code.', "Installer, version $Version")
-    $width = ($title | ForEach-Object { $_.Length } | Measure-Object -Maximum).Maximum
     $columns = 80
     try { $columns = $Host.UI.RawUI.WindowSize.Width } catch { }
     if (-not $columns) { $columns = 80 }
@@ -262,14 +260,11 @@ function Show-Banner([string]$Version) {
     $artWidth = ($art | ForEach-Object { $_.Length } | Measure-Object -Maximum).Maximum
     Say
     if ($artWidth -and $artWidth -le $columns) {
-        $width = [Math]::Max($width, $artWidth)
-        # The dog is centred as one block, so its lines keep their places relative to each other.
-        $pad = ' ' * [int][Math]::Floor(($width - $artWidth) / 2)
-        $art | ForEach-Object { if ($_) { Say ($pad + $_) } else { Say } }
-        Say
-    }
-    foreach ($line in $title) {
-        if ($line) { Say ((' ' * [Math]::Max(0, [int][Math]::Floor(($width - $line.Length) / 2))) + $line) } else { Say }
+        $art | ForEach-Object { Say ($_ -replace 'version [0-9][0-9.]*', "version $Version") }
+    } else {
+        Say 'D U O   W A T C H D O G'
+        Say 'Guards your GitLab Duo credits in IntelliJ IDEA and VS Code.'
+        Say "Installer, version $Version"
     }
     Say
 }
