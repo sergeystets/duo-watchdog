@@ -177,8 +177,9 @@ The script is interactive:
 
 The script greets you with the Duo Watchdog doberman and title from [`docs/images/logo.ascii`](docs/images/logo.ascii),
 printed as drawn; edit that file to change it. Any `version x.y.z` in it is replaced with the version being installed.
-In a terminal narrower than the drawing (114 columns) it shows the dog alone with the title under it, and in one narrower
-than the dog only the title, so nothing wraps.
+In a terminal narrower than the drawing (114 columns) it keeps the title on the right of the dog with the subtitle on two
+lines (about 80 columns); narrower still, the title goes under the dog, and below the dog's width only the title shows,
+so nothing wraps.
 
 ```
    (docs/images/logo.ascii: the doberman, with "D U O   W A T C H D O G", the subtitle and
