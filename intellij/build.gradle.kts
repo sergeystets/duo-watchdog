@@ -37,15 +37,21 @@ fun findInstalledIdea(): String? {
 
 // Compile against the IDEA already installed, never a downloaded one: -PideaPath=... (or IDEA_HOME) names it,
 // otherwise the usual places are searched.
-val installedIdea: String = providers.gradleProperty("ideaPath")
-    .orElse(providers.environmentVariable("IDEA_HOME"))
-    .orNull
-    ?.also { require(isIdea(File(it))) { "Duo Watchdog: no IntelliJ IDEA at $it (no product-info.json there)." } }
-    ?: findInstalledIdea()
-    ?: throw GradleException(
+val requestedIdea: String? = providers.gradleProperty("ideaPath").orElse(providers.environmentVariable("IDEA_HOME")).orNull
+val installedIdea: String? = if (requestedIdea != null) requestedIdea.takeIf { isIdea(File(it)) } else findInstalledIdea()
+
+// Without an IDEA only this module's tasks fail, so the rest of the build (the VS Code module) still runs.
+if (installedIdea == null) {
+    val why = if (requestedIdea != null) {
+        "Duo Watchdog: no IntelliJ IDEA at $requestedIdea (no product-info.json there)."
+    } else {
         "Duo Watchdog: no installed IntelliJ IDEA found. Install IDEA 2024.3 or later, " +
             "or point to it with -PideaPath=\"/path/to/IDEA\" or the IDEA_HOME environment variable."
-    )
+    }
+    gradle.taskGraph.whenReady {
+        if (allTasks.any { it.project == project }) throw GradleException(why)
+    }
+}
 
 /** The IDE's product-info.json as text, or null when it has none. */
 fun productInfo(idea: String): String? =
@@ -77,7 +83,7 @@ fun pluginsDir(idea: String): File {
 
 // IDEs from 2026.2 (branch 262) on are compiled for Java 25, which a JDK 21 javac cannot read, so they are
 // compiled against with JDK 25. The classes stay Java 21 either way, so the plugin still installs on 2024.3.
-val compileJdk = if ((ideaBranch(installedIdea) ?: 0) >= 262) 25 else 21
+val compileJdk = if ((installedIdea?.let(::ideaBranch) ?: 0) >= 262) 25 else 21
 
 java {
     toolchain {
@@ -92,8 +98,10 @@ tasks.withType<JavaCompile>().configureEach {
 dependencies {
     implementation(project(":intellij:core"))
     intellijPlatform {
-        logger.lifecycle("Duo Watchdog: compiling against the installed IDE at $installedIdea with JDK $compileJdk")
-        local(installedIdea)
+        if (installedIdea != null) {
+            logger.lifecycle("Duo Watchdog: compiling against the installed IDE at $installedIdea with JDK $compileJdk")
+            local(installedIdea)
+        }
     }
 }
 
@@ -164,7 +172,7 @@ tasks.register<InstallPlugin>("installPlugin") {
     group = "intellij platform"
     description = "Builds Duo Watchdog and installs it into the IntelliJ IDEA it is compiled against."
     pluginZip = tasks.buildPlugin.flatMap { it.archiveFile }
-    idea = installedIdea
+    if (installedIdea != null) idea = installedIdea
     // -PpluginsDir=... for an IDE whose idea.properties moves its plugins (idea.plugins.path).
-    pluginsDir = layout.dir(providers.gradleProperty("pluginsDir").map(::File).orElse(provider { pluginsDir(installedIdea) }))
+    pluginsDir = layout.dir(providers.gradleProperty("pluginsDir").map(::File).orElse(provider { pluginsDir(installedIdea!!) }))
 }

@@ -5,5 +5,5 @@ plugins {
 
 rootProject.name = "duo-watchdog"
 
-// The IntelliJ plugin and its IDE-free core. The VS Code extension in vscode/ builds with npm.
-include(":intellij", ":intellij:core")
+// The IntelliJ plugin with its IDE-free core, and the VS Code extension, whose npm build :vscode runs.
+include(":intellij", ":intellij:core", ":vscode")

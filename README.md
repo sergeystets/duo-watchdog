@@ -273,11 +273,11 @@ Open *Settings → Tools → Duo Watchdog*.
 **Requirements:** JDK 17+ to run Gradle. Gradle downloads the compile JDK itself: 21, or 25 when building
 against IDEA 2026.2 or later. The plugin's classes target Java 21 in both cases.
 
-The repository root is a Gradle build with the IntelliJ plugin as its modules (`:intellij` and `:intellij:core`);
-open the root folder in IntelliJ IDEA and run Gradle from it:
+The repository root is a Gradle build with three modules: the IntelliJ plugin (`:intellij`, `:intellij:core`) and the
+VS Code extension (`:vscode`, which runs its npm build). Open the root folder in IntelliJ IDEA and run Gradle from it:
 
 ```bash
-./gradlew test            # unit tests for the core logic
+./gradlew test            # all tests: the plugin's core and the VS Code extension
 ./gradlew buildPlugin     # → intellij/build/distributions/duo-watchdog-0.2.1.zip
 ./gradlew runIde          # launch a sandbox IDE with the plugin installed
 ```
@@ -449,7 +449,7 @@ dir intellij\build\distributions
 
 ```
 duo-watchdog/
-├── settings.gradle.kts       Root Gradle build: the modules :intellij and :intellij:core
+├── settings.gradle.kts       Root Gradle build: the modules :intellij, :intellij:core and :vscode
 ├── gradlew, gradle/          Gradle wrapper (run everything from the root)
 ├── intellij/                 IntelliJ plugin, module :intellij (Java)
 │   ├── core/                 Module :intellij:core: plain Java, no IntelliJ dependencies
@@ -459,7 +459,7 @@ duo-watchdog/
 │   ├── src/                  Thin IntelliJ layer: settings, refresh service, status bar widget,
 │   │                         tool window, notifications
 │   └── build.gradle.kts      Finds the installed IDEA; buildPlugin, installPlugin, runIde
-├── vscode/                   VS Code extension (TypeScript, npm, no runtime dependencies)
+├── vscode/                   VS Code extension, module :vscode (TypeScript, npm, no runtime dependencies)
 │   ├── src/core/             Port of intellij/core: GraphQL client, period & forecast, alerts, texts
 │   ├── src/                  Extension layer: status bar, webview dashboard, settings, secret storage
 │   ├── src/test/             node:test tests mirroring the Java tests
@@ -472,15 +472,16 @@ duo-watchdog/
 The UI components get their colors from the plugin as light/dark pairs, so they follow the IDE theme.
 Running `./gradlew test` also renders every dashboard state to PNG (in `intellij/core/build/ui-previews/`). You can review UI changes from those images without starting an IDE.
 
-The VS Code extension builds and tests on its own:
+The VS Code extension builds with npm (Node.js 20+), from the root through Gradle or in `vscode/` directly:
 
 ```bash
-cd vscode
-npm ci
-npm test          # 32 tests, no VS Code needed
-npm run package   # → vscode/duo-watchdog-0.2.1.vsix
-code --install-extension duo-watchdog-0.2.1.vsix
+./gradlew :vscode:test               # 32 tests, no VS Code needed          (npm ci && npm test)
+./gradlew :vscode:packageExtension   # → vscode/duo-watchdog-0.2.1.vsix      (npm run package)
+./gradlew :vscode:installExtension   # into VS Code; -PcodePath=codium for another CLI
 ```
+
+The IntelliJ module needs an installed IntelliJ IDEA; without one only its own tasks fail, so the VS Code tasks
+still run.
 
 ## Troubleshooting
 
