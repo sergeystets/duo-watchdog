@@ -336,9 +336,11 @@ banner() {
     fi
     # The text beside the dog starts after a gap of 10 spaces or more; gaps inside the dog are narrower.
     dog=$(say "$art" | sed -E 's/([^ ]) {10,}[^ ].*$/\1/; s/ +$//')
-    row=$(say "$art" | awk '/[^ ] {10,}[^ ]/ { print NR; exit }')
     title=$(printf '%s\n' "D U O   W A T C H D O G" "" "Guards your GitLab Duo credits" \
         "in IntelliJ IDEA and VS Code." "" "Installer, version $1")
+    # The title goes beside the rows where the dog is narrowest, the ears, well clear of its nose.
+    row=$(say "$dog" | awk -v n="$(say "$title" | wc -l)" '{ w[NR] = length }
+        END { best = 1; for (r = 1; r + n - 1 <= NR; r++) { m = 0; for (i = r; i < r + n; i++) if (w[i] > m) m = w[i]; if (r == 1 || m < least) { least = m; best = r } } print best }')
     # As wide a gap between dog and title as the terminal allows, from 4 to 30 columns.
     gap=$((columns - $(say "$dog" | beside "${row:-1}" "$title" 0 width)))
     [ "$gap" -gt 30 ] && gap=30
