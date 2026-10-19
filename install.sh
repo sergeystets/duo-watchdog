@@ -291,21 +291,37 @@ drop() {
 
 any_added() { local i; for i in "${!ADDED[@]}"; do [ "${ADDED[$i]}" = yes ] && return 0; done; return 1; }
 
+LOGO=docs/images/logo.ascii
+
+# The logo without the margin all its lines share and without blank lines above and below it.
+logo() {
+    awk '{ sub(/\r$/, "") }
+        NR == FNR { if ($0 ~ /[^ ]/) { match($0, /^ */); if (min == "" || RLENGTH < min) min = RLENGTH; if (!first) first = FNR; last = FNR }; next }
+        FNR >= first && FNR <= last { line = substr($0, min + 1); sub(/ +$/, "", line); print line }' "$LOGO" "$LOGO"
+}
+
+# The dog from docs/images/logo.ascii with the title centred under it; only the title when the
+# terminal is too narrow for the dog, since wrapped lines would tear it apart.
 banner() {
-    sed "s/@VERSION@/$1/" <<'EOF'
-
-       /\            /\
-      /  \__________/  \
-     |                  |      D U O   W A T C H D O G
-     |    (o)    (o)    |
-      \       __       /       Guards your GitLab Duo credits
-       \     (oo)     /        in IntelliJ IDEA and VS Code.
-        \    \__/    /
-         \__________/          Installer, version @VERSION@
-          |        |
-         _|        |_    woof!
-
-EOF
+    local width=60 columns art=""
+    columns=$(tput cols 2>/dev/null || say 80)
+    if [ -f "$LOGO" ]; then
+        art=$(logo)
+        width=$(say "$art" | awk '{ if (length > w) w = length } END { print w + 0 }')
+        if [ "$width" -gt "$columns" ]; then
+            art=""
+            width=60
+        fi
+    fi
+    say
+    [ -n "$art" ] && say "$art" && say
+    {
+        say "D U O   W A T C H D O G"
+        say ""
+        say "Guards your GitLab Duo credits in IntelliJ IDEA and VS Code."
+        say "Installer, version $1"
+    } | awk -v w="$width" '{ pad = int((w - length) / 2); if (pad < 0 || length == 0) pad = 0; printf "%" pad "s%s\n", "", $0 }'
+    say
 }
 
 if [ "$PLUGIN_VERSION" = "$EXTENSION_VERSION" ]; then
