@@ -252,10 +252,10 @@ function Get-Logo {
 
 function Get-Widest($Lines) { [int]($Lines | ForEach-Object { $_.Length } | Measure-Object -Maximum).Maximum }
 
-# The dog's lines with $Text to their right, starting at its row $Row (from 1), 4 columns clear of the widest
+# The dog's lines with $Text to their right, starting at its row $Row (from 1), $Gap columns clear of the widest
 # dog line the text sits beside.
-function Join-Beside([string[]]$Dog, [int]$Row, [string[]]$Text) {
-    $column = 4 + (Get-Widest @(for ($k = 0; $k -lt $Text.Count; $k++) { if ($Row - 1 + $k -lt $Dog.Count) { $Dog[$Row - 1 + $k] } }))
+function Join-Beside([string[]]$Dog, [int]$Row, [string[]]$Text, [int]$Gap) {
+    $column = $Gap + (Get-Widest @(for ($k = 0; $k -lt $Text.Count; $k++) { if ($Row - 1 + $k -lt $Dog.Count) { $Dog[$Row - 1 + $k] } }))
     for ($i = 0; $i -lt $Dog.Count; $i++) {
         $k = $i - ($Row - 1)
         if ($k -ge 0 -and $k -lt $Text.Count -and $Text[$k]) { $Dog[$i].PadRight($column) + $Text[$k] } else { $Dog[$i] }
@@ -281,9 +281,11 @@ function Show-Banner([string]$Version) {
     $row = 1
     for ($i = 0; $i -lt $art.Count; $i++) { if ($art[$i] -match '[^ ] {10,}[^ ]') { $row = $i + 1; break } }
     $title = @('D U O   W A T C H D O G', '', 'Guards your GitLab Duo credits', 'in IntelliJ IDEA and VS Code.', '', "Installer, version $Version")
-    $joined = @(if ($art.Count -gt 0) { Join-Beside $dog $row $title })
-    if ($joined.Count -gt 0 -and (Get-Widest $joined) -le $columns) {
-        $joined | ForEach-Object { Say $_ }
+    # As wide a gap between dog and title as the console allows, from 4 to 10 columns.
+    $gap = 0
+    if ($art.Count -gt 0) { $gap = [Math]::Min(10, $columns - (Get-Widest @(Join-Beside $dog $row $title 0))) }
+    if ($art.Count -gt 0 -and $gap -ge 4) {
+        Join-Beside $dog $row $title $gap | ForEach-Object { Say $_ }
     } else {
         if ($dog.Count -gt 0 -and (Get-Widest $dog) -le $columns) {
             $dog | ForEach-Object { Say $_ }
