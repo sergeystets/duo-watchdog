@@ -1,8 +1,11 @@
 package duowatchdog.core;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.Locale;
 
 /** The words and numbers the plugin shows: the status bar text, its tooltip, and the dashboard's dates. */
@@ -12,6 +15,9 @@ public final class CreditsView {
     private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("MMM d", Locale.ENGLISH);
     private static final DateTimeFormatter MONTH_DAY = DateTimeFormatter.ofPattern("MMMM d", Locale.ENGLISH);
     private static final DateTimeFormatter MONTH = DateTimeFormatter.ofPattern("MMMM", Locale.ENGLISH);
+    private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.ENGLISH);
+    private static final DateTimeFormatter MOMENT = DateTimeFormatter.ofPattern("MMM d, HH:mm zzz", Locale.ENGLISH);
+    private static final DateTimeFormatter MOMENT_YEAR = DateTimeFormatter.ofPattern("MMM d, yyyy, HH:mm zzz", Locale.ENGLISH);
 
     private CreditsView() {
     }
@@ -44,6 +50,7 @@ public final class CreditsView {
                     .append("<br>Used ").append(number(r.creditsUsed())).append(" of ").append(number(limit))
                     .append(" (").append(percent(r.creditsUsed(), limit)).append("), left ")
                     .append(number(Math.max(limit - r.creditsUsed(), 0)))
+                    .append("<br>Spent today: ").append(number(r.spentOn(today)))
                     .append("<br>Forecast by ").append(day(period.end())).append(": ")
                     .append(number(period.project(r.creditsUsed())));
             if (r.blocked()) {
@@ -74,6 +81,30 @@ public final class CreditsView {
         String from = MONTH.format(period.start());
         String to = MONTH.format(period.end());
         return from.equals(to) ? from : from + " – " + to;
+    }
+
+    /** "Oct 1, 14:38 EEST", with the year when it is not this one: when the token was saved. */
+    public static String moment(Instant at, ZoneId zone, LocalDate today) {
+        ZonedDateTime local = at.atZone(zone);
+        return (local.getYear() == today.getYear() ? MOMENT : MOMENT_YEAR).format(local);
+    }
+
+    /**
+     * "Expires on Dec 31, 2026, in 62 days", "Expires tomorrow", "Expired on Oct 3, 2026" or "Never expires". GitLab
+     * stops taking a token at the start of its expiry day.
+     */
+    public static String expiry(LocalDate expiresAt, LocalDate today) {
+        if (expiresAt == null) {
+            return "Never expires";
+        }
+        long days = ChronoUnit.DAYS.between(today, expiresAt);
+        if (days <= 0) {
+            return "Expired on " + DATE.format(expiresAt);
+        }
+        if (days == 1) {
+            return "Expires tomorrow, " + DATE.format(expiresAt);
+        }
+        return "Expires on " + DATE.format(expiresAt) + ", in " + days + " days";
     }
 
     /** "Oct 31". */

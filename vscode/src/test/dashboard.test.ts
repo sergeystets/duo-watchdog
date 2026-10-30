@@ -32,7 +32,7 @@ test('the dashboard reads as in the mockup', () => {
     assert.equal(r.caption, 'of 300 credits used');
     assert.equal(r.period, 'October 1 – 31 · day 18 of 31');
     assert.deepEqual(r.tiles.map(t => [t.caption, t.value, t.unit]), [
-        ['Left', '278.5', null], ['Forecast · Oct 31', '37', null], ['Pace', '1.2', 'a day']]);
+        ['Left', '278.5', null], ['Forecast', '37', 'by Oct 31'], ['Pace', '1.2', 'a day'], ['Spent today', '1.3', null]]);
     assert.equal(r.meter!.limitText, 'limit 300');
     assert.equal(r.meter!.forecastText, 'forecast 37');
     assert.equal(r.meter!.tone, 'accent');

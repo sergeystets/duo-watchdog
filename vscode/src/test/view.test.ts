@@ -50,6 +50,7 @@ test('the tooltip explains the dollar and keeps the last error', () => {
     const tip = tooltipLines(s, 100, TODAY).join('\n');
 
     assert.ok(tip.includes('Used 42 of 100 (42%), left 58'), tip);
+    assert.ok(tip.includes('Spent today: 1.3'), tip);
     assert.ok(tip.includes('Forecast by Oct 31: 72.3'), tip);
     assert.ok(tip.includes('Updated 2026-10-18 14:05'), tip);
     assert.ok(tip.includes("$ = credits at GitLab's $1 list price"), tip);

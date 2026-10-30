@@ -20,6 +20,7 @@ public final class CreditsToolWindowFactory implements ToolWindowFactory, DumbAw
         CreditsPanel panel = new CreditsPanel(project);
         Content content = ContentFactory.getInstance().createContent(panel, "", false);
         content.setDisposer(panel);
+        content.setPreferredFocusableComponent(panel.focusTarget());
         toolWindow.getContentManager().addContent(content);
     }
 

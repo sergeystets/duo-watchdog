@@ -28,6 +28,11 @@ public record CreditsReport(
     public record FlowUsage(String id, String title, Double credits) {
     }
 
+    /** The credits GitLab counted on {@code day}; none when it has no entry for it. */
+    public double spentOn(LocalDate day) {
+        return daily.stream().filter(d -> day.equals(d.date())).mapToDouble(DailyUsage::credits).sum();
+    }
+
     public CreditsReport withFlows(List<FlowUsage> flows, String flowsError) {
         return new CreditsReport(username, startDate, endDate, creditsUsed, blocked, blockedBy, daily, flows, flowsError);
     }

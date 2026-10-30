@@ -33,6 +33,8 @@ public final class CreditsSettings implements PersistentStateComponent<CreditsSe
         public String alertPercents = Alert.DEFAULT_PERCENTS;
         public boolean alertOnForecast = true;
         public int refreshMinutes = 15;
+        /** When the token in the password safe was saved, in epoch milliseconds; 0 when it was saved before 0.3.0. */
+        public long tokenSavedAt = 0;
         /** {@link Alert#key()} of the last notice shown, so it is not repeated on every refresh. */
         public String lastAlertKey = "";
     }

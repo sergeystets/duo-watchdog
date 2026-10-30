@@ -9,6 +9,23 @@
     when the forecast passes the limit, at each threshold, at the limit, and when GitLab blocks you.
     ]]></description>
 
+    <change-notes><![CDATA[
+    <h3>What's new in 0.3.0</h3>
+    <ul>
+      <li><b>Spent today</b>: a new tile on the dashboard, and a line in the status bar tooltip.</li>
+      <li><b>Token status in Settings</b>: green with a check mark when a token is saved, amber when there is none
+          or it expires within a week, red when GitLab turns it down. It says when the token was saved, when it
+          expires and which scopes it has.</li>
+      <li><b>Check connection</b> asks GitLab whose the token is, when it expires, and for your group's credits.</li>
+      <li><b>Find my group</b> says what it does, and the token now comes before the group, since Find my group
+          asks GitLab with it.</li>
+      <li><b>Shift+Esc</b> hides the Duo Watchdog tool window and <b>Esc</b> goes back to the editor, as in the
+          IDE's own tool windows.</li>
+      <li>The installers: choose IntelliJ IDEA, VS Code or both with the arrow keys, and follow the install on a
+          progress bar.</li>
+    </ul>
+    ]]></change-notes>
+
     <depends>com.intellij.modules.platform</depends>
 
     <extensions defaultExtensionNs="com.intellij">

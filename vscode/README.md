@@ -11,7 +11,7 @@ This is the VS Code version of the Duo Watchdog IntelliJ plugin. It uses the sam
 - **Dashboard** (the doberman in the activity bar):
   - credits used with an **Active** / **Blocked** badge
   - a usage meter with the forecast marker and your alert thresholds
-  - **Left**, **Forecast** and **Pace** tiles
+  - **Left**, **Forecast**, **Pace** and **Spent today** tiles
   - a daily chart for the month: hover a bar to see that day's credits
   - credits by feature
 - **Alerts:** a notification when the forecast passes your limit, at each threshold, at the limit, and when GitLab

@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
 
@@ -97,5 +98,25 @@ class CreditsViewTest {
         assertEquals("42.4", CreditsView.number(42.37));
         assertEquals("0", CreditsView.number(0.04));
         assertEquals("1.3", CreditsView.number(1.25));
+    }
+
+    @Test
+    void spentTodayIsTodaysDailyEntry() {
+        assertEquals(1.25, report(42, false).spentOn(TODAY), 1e-9);
+        assertEquals(0, report(42, false).spentOn(TODAY.plusDays(1)), 1e-9);
+        String tip = CreditsView.tooltipHtml(Snapshot.ok(report(42, false), AT), 100, TODAY, ZoneOffset.UTC);
+        assertTrue(tip.contains("Spent today: 1.3"), tip);
+    }
+
+    @Test
+    void saysWhenTheTokenWasSavedAndWhenItExpires() {
+        ZoneId kyiv = ZoneId.of("Europe/Kyiv");
+        assertEquals("Oct 1, 14:38 EEST", CreditsView.moment(Instant.parse("2026-10-01T11:38:00Z"), kyiv, TODAY));
+        assertEquals("Dec 30, 2025, 09:00 EET", CreditsView.moment(Instant.parse("2025-12-30T07:00:00Z"), kyiv, TODAY));
+
+        assertEquals("Never expires", CreditsView.expiry(null, TODAY));
+        assertEquals("Expires on Dec 31, 2026, in 74 days", CreditsView.expiry(LocalDate.of(2026, 12, 31), TODAY));
+        assertEquals("Expires tomorrow, Oct 19, 2026", CreditsView.expiry(TODAY.plusDays(1), TODAY));
+        assertEquals("Expired on Oct 18, 2026", CreditsView.expiry(TODAY, TODAY));
     }
 }

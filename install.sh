@@ -26,6 +26,47 @@ yes_default() {
     case "$answer" in [nN]*) return 1 ;; *) return 0 ;; esac
 }
 
+# The menu's arrows and the redrawn progress bar need a terminal. Without one (input from a pipe, output to a
+# log) the menu asks for a number and each step prints a line.
+INTERACTIVE=
+if [ -t 0 ] && [ -t 1 ]; then INTERACTIVE=yes; fi
+LIVE=
+if [ -t 1 ]; then LIVE=yes; fi
+ESC=$'\033'
+# Blocks, marks and a spinner where the terminal speaks UTF-8, as every macOS terminal does; ASCII elsewhere.
+if [ "$(uname -s)" = Darwin ] || [ "$(locale charmap 2>/dev/null || true)" = UTF-8 ]; then
+    FULL=█ EMPTY=░ OK_MARK=✓ FAIL_MARK=✗ SKIP_MARK=– POINTER=❯ DOT=· ARROWS=↑/↓
+    SPINNER=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏)
+else
+    FULL='#' EMPTY='.' OK_MARK=+ FAIL_MARK=x SKIP_MARK=- POINTER='>' DOT=- ARROWS=Up/Down
+    SPINNER=('|' '/' '-' '\')
+fi
+
+columns() { tput cols 2>/dev/null || say 80; }
+
+# The text cut to $2 columns.
+fit() {
+    local width=$2
+    [ "$width" -ge 10 ] || width=10
+    if [ "${#1}" -le "$width" ]; then say "$1"; else say "${1:0:$((width - 3))}..."; fi
+}
+
+WORK=""
+TICKER=""
+KEEP_LOGS=""
+# However the script ends, the terminal is left as it was: nothing drawing in the background, the cursor shown.
+cleanup() {
+    if [ -n "$TICKER" ]; then
+        touch "$WORK/stop"
+        wait "$TICKER" 2>/dev/null || true
+        printf '\n\n'
+    fi
+    if [ -t 1 ]; then printf '\033[?25h'; fi
+    if [ -n "$WORK" ] && [ -z "$KEEP_LOGS" ]; then rm -rf "$WORK"; fi
+}
+trap cleanup EXIT
+trap 'exit 130' INT TERM
+
 PLUGIN_VERSION=$(sed -n 's/^version = "\(.*\)"$/\1/p' intellij/build.gradle.kts)
 EXTENSION_VERSION=$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' vscode/package.json 2>/dev/null | head -n 1 || true)
 
@@ -157,7 +198,7 @@ forget() {
 
 new_version() { if [ "${KINDS[$1]}" = idea ]; then say "$PLUGIN_VERSION"; else say "$EXTENSION_VERSION"; fi; }
 
-# What installing does to target $1, e.g. "update Duo Watchdog 0.2.0 -> 0.2.1".
+# What installing does to target $1, e.g. "update Duo Watchdog 0.2.1 -> 0.3.0".
 plan() {
     local current=${CURRENT[$1]} new
     new=$(new_version "$1")
@@ -257,7 +298,7 @@ show() {
     if [ "${KINDS[$i]}" = idea ] && idea_running "${PLACES[$i]}"; then
         say "      It is running now; you'll be asked to close it before installing."
     fi
-    [ "${ADDED[$i]}" = yes ] && say "      You added this folder; it is remembered (f forgets it)."
+    [ "${ADDED[$i]}" = yes ] && say "      You added this folder; it is remembered until you forget it in the menu below."
     return 0
 }
 
@@ -273,8 +314,8 @@ show_all() {
         for i in "${!KINDS[@]}"; do show "$i"; done
     fi
     say
-    has idea || say "  IntelliJ IDEA: none found in the usual places. If you have one, type p and its folder."
-    has code || say "  VS Code: none found on the PATH or in the usual places. If you have it, type p and its folder."
+    has idea || say "  IntelliJ IDEA: none found in the usual places. If you have one, add it in the menu below."
+    has code || say "  VS Code: none found on the PATH or in the usual places. If you have it, add it in the menu below."
     has idea && has code || say
 }
 
@@ -385,23 +426,133 @@ done < <(find_codes)
 
 show_all
 
+# --- Choosing --------------------------------------------------------------------------------------------
+
+# The indexes of the listed targets of a kind, idea or code, one per line.
+of_kind() { local i; for i in "${!KINDS[@]}"; do [ "${KINDS[$i]}" = "$1" ] && say "$i"; done; return 0; }
+
+# How the menu names the targets of a kind: the name of the only one, or how many there are.
+kind_label() {
+    local i count=0 name=""
+    for i in "${!KINDS[@]}"; do
+        if [ "${KINDS[$i]}" = "$1" ]; then
+            count=$((count + 1))
+            name=${NAMES[$i]}
+        fi
+    done
+    if [ "$count" -eq 1 ]; then
+        say "$name"
+    elif [ "$1" = idea ]; then
+        say "$count IntelliJ IDEAs"
+    else
+        say "$count VS Codes"
+    fi
+}
+
+# One line of the menu, cut to the terminal's width; the one the arrows are on ($1 = yes) marked and in colour.
+menu_line() {
+    local text
+    text=$(fit "$2" $(($(columns) - 6)))
+    if [ "$1" = yes ]; then
+        printf '\r\033[2K  \033[1;36m%s %s\033[0m\n' "$POINTER" "$text"
+    else
+        printf '\r\033[2K    %s\n' "$text"
+    fi
+}
+
+# Offers the arguments as a menu and sets PICKED to the index of the one chosen: the arrows (or j and k) move,
+# Enter chooses, q and Esc choose the last line, which is Exit. Without a terminal the lines are numbered and a
+# number is read instead.
+PICKED=0
+menu() {
+    local count=$# current=0 chosen="" key rest i
+    if [ -z "$INTERACTIVE" ]; then
+        i=1
+        for key in "$@"; do
+            say "  $i) $key"
+            i=$((i + 1))
+        done
+        while :; do
+            key=$(ask "Number: ") || exit 1
+            if [[ "$key" =~ ^[0-9]+$ ]] && [ "$key" -ge 1 ] && [ "$key" -le "$count" ]; then
+                PICKED=$((key - 1))
+                return
+            fi
+            say "  Type a number from 1 to $count."
+        done
+    fi
+    printf '\033[?25l'
+    while :; do
+        i=0
+        for key in "$@"; do
+            if [ "$i" -eq "$current" ]; then menu_line yes "$key"; else menu_line no "$key"; fi
+            i=$((i + 1))
+        done
+        [ -z "$chosen" ] || break
+        if ! IFS= read -rsn1 key; then
+            printf '\nNo more input; stopping.\n' >&2
+            exit 1
+        fi
+        case "$key" in
+            "") chosen=yes ;;
+            "$ESC")
+                # An arrow sends Esc [ A (or Esc O A); Esc on its own sends nothing more.
+                rest=""
+                IFS= read -rsn2 -t 1 rest || true
+                case "$rest" in
+                    "[A" | OA) current=$(((current + count - 1) % count)) ;;
+                    "[B" | OB) current=$(((current + 1) % count)) ;;
+                    "") current=$((count - 1)) chosen=yes ;;
+                esac
+                ;;
+            k | K) current=$(((current + count - 1) % count)) ;;
+            j | J) current=$(((current + 1) % count)) ;;
+            q | Q) current=$((count - 1)) chosen=yes ;;
+        esac
+        printf '\033[%dA' "$count"
+    done
+    printf '\033[?25h'
+    PICKED=$current
+}
+
 CHOSEN=()
 while [ ${#CHOSEN[@]} -eq 0 ]; do
-    say "Which of these should get Duo Watchdog?"
-    if [ ${#KINDS[@]} -gt 0 ]; then
-        say "  Enter   all of them"
-        say "  1 2     only the ones with these numbers"
+    labels=() actions=()
+    if has idea && has code; then
+        labels+=("Both: $(kind_label idea) and $(kind_label code)") actions+=(all)
+        labels+=("IntelliJ IDEA only: $(kind_label idea)") actions+=(idea)
+        labels+=("VS Code only: $(kind_label code)") actions+=(code)
+        if [ ${#KINDS[@]} -gt 2 ]; then labels+=("Some of them, by their numbers in the list above...") actions+=(numbers); fi
+    elif [ ${#KINDS[@]} -eq 1 ]; then
+        labels+=("${NAMES[0]}") actions+=(all)
+    elif [ ${#KINDS[@]} -gt 1 ]; then
+        labels+=("All of them: $(kind_label "${KINDS[0]}")") actions+=(all)
+        labels+=("Some of them, by their numbers in the list above...") actions+=(numbers)
     fi
-    say "  p       an IntelliJ IDEA or VS Code that isn't listed (you'll type its folder; it's remembered)"
-    any_added && say "  f       forget a folder you added"
-    say "  q       quit without installing"
-    answer=$(ask "Your choice: ") || exit 1
-    case "$answer" in
-        "")
-            if [ ${#KINDS[@]} -gt 0 ]; then CHOSEN=("${!KINDS[@]}"); else say "  Nothing is listed yet: type p to add a folder, or q."; fi
+    labels+=("An IntelliJ IDEA or VS Code that isn't listed (you type its folder)...") actions+=(add)
+    if any_added; then labels+=("Forget a folder you added...") actions+=(forget); fi
+    labels+=("Exit without installing") actions+=(exit)
+
+    bold "Where should Duo Watchdog go?"
+    if [ -n "$INTERACTIVE" ]; then say "  $ARROWS to move, Enter to choose"; fi
+    menu "${labels[@]}"
+    say
+    case "${actions[$PICKED]}" in
+        all) CHOSEN=("${!KINDS[@]}") ;;
+        idea | code) CHOSEN=($(of_kind "${actions[$PICKED]}")) ;;
+        numbers)
+            answer=$(ask "Their numbers in the list above, e.g. 1 3: ") || exit 1
+            for n in ${answer//,/ }; do
+                if [[ "$n" =~ ^[0-9]+$ ]] && [ "$n" -ge 1 ] && [ "$n" -le ${#KINDS[@]} ]; then
+                    CHOSEN+=($((n - 1)))
+                else
+                    say "  There is no [$n]."
+                    CHOSEN=()
+                    break
+                fi
+            done
             ;;
-        q | Q) exit 0 ;;
-        p | P)
+        add)
             dir=$(ask "Folder of the IntelliJ IDEA or VS Code (on macOS, the .app): ") || exit 1
             count=${#KINDS[@]}
             if [ -n "$dir" ] && add_folder "$dir" && [ ${#KINDS[@]} -gt "$count" ]; then
@@ -409,17 +560,13 @@ while [ ${#CHOSEN[@]} -eq 0 ]; do
             fi
             say
             ;;
-        f | F)
-            if ! any_added; then
-                say "  You haven't added any folder."
-                continue
-            fi
+        forget)
             added=()
             for i in "${!ADDED[@]}"; do [ "${ADDED[$i]}" = yes ] && added+=("$i"); done
             if [ ${#added[@]} -eq 1 ]; then
                 number=$((added[0] + 1))
             else
-                number=$(ask "Number of the one to forget: ") || exit 1
+                number=$(ask "Number of the one to forget, in the list above: ") || exit 1
             fi
             if [[ "$number" =~ ^[0-9]+$ ]] && [ "$number" -ge 1 ] && [ "$number" -le ${#KINDS[@]} ] &&
                 [ "${ADDED[$((number - 1))]}" = yes ]; then
@@ -431,17 +578,7 @@ while [ ${#CHOSEN[@]} -eq 0 ]; do
                 say "  [$number] isn't a folder you added."
             fi
             ;;
-        *)
-            for n in ${answer//,/ }; do
-                if [[ "$n" =~ ^[0-9]+$ ]] && [ "$n" -ge 1 ] && [ "$n" -le ${#KINDS[@]} ]; then
-                    CHOSEN+=($((n - 1)))
-                else
-                    say "  There is no [$n]."
-                    CHOSEN=()
-                    break
-                fi
-            done
-            ;;
+        exit) exit 0 ;;
     esac
 done
 
@@ -472,75 +609,228 @@ for i in "${CHOSEN[@]}"; do
 done
 yes_default "Continue?" || exit 0
 
-# --- Install ---------------------------------------------------------------------------------------------
+# --- Install, with a progress bar ------------------------------------------------------------------------
 
 RESULTS=()
-VSIX=""
-
-install_idea() {
-    local i=$1 dir=${PLACES[$1]}
-    while idea_running "$dir"; do
+STARTS=()   # the IntelliJ IDEAs to offer to start at the end
+IDEAS=()
+CODES=()
+# IntelliJ IDEA replaces plugins only while it is closed. That is settled here, so no question interrupts the bar.
+for i in "${CHOSEN[@]}"; do
+    if [ "${KINDS[$i]}" = code ]; then
+        CODES+=("$i")
+        continue
+    fi
+    skipped=
+    while idea_running "${PLACES[$i]}"; do
         say "${NAMES[$i]} is running. Plugins can be replaced only while it is closed."
         answer=$(ask "Quit it (IntelliJ IDEA > Quit, or File > Exit), then press Enter. s = skip it: ") || exit 1
-        case "$answer" in
-            s | S) RESULTS+=("SKIPPED  ${NAMES[$i]}: it was running.") && return ;;
-        esac
+        case "$answer" in s | S) skipped=yes && break ;; esac
     done
-    # A checkout made with core.autocrlf=true has CRLF in gradlew, which then fails with "/bin/sh^M: bad interpreter".
-    if grep -q "$(printf '\r')" gradlew; then
-        say "gradlew has Windows line endings (CRLF), so it can't run here. Your git wrote them:"
-        say "it has core.autocrlf=true. Fix the setting and check the files out again (this discards local edits):"
-        say "  git config --global core.autocrlf input"
-        say "  git rm -r -q --cached . && git reset --hard"
-        RESULTS+=("FAILED   ${NAMES[$i]}: gradlew has CRLF line endings, see above.")
-        return
-    fi
-    say "Building the plugin for ${NAMES[$i]} (the first build downloads Gradle and a JDK and can take a few minutes)..."
-    if ./gradlew :intellij:installPlugin -PideaPath="$dir" --quiet --console=plain; then
-        RESULTS+=("OK       ${NAMES[$i]}: Duo Watchdog $PLUGIN_VERSION installed.")
-        yes_default "Start ${NAMES[$i]} now?" && start_idea "$dir"
-    else
-        RESULTS+=("FAILED   ${NAMES[$i]}: the build failed, see the Gradle output above.")
-    fi
-}
-
-package_extension() {
-    say "Packaging the VS Code extension..."
-    if (cd vscode && npm ci --no-audit --no-fund --loglevel=error && npm run --silent package >/dev/null); then
-        VSIX="vscode/duo-watchdog-$EXTENSION_VERSION.vsix"
-    else
-        VSIX="failed"
-    fi
-}
-
-install_code() {
-    local i=$1 cli=${PLACES[$1]}
-    [ -n "$VSIX" ] || package_extension
-    if [ "$VSIX" = failed ] || [ ! -f "$VSIX" ]; then
-        VSIX=failed
-        RESULTS+=("FAILED   ${NAMES[$i]}: packaging the extension failed, see the npm output above.")
-        return
-    fi
-    say "Installing into ${NAMES[$i]}..."
-    if "$cli" --install-extension "$VSIX" --force >/dev/null; then
-        RESULTS+=("OK       ${NAMES[$i]}: Duo Watchdog $EXTENSION_VERSION installed. In open windows run 'Developer: Reload Window'.")
-    else
-        RESULTS+=("FAILED   ${NAMES[$i]}: '$cli --install-extension' failed.")
-    fi
-}
-
-for i in "${CHOSEN[@]}"; do
-    say
-    case "${KINDS[$i]}" in
-        idea) install_idea "$i" ;;
-        code) install_code "$i" ;;
-    esac
+    if [ -n "$skipped" ]; then RESULTS+=("SKIPPED  ${NAMES[$i]}: it was running."); else IDEAS+=("$i"); fi
 done
+
+# A checkout made with core.autocrlf=true has CRLF in gradlew, which then fails with "/bin/sh^M: bad interpreter".
+if [ ${#IDEAS[@]} -gt 0 ] && grep -q "$(printf '\r')" gradlew; then
+    say "gradlew has Windows line endings (CRLF), so it can't run here. Your git wrote them:"
+    say "it has core.autocrlf=true. Fix the setting and check the files out again (this discards local edits):"
+    say "  git config --global core.autocrlf input"
+    say "  git rm -r -q --cached . && git reset --hard"
+    for i in "${IDEAS[@]}"; do RESULTS+=("FAILED   ${NAMES[$i]}: gradlew has CRLF line endings, see above."); done
+    IDEAS=()
+fi
+
+# Each step's share of the bar; building the plugin is most of the wait.
+W_PREPARE=10 W_BUILD=45 W_NPM=20 W_PACKAGE=10 W_CODE=5
+STEP_COUNT=0 TOTAL_WEIGHT=0
+if [ ${#IDEAS[@]} -gt 0 ]; then
+    STEP_COUNT=$((1 + ${#IDEAS[@]}))
+    TOTAL_WEIGHT=$((W_PREPARE + W_BUILD * ${#IDEAS[@]}))
+fi
+if [ ${#CODES[@]} -gt 0 ]; then
+    STEP_COUNT=$((STEP_COUNT + 2 + ${#CODES[@]}))
+    TOTAL_WEIGHT=$((TOTAL_WEIGHT + W_NPM + W_PACKAGE + W_CODE * ${#CODES[@]}))
+fi
+STEP_NUMBER=0 DONE_WEIGHT=0 GRADLE_TASKS=0
+STEP_LABEL="" STEP_KIND="" STEP_WEIGHT=0 STEP_TAU=1 STEP_LOG="" STEP_START=0
+
+# m:ss
+clock() { printf '%d:%02d' $(($1 / 60)) $(($1 % 60)); }
+
+# The bar for $1 percent, as wide as $2 columns leave room for, at most 40.
+bar() {
+    local width=$(($2 - 30)) filled full empty
+    [ "$width" -le 40 ] || width=40
+    [ "$width" -ge 10 ] || width=10
+    filled=$(($1 * width / 100))
+    full=$(printf '%*s' "$filled" '')
+    empty=$(printf '%*s' $((width - filled)) '')
+    printf '\033[36m%s\033[0m\033[2m%s\033[0m' "${full// /$FULL}" "${empty// /$EMPTY}"
+}
+
+# How far the running step is, in percent, after $1 seconds: the build by Gradle's tasks against the count the
+# dry run planned, the other steps by time against how long they usually take (half of it at $STEP_TAU seconds).
+# It waits at 95 for the step to end.
+step_percent() {
+    local pct seen
+    if [ "$STEP_KIND" = gradle ] && [ "$GRADLE_TASKS" -gt 0 ]; then
+        seen=$(grep -c '^> Task ' "$STEP_LOG" 2>/dev/null || true)
+        pct=$((${seen:-0} * 100 / (GRADLE_TASKS + 1)))
+    else
+        pct=$(($1 * 100 / ($1 + STEP_TAU)))
+    fi
+    [ "$pct" -le 95 ] || pct=95
+    say "$pct"
+}
+
+# The running step with a spinner, the Gradle task it is on and its time; under it the bar of the whole install.
+# The cursor ends where it began, at the start of the step's line, for the next frame to draw over.
+draw_live() {
+    local frame=$1 cols=$2 elapsed=$((SECONDS - STEP_START)) pct overall task=""
+    pct=$(step_percent "$elapsed")
+    overall=$(((DONE_WEIGHT * 100 + pct * STEP_WEIGHT) / TOTAL_WEIGHT))
+    if [ "$STEP_KIND" = gradle ]; then
+        task=$(sed -n 's/^> Task :\([^ ]*\).*/\1/p' "$STEP_LOG" 2>/dev/null | tail -n 1)
+        [ -z "$task" ] || task=" $DOT ${task##*:}"
+    fi
+    printf '\r\033[2K  \033[36m%s\033[0m %s\033[2m%s  %s\033[0m\n' "${SPINNER[$((frame % ${#SPINNER[@]}))]}" \
+        "$(fit "$STEP_LABEL" $((cols - 12 - ${#task})))" "$task" "$(clock "$elapsed")"
+    printf '\r\033[2K    %s \033[1m%3d%%\033[0m  \033[2mstep %d of %d\033[0m\033[1A\r' \
+        "$(bar "$overall" "$cols")" "$overall" "$STEP_NUMBER" "$STEP_COUNT"
+}
+
+# Redraws the running step five times a second until the step's stop file appears.
+ticker() {
+    set +e
+    local frame=0 cols
+    cols=$(columns)
+    while [ ! -f "$WORK/stop" ]; do
+        draw_live "$frame" "$cols"
+        frame=$((frame + 1))
+        sleep 0.2
+    done
+}
+
+stop_ticker() {
+    [ -n "$TICKER" ] || return 0
+    touch "$WORK/stop"
+    wait "$TICKER" 2>/dev/null || true
+    TICKER=
+}
+
+# A step that ended: its mark ($2) in colour ($1), its name and $3, how long it took or why it didn't run.
+# The bar's line under it is cleared for the next step.
+step_line() {
+    if [ -n "$LIVE" ]; then
+        printf '\r\033[2K  \033[%sm%s\033[0m %s  \033[2m%s\033[0m\n\033[2K' "$1" "$2" "$STEP_LABEL" "$3"
+    else
+        say "  $2 [$STEP_NUMBER/$STEP_COUNT] $STEP_LABEL ($3)"
+    fi
+}
+
+# Runs the command of a step (label, kind, weight, usual seconds, then the command) with its output in a log
+# while the bar moves; then marks the step done, or failed with the end of its log. Returns the command's status.
+run_step() {
+    local status=0
+    STEP_LABEL=$1 STEP_KIND=$2 STEP_WEIGHT=$3 STEP_TAU=$4
+    shift 4
+    STEP_NUMBER=$((STEP_NUMBER + 1))
+    STEP_LOG="$WORK/step-$STEP_NUMBER.log"
+    STEP_START=$SECONDS
+    : >"$STEP_LOG"
+    if [ -n "$LIVE" ]; then
+        rm -f "$WORK/stop"
+        ticker &
+        TICKER=$!
+    fi
+    "$@" >"$STEP_LOG" 2>&1 </dev/null || status=$?
+    stop_ticker
+    DONE_WEIGHT=$((DONE_WEIGHT + STEP_WEIGHT))
+    if [ "$status" -eq 0 ]; then
+        step_line 32 "$OK_MARK" "$(clock $((SECONDS - STEP_START)))"
+    else
+        KEEP_LOGS=yes
+        step_line 31 "$FAIL_MARK" "failed after $(clock $((SECONDS - STEP_START)))"
+        tail -n 20 "$STEP_LOG" | sed 's/^/      /'
+        say "      The whole output is in $STEP_LOG"
+    fi
+    return "$status"
+}
+
+# A step that can't run because one before it failed: label, weight, why.
+skip_step() {
+    STEP_LABEL=$1
+    STEP_NUMBER=$((STEP_NUMBER + 1))
+    DONE_WEIGHT=$((DONE_WEIGHT + $2))
+    step_line 2 "$SKIP_MARK" "skipped: $3"
+}
+
+in_vscode() { (cd vscode && "$@"); }
+
+if [ "$STEP_COUNT" -gt 0 ]; then
+    WORK=$(mktemp -d "${TMPDIR:-/tmp}/duo-watchdog.XXXXXX")
+    say
+    bold "Installing ($STEP_COUNT steps)"
+    if [ -n "$LIVE" ]; then printf '\033[?25l'; fi
+fi
+
+if [ ${#IDEAS[@]} -gt 0 ]; then
+    # The dry run lists the tasks the build will run, so the bar can follow it task by task.
+    if run_step "Preparing Gradle (the first run downloads Gradle and a JDK)" prepare $W_PREPARE 20 \
+        ./gradlew :intellij:installPlugin -PideaPath="${PLACES[${IDEAS[0]}]}" --dry-run --console=plain; then
+        GRADLE_TASKS=$(grep -c ' SKIPPED$' "$STEP_LOG" || true)
+        for i in "${IDEAS[@]}"; do
+            if run_step "Building and installing the plugin into ${NAMES[$i]}" gradle $W_BUILD 60 \
+                ./gradlew :intellij:installPlugin -PideaPath="${PLACES[$i]}" --console=plain; then
+                RESULTS+=("OK       ${NAMES[$i]}: Duo Watchdog $PLUGIN_VERSION installed.")
+                STARTS+=("$i")
+            else
+                RESULTS+=("FAILED   ${NAMES[$i]}: the build failed, see its output above.")
+            fi
+        done
+    else
+        for i in "${IDEAS[@]}"; do
+            skip_step "Building and installing the plugin into ${NAMES[$i]}" $W_BUILD "Gradle didn't start"
+            RESULTS+=("FAILED   ${NAMES[$i]}: Gradle didn't start, see its output above.")
+        done
+    fi
+fi
+
+if [ ${#CODES[@]} -gt 0 ]; then
+    VSIX="vscode/duo-watchdog-$EXTENSION_VERSION.vsix"
+    why=""
+    if ! run_step "Downloading the extension's npm packages" npm $W_NPM 25 \
+        in_vscode npm ci --no-audit --no-fund --loglevel=error; then
+        why="its npm packages didn't download"
+        skip_step "Packaging the VS Code extension" $W_PACKAGE "$why"
+    elif ! run_step "Packaging the VS Code extension" package $W_PACKAGE 15 in_vscode npm run package ||
+        [ ! -f "$VSIX" ]; then
+        why="the extension didn't package"
+    fi
+    for i in "${CODES[@]}"; do
+        if [ -n "$why" ]; then
+            skip_step "Installing the extension into ${NAMES[$i]}" $W_CODE "$why"
+            RESULTS+=("FAILED   ${NAMES[$i]}: $why, see the output above.")
+        elif run_step "Installing the extension into ${NAMES[$i]}" code $W_CODE 8 \
+            "${PLACES[$i]}" --install-extension "$VSIX" --force; then
+            RESULTS+=("OK       ${NAMES[$i]}: Duo Watchdog $EXTENSION_VERSION installed. In open windows run 'Developer: Reload Window'.")
+        else
+            RESULTS+=("FAILED   ${NAMES[$i]}: '${PLACES[$i]} --install-extension' failed.")
+        fi
+    done
+fi
+
+if [ "$STEP_COUNT" -gt 0 ] && [ -n "$LIVE" ]; then
+    printf '\r\033[2K    %s \033[1m100%%\033[0m\n\033[?25h' "$(bar 100 "$(columns)")"
+fi
 
 say
 bold "Summary"
 for result in "${RESULTS[@]}"; do say "  $result"; done
-for result in "${RESULTS[@]}"; do case "$result" in FAILED*) exit 1 ;; esac; done
 say
+for i in ${STARTS[@]+"${STARTS[@]}"}; do
+    yes_default "Start ${NAMES[$i]} now?" && start_idea "${PLACES[$i]}"
+done
+for result in "${RESULTS[@]}"; do case "$result" in FAILED*) exit 1 ;; esac; done
 say "Next: set your GitLab token. IntelliJ IDEA: Settings > Tools > Duo Watchdog."
 say "VS Code: Ctrl/Cmd+Shift+P > 'Duo Watchdog: Set GitLab Token'."

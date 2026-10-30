@@ -1,11 +1,11 @@
 import { addDays, daysBetween, dayOfMonth, IsoDate, time } from './dates';
 import { BillingPeriod } from './period';
-import { CreditsReport, FlowUsage, Snapshot } from './report';
+import { CreditsReport, FlowUsage, Snapshot, spentOn } from './report';
 import { capName, day, monthText, number, periodText } from './view';
 
 /**
  * Everything the dashboard webview draws, worked out here so the webview only lays it out: the headline, the
- * meter, the Left, Forecast and Pace tiles, the month's daily bars, the per-feature bars, and the notes.
+ * meter, the Left, Forecast, Pace and Spent today tiles, the month's daily bars, the per-feature bars, and the notes.
  */
 export interface DashboardModel {
     /** "@alice · acme · Updated 14:05". */
@@ -144,8 +144,9 @@ function reportModel(report: CreditsReport, limit: number, percents: number[], t
         } : null,
         tiles: [
             { caption: 'Left', value: number(Math.max(limit - used, 0)), unit: null },
-            { caption: 'Forecast · ' + day(period.end), value: number(forecast), unit: null },
+            { caption: 'Forecast', value: number(forecast), unit: 'by ' + day(period.end) },
             { caption: 'Pace', value: number(period.pace(used)), unit: 'a day' },
+            { caption: 'Spent today', value: number(spentOn(report, today)), unit: null },
         ],
         daily: dailyModel(period, today, report),
         features: features(report.flows),
