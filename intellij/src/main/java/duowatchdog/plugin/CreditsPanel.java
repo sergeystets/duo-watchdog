@@ -23,6 +23,7 @@ import duowatchdog.core.Snapshot;
 import duowatchdog.core.ui.Dashboard;
 import org.jetbrains.annotations.NotNull;
 
+import javax.swing.JComponent;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.ScrollPaneConstants;
@@ -48,6 +49,9 @@ final class CreditsPanel extends SimpleToolWindowPanel implements Disposable {
         Color background = JBUI.CurrentTheme.ToolWindow.background();
         dashboard = new Dashboard(DuoIcons.theme(), () -> openSettings(project));
         dashboard.setBackground(background);
+        // Something to focus makes the tool window active when clicked, as the IDE's own are: Shift+Esc hides it,
+        // Esc goes back to the editor, and the arrows scroll.
+        dashboard.setFocusable(true);
         JScrollPane scroll = ScrollPaneFactory.createScrollPane(dashboard, true);
         scroll.getViewport().setBackground(background);
         scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
@@ -89,6 +93,11 @@ final class CreditsPanel extends SimpleToolWindowPanel implements Disposable {
             parts.add("Updated " + TIME.format(snapshot.fetchedAt().atZone(ZoneId.systemDefault())));
         }
         byline.setText(String.join(" · ", parts));
+    }
+
+    /** What the tool window focuses when it is opened or clicked. */
+    JComponent focusTarget() {
+        return dashboard;
     }
 
     private static void openSettings(Project project) {

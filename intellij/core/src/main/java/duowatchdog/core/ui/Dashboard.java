@@ -23,7 +23,6 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
-import java.awt.GridLayout;
 import java.awt.Insets;
 import java.awt.Rectangle;
 import java.awt.event.MouseAdapter;
@@ -36,8 +35,8 @@ import java.time.LocalDate;
 import java.util.List;
 
 /**
- * The tool window's page, top to bottom: what is used of the limit, the meter, the Left, Forecast and Pace tiles,
- * the month's daily bars, the per-feature bars, and a note that GitLab's data can lag.
+ * The tool window's page, top to bottom: what is used of the limit, the meter, the Left, Forecast, Pace and Spent
+ * today tiles, the month's daily bars, the per-feature bars, and a note that GitLab's data can lag.
  */
 public final class Dashboard extends JPanel implements Scrollable {
 
@@ -102,11 +101,11 @@ public final class Dashboard extends JPanel implements Scrollable {
         });
         place(meter, 14);
 
-        JPanel tiles = new JPanel(new GridLayout(1, 3, theme.px(8), 0));
-        tiles.setOpaque(false);
+        Tiles tiles = new Tiles(theme);
         tiles.add(new Tile(theme, "Left", CreditsView.number(Math.max(limit - used, 0)), null));
-        tiles.add(new Tile(theme, "Forecast · " + CreditsView.day(period.end()), CreditsView.number(forecast), null));
+        tiles.add(new Tile(theme, "Forecast", CreditsView.number(forecast), "by " + CreditsView.day(period.end())));
         tiles.add(new Tile(theme, "Pace", CreditsView.number(period.pace(used)), "a day"));
+        tiles.add(new Tile(theme, "Spent today", CreditsView.number(report.spentOn(today)), null));
         place(tiles, 14);
 
         JPanel daily = column(6);
@@ -323,6 +322,63 @@ public final class Dashboard extends JPanel implements Scrollable {
             g.setFont(captionFont);
             g.setColor(theme.color(Tone.MUTED));
             g.drawString(Draw.fit(caption, cfm, pillX - theme.px(8) - captionX), captionX, baseline);
+        }
+    }
+
+    /**
+     * The tiles in a row where each gets {@link #WIDE} pixels, else two by two. Which it is depends on the width it
+     * is given, so a change of it lays the page out again.
+     */
+    private static final class Tiles extends JPanel {
+
+        private static final int WIDE = 100;
+
+        private final Theme theme;
+        private int columns = 2;
+
+        Tiles(Theme theme) {
+            super(null);
+            this.theme = theme;
+            setOpaque(false);
+        }
+
+        private int columnsFor(int width) {
+            int count = Math.max(getComponentCount(), 1);
+            return width >= count * theme.px(WIDE) + (count - 1) * theme.px(8) ? count : Math.min(2, count);
+        }
+
+        @Override
+        public void setBounds(int x, int y, int width, int height) {
+            super.setBounds(x, y, width, height);
+            int fit = columnsFor(width);
+            if (fit != columns) {
+                columns = fit;
+                revalidate();
+            }
+        }
+
+        @Override
+        public Dimension getPreferredSize() {
+            int rows = (getComponentCount() + columns - 1) / columns;
+            int tile = getComponentCount() == 0 ? 0 : getComponent(0).getPreferredSize().height;
+            return new Dimension(theme.px(200), rows * tile + Math.max(rows - 1, 0) * theme.px(8));
+        }
+
+        @Override
+        public Dimension getMinimumSize() {
+            return new Dimension(0, getPreferredSize().height);
+        }
+
+        @Override
+        public void doLayout() {
+            int gap = theme.px(8);
+            int width = (getWidth() - (columns - 1) * gap) / columns;
+            int height = getComponentCount() == 0 ? 0 : getComponent(0).getPreferredSize().height;
+            for (int i = 0; i < getComponentCount(); i++) {
+                int column = i % columns;
+                int x = column == columns - 1 ? getWidth() - width : column * (width + gap);
+                getComponent(i).setBounds(x, i / columns * (height + gap), width, height);
+            }
         }
     }
 

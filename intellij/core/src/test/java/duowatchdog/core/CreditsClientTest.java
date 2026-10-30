@@ -7,12 +7,14 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.net.URI;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -181,6 +183,72 @@ class CreditsClientTest {
                 () -> new CreditsClient("https://gitlab.com", "t", http).fetch("acme"));
 
         assertTrue(e.getMessage().contains("read_api"), e.getMessage());
+    }
+
+    @Test
+    void readsTheTokensOwnDetails() throws Exception {
+        List<URI> asked = new ArrayList<>();
+        Transport rest = new Transport() {
+            @Override
+            public Response post(URI endpoint, String token, String jsonBody) {
+                return new Response(500, "");
+            }
+
+            @Override
+            public Response get(URI uri, String token) {
+                asked.add(uri);
+                return new Response(200, """
+                        {"id":7,"name":"Duo Watchdog","revoked":false,"created_at":"2026-10-01T11:38:12.345Z",
+                         "scopes":["read_api","ai_features"],"user_id":3,"last_used_at":null,"active":true,
+                         "expires_at":"2026-12-31"}
+                        """);
+            }
+        };
+
+        CreditsClient.TokenInfo info = new CreditsClient("https://gitlab.example.com/gitlab/", "t", rest).tokenInfo();
+
+        assertEquals(List.of(URI.create("https://gitlab.example.com/gitlab/api/v4/personal_access_tokens/self")), asked);
+        assertEquals("Duo Watchdog", info.name());
+        assertEquals(LocalDate.of(2026, 12, 31), info.expiresAt());
+        assertEquals(Instant.parse("2026-10-01T11:38:12.345Z"), info.createdAt());
+        assertNull(info.lastUsedAt());
+        assertEquals(List.of(), info.missingScopes());
+    }
+
+    @Test
+    void namesTheScopesATokenLacks() {
+        CreditsClient.TokenInfo info = new CreditsClient.TokenInfo("x", List.of("read_api", "api"), null, null, null);
+        assertEquals(List.of("ai_features"), info.missingScopes());
+    }
+
+    @Test
+    void anExpiredTokenIsRejected() {
+        Transport rest = new Transport() {
+            @Override
+            public Response post(URI endpoint, String token, String jsonBody) {
+                return new Response(401, "{\"message\":\"401 Unauthorized\"}");
+            }
+
+            @Override
+            public Response get(URI uri, String token) {
+                return new Response(401, "{\"message\":\"401 Unauthorized\"}");
+            }
+        };
+        CreditsClient client = assertDoesNotThrow(() -> new CreditsClient("https://gitlab.com", "glpat-old", rest));
+        GitLabException e = assertThrows(GitLabException.class, client::tokenInfo);
+        assertTrue(e.getMessage().contains("expired"), e.getMessage());
+        assertEquals(401, e.status());
+        assertThrows(GitLabException.class, client::username);
+    }
+
+    @Test
+    void namesTheTokensUser() throws Exception {
+        FakeTransport http = new FakeTransport().reply(200, "{\"data\":{\"currentUser\":{\"username\":\"alice\"}}}");
+        assertEquals("alice", new CreditsClient("https://gitlab.com", "t", http).username());
+        assertTrue(http.requests.get(0).get("query").getAsString().contains("username"));
+
+        FakeTransport anonymous = new FakeTransport().reply(200, "{\"data\":{\"currentUser\":null}}");
+        assertThrows(GitLabException.class, () -> new CreditsClient("https://gitlab.com", "t", anonymous).username());
     }
 
     @Test

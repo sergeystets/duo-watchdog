@@ -27,4 +27,16 @@ public final class HttpTransport implements Transport {
         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
         return new Response(response.statusCode(), response.body());
     }
+
+    @Override
+    public Response get(URI uri, String token) throws IOException, InterruptedException {
+        HttpRequest request = HttpRequest.newBuilder(uri)
+                .timeout(Duration.ofSeconds(30))
+                .header("Authorization", "Bearer " + token)
+                .header("User-Agent", "duo-watchdog-intellij")
+                .GET()
+                .build();
+        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        return new Response(response.statusCode(), response.body());
+    }
 }

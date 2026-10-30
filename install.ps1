@@ -21,6 +21,31 @@ function Ask([string]$Prompt) {
 }
 function YesDefault([string]$Prompt) { (Ask "$Prompt [Y/n]") -notmatch '^[nN]' }
 
+# The menu's arrows and the redrawn progress bar need a console. Without one (input or output redirected) the
+# menu asks for a number and each step prints a line.
+$Live = $false
+$Interactive = $false
+try {
+    $Live = -not [Console]::IsOutputRedirected
+    $Interactive = $Live -and -not [Console]::IsInputRedirected
+} catch { }
+# Characters every Windows console font has; the script itself stays ASCII for Windows PowerShell 5.1.
+$Full = [string][char]0x2588
+$Empty = [string][char]0x2591
+$OkMark = [string][char]0x221A
+$Spinner = '|', '/', '-', '\'
+
+function Get-Width { try { [Console]::WindowWidth - 1 } catch { 79 } }
+
+# The text cut to $Width columns.
+function Limit-Text([string]$Text, [int]$Width) {
+    if ($Width -lt 10) { $Width = 10 }
+    if ($Text.Length -gt $Width) { $Text.Substring(0, $Width - 3) + '...' } else { $Text }
+}
+
+# The text cut or padded to $Width columns, so it covers what the line held before.
+function Format-Line([string]$Text, [int]$Width) { (Limit-Text $Text $Width).PadRight([Math]::Max($Width, 10)) }
+
 $PluginVersion = (Select-String -Path intellij\build.gradle.kts -Pattern '^version = "(.*)"$').Matches[0].Groups[1].Value
 $ExtensionVersion = ''
 if (Test-Path vscode\package.json) { $ExtensionVersion = (Get-Content -Raw vscode\package.json | ConvertFrom-Json).version }
@@ -134,7 +159,7 @@ function Remove-Remembered([string]$Place) {
 
 function Get-NewVersion($Target) { if ($Target.Kind -eq 'idea') { $PluginVersion } else { $ExtensionVersion } }
 
-# What installing does to the target, e.g. "update Duo Watchdog 0.2.0 -> 0.2.1".
+# What installing does to the target, e.g. "update Duo Watchdog 0.2.1 -> 0.3.0".
 function Get-Plan($Target) {
     $new = Get-NewVersion $Target
     if (-not $Target.Current) { "install Duo Watchdog $new" }
@@ -222,7 +247,7 @@ function Show-Target([int]$Index) {
     if ($target.Kind -eq 'idea' -and (Test-IdeaRunning $target.Place)) {
         Say "      It is running now; you'll be asked to close it before installing."
     }
-    if ($target.Added) { Say '      You added this folder; it is remembered (f forgets it).' }
+    if ($target.Added) { Say '      You added this folder; it is remembered until you forget it in the menu below.' }
 }
 
 function Show-All {
@@ -236,8 +261,8 @@ function Show-All {
     Say
     $hasIdea = [bool]($Targets | Where-Object Kind -eq 'idea')
     $hasCode = [bool]($Targets | Where-Object Kind -eq 'code')
-    if (-not $hasIdea) { Say '  IntelliJ IDEA: none found in the usual places. If you have one, type p and its folder.' }
-    if (-not $hasCode) { Say '  VS Code: none found on the PATH or in the usual places. If you have it, type p and its folder.' }
+    if (-not $hasIdea) { Say '  IntelliJ IDEA: none found in the usual places. If you have one, add it in the menu below.' }
+    if (-not $hasCode) { Say '  VS Code: none found on the PATH or in the usual places. If you have it, add it in the menu below.' }
     if (-not ($hasIdea -and $hasCode)) { Say }
 }
 
@@ -319,45 +344,92 @@ foreach ($cli in Find-Codes) {
 
 Show-All
 
+# --- Choosing --------------------------------------------------------------------------------------------
+
+# How the menu names the targets of a kind: the name of the only one, or how many there are.
+function Get-KindLabel([string]$Kind) {
+    $ofKind = @($Targets | Where-Object Kind -eq $Kind)
+    if ($ofKind.Count -eq 1) { $ofKind[0].Name }
+    elseif ($Kind -eq 'idea') { "$($ofKind.Count) IntelliJ IDEAs" }
+    else { "$($ofKind.Count) VS Codes" }
+}
+
+# Offers the options as a menu and returns the index of the one chosen: the arrows (or j and k) move, Enter
+# chooses, Esc and q choose the last option, which is Exit. Without a console the options are numbered and a
+# number is read instead.
+function Select-Option([string[]]$Options) {
+    $count = $Options.Count
+    if (-not $Interactive) {
+        for ($i = 0; $i -lt $count; $i++) { Say "  $($i + 1)) $($Options[$i])" }
+        while ($true) {
+            $number = (Ask 'Number').Trim()
+            if ($number -match '^\d+$' -and [int]$number -ge 1 -and [int]$number -le $count) { return [int]$number - 1 }
+            Say "  Type a number from 1 to $count."
+        }
+    }
+    $width = Get-Width
+    for ($i = 0; $i -lt $count; $i++) { Say }
+    $top = [Console]::CursorTop - $count
+    $current = 0
+    $chosen = $false
+    [Console]::CursorVisible = $false
+    try {
+        while ($true) {
+            for ($i = 0; $i -lt $count; $i++) {
+                [Console]::SetCursorPosition(0, $top + $i)
+                if ($i -eq $current) {
+                    Write-Host (Format-Line "  > $($Options[$i])" $width) -ForegroundColor Cyan -NoNewline
+                } else {
+                    Write-Host (Format-Line "    $($Options[$i])" $width) -NoNewline
+                }
+            }
+            [Console]::SetCursorPosition(0, $top + $count)
+            if ($chosen) { break }
+            $key = [Console]::ReadKey($true)
+            if ($key.Key -eq 'UpArrow' -or $key.KeyChar -eq 'k') { $current = ($current + $count - 1) % $count }
+            elseif ($key.Key -eq 'DownArrow' -or $key.KeyChar -eq 'j') { $current = ($current + 1) % $count }
+            elseif ($key.Key -eq 'Enter') { $chosen = $true }
+            elseif ($key.Key -eq 'Escape' -or $key.KeyChar -eq 'q') { $current = $count - 1; $chosen = $true }
+        }
+    } finally {
+        [Console]::CursorVisible = $true
+    }
+    $current
+}
+
 $Chosen = @()
 while ($Chosen.Count -eq 0) {
-    Say 'Which of these should get Duo Watchdog?'
-    if ($Targets.Count -gt 0) {
-        Say '  Enter   all of them'
-        Say '  1 2     only the ones with these numbers'
-    }
-    Say "  p       an IntelliJ IDEA or VS Code that isn't listed (you'll type its folder; it's remembered)"
+    $ideaIndexes = @(for ($i = 0; $i -lt $Targets.Count; $i++) { if ($Targets[$i].Kind -eq 'idea') { $i } })
+    $codeIndexes = @(for ($i = 0; $i -lt $Targets.Count; $i++) { if ($Targets[$i].Kind -eq 'code') { $i } })
     $added = @(for ($i = 0; $i -lt $Targets.Count; $i++) { if ($Targets[$i].Added) { $i } })
-    if ($added.Count -gt 0) { Say '  f       forget a folder you added' }
-    Say '  q       quit without installing'
-    $answer = (Ask 'Your choice').Trim()
-    switch -Regex ($answer) {
-        '^$' {
-            if ($Targets.Count -gt 0) { $Chosen = @(0..($Targets.Count - 1)) }
-            else { Say '  Nothing is listed yet: type p to add a folder, or q.' }
-        }
-        '^[qQ]$' { exit 0 }
-        '^[pP]$' {
-            $count = $Targets.Count
-            if ((Add-Folder (Ask 'Folder of the IntelliJ IDEA or VS Code')) -and $Targets.Count -gt $count) { Show-Target $count }
-            Say
-        }
-        '^[fF]$' {
-            if ($added.Count -eq 0) { Say "  You haven't added any folder."; break }
-            if ($added.Count -eq 1) { $number = "$($added[0] + 1)" } else { $number = (Ask 'Number of the one to forget').Trim() }
-            if ($number -match '^\d+$' -and $added -contains ([int]$number - 1)) {
-                $target = $Targets[[int]$number - 1]
-                Remove-Remembered $target.Place
-                Say "  Forgot $($target.Folder)."
-                $Targets.RemoveAt([int]$number - 1)
-                Show-All
-            } else {
-                Say "  [$number] isn't a folder you added."
-            }
-        }
-        default {
+    $labels = @()
+    $actions = @()
+    if ($ideaIndexes.Count -gt 0 -and $codeIndexes.Count -gt 0) {
+        $labels += "Both: $(Get-KindLabel 'idea') and $(Get-KindLabel 'code')"; $actions += 'all'
+        $labels += "IntelliJ IDEA only: $(Get-KindLabel 'idea')"; $actions += 'idea'
+        $labels += "VS Code only: $(Get-KindLabel 'code')"; $actions += 'code'
+        if ($Targets.Count -gt 2) { $labels += 'Some of them, by their numbers in the list above...'; $actions += 'numbers' }
+    } elseif ($Targets.Count -eq 1) {
+        $labels += $Targets[0].Name; $actions += 'all'
+    } elseif ($Targets.Count -gt 1) {
+        $labels += "All of them: $(Get-KindLabel $Targets[0].Kind)"; $actions += 'all'
+        $labels += 'Some of them, by their numbers in the list above...'; $actions += 'numbers'
+    }
+    $labels += "An IntelliJ IDEA or VS Code that isn't listed (you type its folder)..."; $actions += 'add'
+    if ($added.Count -gt 0) { $labels += 'Forget a folder you added...'; $actions += 'forget' }
+    $labels += 'Exit without installing'; $actions += 'exit'
+
+    Bold 'Where should Duo Watchdog go?'
+    if ($Interactive) { Write-Host '  Up/Down to move, Enter to choose' -ForegroundColor DarkGray }
+    $action = $actions[(Select-Option $labels)]
+    Say
+    switch ($action) {
+        'all' { $Chosen = @(0..($Targets.Count - 1)) }
+        'idea' { $Chosen = $ideaIndexes }
+        'code' { $Chosen = $codeIndexes }
+        'numbers' {
             $picked = @()
-            foreach ($n in ($answer -split '[\s,]+' | Where-Object { $_ })) {
+            foreach ($n in ((Ask 'Their numbers in the list above, e.g. 1 3') -split '[\s,]+' | Where-Object { $_ })) {
                 if ($n -match '^\d+$' -and [int]$n -ge 1 -and [int]$n -le $Targets.Count) {
                     $picked += [int]$n - 1
                 } else {
@@ -368,6 +440,24 @@ while ($Chosen.Count -eq 0) {
             }
             $Chosen = $picked
         }
+        'add' {
+            $count = $Targets.Count
+            if ((Add-Folder (Ask 'Folder of the IntelliJ IDEA or VS Code')) -and $Targets.Count -gt $count) { Show-Target $count }
+            Say
+        }
+        'forget' {
+            if ($added.Count -eq 1) { $number = "$($added[0] + 1)" } else { $number = (Ask 'Number of the one to forget, in the list above').Trim() }
+            if ($number -match '^\d+$' -and $added -contains ([int]$number - 1)) {
+                $target = $Targets[[int]$number - 1]
+                Remove-Remembered $target.Place
+                Say "  Forgot $($target.Folder)."
+                $Targets.RemoveAt([int]$number - 1)
+                Show-All
+            } else {
+                Say "  [$number] isn't a folder you added."
+            }
+        }
+        'exit' { exit 0 }
     }
 }
 $Selected = $Chosen | ForEach-Object { $Targets[$_] }
@@ -396,70 +486,213 @@ foreach ($target in $Selected) {
 }
 if (-not (YesDefault 'Continue?')) { exit 0 }
 
-# --- Install ---------------------------------------------------------------------------------------------
+# --- Install, with a progress bar ------------------------------------------------------------------------
 
 $Results = New-Object System.Collections.ArrayList
-$script:Vsix = ''
-
-function Install-Idea($Target) {
-    $dir = $Target.Place
-    while (Test-IdeaRunning $dir) {
-        Say "$($Target.Name) is running. Plugins can be replaced only while it is closed."
-        if ((Ask 'Close it (File > Exit), then press Enter. s = skip it') -match '^[sS]$') {
-            [void]$Results.Add("SKIPPED  $($Target.Name): it was running.")
-            return
-        }
+$Starts = New-Object System.Collections.ArrayList   # the IntelliJ IDEAs to offer to start at the end
+$Ideas = @()
+$Codes = @()
+# IntelliJ IDEA replaces plugins only while it is closed. That is settled here, so no question interrupts the bar.
+foreach ($target in $Selected) {
+    if ($target.Kind -eq 'code') { $Codes += $target; continue }
+    $skipped = $false
+    while (Test-IdeaRunning $target.Place) {
+        Say "$($target.Name) is running. Plugins can be replaced only while it is closed."
+        if ((Ask 'Close it (File > Exit), then press Enter. s = skip it') -match '^[sS]$') { $skipped = $true; break }
     }
-    Say "Building the plugin for $($Target.Name) (the first build downloads Gradle and a JDK and can take a few minutes)..."
-    & .\gradlew.bat :intellij:installPlugin "-PideaPath=$dir" --quiet --console=plain
-    if ($LASTEXITCODE -eq 0) {
-        [void]$Results.Add("OK       $($Target.Name): Duo Watchdog $PluginVersion installed.")
-        if (YesDefault "Start $($Target.Name) now?") { Start-Process (Join-Path $dir 'bin\idea64.exe') }
-    } else {
-        [void]$Results.Add("FAILED   $($Target.Name): the build failed, see the Gradle output above.")
-    }
+    if ($skipped) { [void]$Results.Add("SKIPPED  $($target.Name): it was running.") } else { $Ideas += $target }
 }
 
-function Build-Extension {
-    Say 'Packaging the VS Code extension...'
-    Push-Location vscode
+# Each step's share of the bar; building the plugin is most of the wait.
+$WPrepare = 10; $WBuild = 45; $WNpm = 20; $WPackage = 10; $WCode = 5
+$StepCount = 0
+$TotalWeight = 0
+if ($Ideas.Count -gt 0) { $StepCount += 1 + $Ideas.Count; $TotalWeight += $WPrepare + $WBuild * $Ideas.Count }
+if ($Codes.Count -gt 0) { $StepCount += 2 + $Codes.Count; $TotalWeight += $WNpm + $WPackage + $WCode * $Codes.Count }
+$StepNumber = 0
+$DoneWeight = 0
+$GradleTasks = 0
+$StepLog = ''
+$LiveTop = 0
+$KeepLogs = $false
+$Work = Join-Path ([IO.Path]::GetTempPath()) ('duo-watchdog-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+
+# m:ss
+function Format-Clock([int]$Seconds) { '{0}:{1:00}' -f [int][Math]::Floor($Seconds / 60), ($Seconds % 60) }
+
+# A step's log as far as it is written; the command still holds it open.
+function Read-Log([string]$Path) {
     try {
-        & npm.cmd ci --no-audit --no-fund --loglevel=error
-        if ($LASTEXITCODE -eq 0) { & npm.cmd run --silent package | Out-Null }
-        if ($LASTEXITCODE -eq 0 -and (Test-Path "duo-watchdog-$ExtensionVersion.vsix")) {
-            $script:Vsix = (Resolve-Path "duo-watchdog-$ExtensionVersion.vsix").Path
-        } else {
-            $script:Vsix = 'failed'
-        }
-    } finally {
-        Pop-Location
-    }
+        $stream = [IO.File]::Open($Path, 'Open', 'Read', 'ReadWrite, Delete')
+        try { (New-Object IO.StreamReader($stream)).ReadToEnd() } finally { $stream.Dispose() }
+    } catch { '' }
 }
 
-function Install-Code($Target) {
-    if (-not $script:Vsix) { Build-Extension }
-    if ($script:Vsix -eq 'failed') {
-        [void]$Results.Add("FAILED   $($Target.Name): packaging the extension failed, see the npm output above.")
+function Get-BarWidth([int]$Width) { [Math]::Max(10, [Math]::Min(40, $Width - 30)) }
+
+# The bar for $Percent, $Width characters wide.
+function Write-Bar([int]$Percent, [int]$Width) {
+    $filled = [int][Math]::Floor($Percent * $Width / 100)
+    Write-Host ($Full * $filled) -ForegroundColor Cyan -NoNewline
+    Write-Host ($Empty * ($Width - $filled)) -ForegroundColor DarkGray -NoNewline
+}
+
+# The running step with a spinner, the Gradle task it is on and its time; under it the bar of the whole install.
+# How far the step is: the build by Gradle's tasks against the count the dry run planned, the other steps by time
+# against how long they usually take (half of it at $Tau seconds). It waits at 95% for the step to end.
+function Show-Live([string]$Label, [string]$Kind, [int]$Weight, [int]$Tau, [int]$Elapsed, [int]$Frame) {
+    $text = Read-Log $script:StepLog
+    if ($Kind -eq 'gradle' -and $script:GradleTasks -gt 0) {
+        $percent = [int][Math]::Floor(([regex]::Matches($text, '(?m)^> Task ')).Count * 100 / ($script:GradleTasks + 1))
+    } else {
+        $percent = [int][Math]::Floor($Elapsed * 100 / ($Elapsed + $Tau))
+    }
+    $percent = [Math]::Min($percent, 95)
+    $overall = [int][Math]::Floor(($script:DoneWeight * 100 + $percent * $Weight) / $TotalWeight)
+    $task = ''
+    if ($Kind -eq 'gradle') {
+        $tasks = [regex]::Matches($text, '(?m)^> Task :(\S+)')
+        if ($tasks.Count -gt 0) { $task = ' - ' + ($tasks[$tasks.Count - 1].Groups[1].Value -split ':')[-1] }
+    }
+    $width = Get-Width
+    $barWidth = Get-BarWidth $width
+    [Console]::SetCursorPosition(0, $script:LiveTop)
+    Write-Host '  ' -NoNewline
+    Write-Host $Spinner[$Frame % $Spinner.Count] -ForegroundColor Cyan -NoNewline
+    Write-Host (Format-Line (' ' + (Limit-Text $Label ($width - 14 - $task.Length)) + "$task  $(Format-Clock $Elapsed)") ($width - 3))
+    Write-Host '    ' -NoNewline
+    Write-Bar $overall $barWidth
+    Write-Host (Format-Line (' {0,3}%  step {1} of {2}' -f $overall, $script:StepNumber, $StepCount) ($width - 4 - $barWidth))
+    $script:LiveTop = [Console]::CursorTop - 2
+}
+
+# A step that ended: its mark in colour, its name, and how long it took or why it didn't run. The bar's line
+# under it is cleared for the next step.
+function Write-StepEnd([string]$Label, [string]$Mark, [ConsoleColor]$Color, [string]$Note) {
+    if (-not $Live) {
+        Write-Host "  $Mark [$($script:StepNumber)/$StepCount] $Label ($Note)"
         return
     }
-    Say "Installing into $($Target.Name)..."
-    & $Target.Place --install-extension $script:Vsix --force | Out-Null
-    if ($LASTEXITCODE -eq 0) {
-        [void]$Results.Add("OK       $($Target.Name): Duo Watchdog $ExtensionVersion installed. In open windows run 'Developer: Reload Window'.")
-    } else {
-        [void]$Results.Add("FAILED   $($Target.Name): '$($Target.Place) --install-extension' failed.")
-    }
+    $width = Get-Width
+    [Console]::SetCursorPosition(0, $script:LiveTop)
+    Write-Host '  ' -NoNewline
+    Write-Host $Mark -ForegroundColor $Color -NoNewline
+    Write-Host (Format-Line (' ' + (Limit-Text $Label ($width - 8 - $Note.Length)) + "  $Note") ($width - 3))
+    Write-Host (' ' * $width) -NoNewline
+    [Console]::SetCursorPosition(0, [Console]::CursorTop)
+    $script:LiveTop = [Console]::CursorTop
 }
 
-foreach ($target in $Selected) {
+# Runs the command line of a step through cmd.exe with its output in a log while the bar moves; then marks the
+# step done, or failed with the end of its log. Returns whether it worked.
+function Invoke-Step([string]$Label, [string]$Kind, [int]$Weight, [int]$Tau, [string]$CommandLine, [string]$Directory = $PSScriptRoot) {
+    $script:StepNumber++
+    $script:StepLog = Join-Path $Work "step-$($script:StepNumber).log"
+    $started = Get-Date
+    $process = Start-Process -FilePath $env:ComSpec -WorkingDirectory $Directory -NoNewWindow -PassThru `
+        -ArgumentList "/d /s /c `"$CommandLine > `"$($script:StepLog)`" 2>&1 < NUL`""
+    $null = $process.Handle   # without it the exit code is lost once the process has exited
+    $frame = 0
+    while (-not $process.HasExited) {
+        if ($Live) { Show-Live $Label $Kind $Weight $Tau ([int]((Get-Date) - $started).TotalSeconds) $frame }
+        $frame++
+        Start-Sleep -Milliseconds 200
+    }
+    $process.WaitForExit()
+    $elapsed = Format-Clock ([int]((Get-Date) - $started).TotalSeconds)
+    $script:DoneWeight += $Weight
+    if ($process.ExitCode -eq 0) {
+        Write-StepEnd $Label $OkMark Green $elapsed
+        return $true
+    }
+    $script:KeepLogs = $true
+    Write-StepEnd $Label 'x' Red "failed after $elapsed"
+    Get-Content $script:StepLog -Tail 20 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "      $_" -ForegroundColor DarkGray }
+    Say "      The whole output is in $($script:StepLog)"
+    $false
+}
+
+# A step that can't run because one before it failed.
+function Skip-Step([string]$Label, [int]$Weight, [string]$Why) {
+    $script:StepNumber++
+    $script:DoneWeight += $Weight
+    Write-StepEnd $Label '-' DarkGray "skipped: $Why"
+}
+
+if ($StepCount -gt 0) {
+    New-Item -ItemType Directory -Force $Work | Out-Null
     Say
-    if ($target.Kind -eq 'idea') { Install-Idea $target } else { Install-Code $target }
+    Bold "Installing ($StepCount steps)"
+    if ($Live) {
+        $LiveTop = [Console]::CursorTop
+        [Console]::CursorVisible = $false
+    }
+}
+try {
+    if ($Ideas.Count -gt 0) {
+        $gradle = "`"$PSScriptRoot\gradlew.bat`" :intellij:installPlugin --console=plain"
+        # The dry run lists the tasks the build will run, so the bar can follow it task by task.
+        if (Invoke-Step 'Preparing Gradle (the first run downloads Gradle and a JDK)' 'prepare' $WPrepare 20 `
+                "$gradle `"-PideaPath=$($Ideas[0].Place)`" --dry-run") {
+            $GradleTasks = ([regex]::Matches((Read-Log $StepLog), '(?m) SKIPPED\s*$')).Count
+            foreach ($target in $Ideas) {
+                if (Invoke-Step "Building and installing the plugin into $($target.Name)" 'gradle' $WBuild 60 `
+                        "$gradle `"-PideaPath=$($target.Place)`"") {
+                    [void]$Results.Add("OK       $($target.Name): Duo Watchdog $PluginVersion installed.")
+                    [void]$Starts.Add($target)
+                } else {
+                    [void]$Results.Add("FAILED   $($target.Name): the build failed, see its output above.")
+                }
+            }
+        } else {
+            foreach ($target in $Ideas) {
+                Skip-Step "Building and installing the plugin into $($target.Name)" $WBuild "Gradle didn't start"
+                [void]$Results.Add("FAILED   $($target.Name): Gradle didn't start, see its output above.")
+            }
+        }
+    }
+    if ($Codes.Count -gt 0) {
+        $vscode = Join-Path $PSScriptRoot 'vscode'
+        $vsix = Join-Path $vscode "duo-watchdog-$ExtensionVersion.vsix"
+        $why = ''
+        if (-not (Invoke-Step "Downloading the extension's npm packages" 'npm' $WNpm 25 'npm ci --no-audit --no-fund --loglevel=error' $vscode)) {
+            $why = "its npm packages didn't download"
+            Skip-Step 'Packaging the VS Code extension' $WPackage $why
+        } elseif (-not (Invoke-Step 'Packaging the VS Code extension' 'package' $WPackage 15 'npm run package' $vscode) -or -not (Test-Path $vsix)) {
+            $why = "the extension didn't package"
+        }
+        foreach ($target in $Codes) {
+            if ($why) {
+                Skip-Step "Installing the extension into $($target.Name)" $WCode $why
+                [void]$Results.Add("FAILED   $($target.Name): $why, see the output above.")
+            } elseif (Invoke-Step "Installing the extension into $($target.Name)" 'code' $WCode 8 `
+                    "`"$($target.Place)`" --install-extension `"$vsix`" --force") {
+                [void]$Results.Add("OK       $($target.Name): Duo Watchdog $ExtensionVersion installed. In open windows run 'Developer: Reload Window'.")
+            } else {
+                [void]$Results.Add("FAILED   $($target.Name): '$($target.Place) --install-extension' failed.")
+            }
+        }
+    }
+    if ($StepCount -gt 0 -and $Live) {
+        $width = Get-Width
+        $barWidth = Get-BarWidth $width
+        [Console]::SetCursorPosition(0, $LiveTop)
+        Write-Host '    ' -NoNewline
+        Write-Bar 100 $barWidth
+        Write-Host (Format-Line ' 100%' ($width - 4 - $barWidth))
+    }
+} finally {
+    if ($Live) { try { [Console]::CursorVisible = $true } catch { } }
+    if (-not $KeepLogs -and (Test-Path $Work)) { Remove-Item -Recurse -Force $Work -ErrorAction SilentlyContinue }
 }
 
 Say
 Bold 'Summary'
 $Results | ForEach-Object { Say "  $_" }
-if ($Results | Where-Object { $_ -like 'FAILED*' }) { exit 1 }
 Say
+foreach ($target in $Starts) {
+    if (YesDefault "Start $($target.Name) now?") { Start-Process (Join-Path $target.Place 'bin\idea64.exe') }
+}
+if ($Results | Where-Object { $_ -like 'FAILED*' }) { exit 1 }
 Say 'Next: set your GitLab token. IntelliJ IDEA: Settings > Tools > Duo Watchdog.'
 Say "VS Code: Ctrl+Shift+P > 'Duo Watchdog: Set GitLab Token'."

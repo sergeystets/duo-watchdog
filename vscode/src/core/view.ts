@@ -1,6 +1,6 @@
 import { dateTime, dayOfMonth, IsoDate, monthName } from './dates';
 import { BillingPeriod } from './period';
-import { Snapshot } from './report';
+import { Snapshot, spentOn } from './report';
 
 /** The words and numbers the extension shows: the status bar text, its tooltip, and the dashboard's dates. */
 
@@ -41,6 +41,7 @@ export function tooltipLines(s: Snapshot, limit: number, today: IsoDate): string
         lines.push('@' + (r.username ?? ''));
         lines.push('Used ' + number(r.creditsUsed) + ' of ' + number(limit) + ' (' + percent(r.creditsUsed, limit)
             + '), left ' + number(Math.max(limit - r.creditsUsed, 0)));
+        lines.push('Spent today: ' + number(spentOn(r, today)));
         lines.push('Forecast by ' + day(period.end) + ': ' + number(period.project(r.creditsUsed)));
         if (r.blocked) {
             lines.push('Blocked by ' + capName(r.blockedBy));

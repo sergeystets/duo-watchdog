@@ -17,7 +17,7 @@ GitLab Credits usage for the current billing period, forecast where the month wi
 ![Java](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-VS_Code_extension-3178C6?logo=typescript&logoColor=white)
 ![GitLab](https://img.shields.io/badge/GitLab-Duo-FC6D26?logo=gitlab&logoColor=white)
-![Version](https://img.shields.io/badge/version-0.2.1-blue)
+![Version](https://img.shields.io/badge/version-0.3.0-blue)
 
 </div>
 
@@ -29,8 +29,21 @@ GitLab Credits usage for the current billing period, forecast where the month wi
 
 ---
 
+## What's new in 0.3.0
+
+- **Spent today**: a new tile on the dashboard (IntelliJ IDEA and VS Code) and a line in the status bar tooltip.
+- **Token status in Settings** (IntelliJ IDEA): green with a check mark when a token is saved, amber when there is
+  none or it expires within a week, red when GitLab turns it down. It says when the token was saved
+  (`Saved on Oct 1, 14:38 EEST`), when it expires and which scopes it has; GitLab gives the expiry date through
+  `GET /personal_access_tokens/self`.
+- **Check connection** asks GitLab whose the token is, when it expires, and for your group's credits.
+- **Find my group** says what it does, and the token now comes before the group, since Find my group asks GitLab with it.
+- **Shift+Esc** hides the Duo Watchdog tool window and **Esc** goes back to the editor, as in the IDE's own tool windows.
+- **Installers**: choose IntelliJ IDEA, VS Code or both with the arrow keys, and follow the install on a progress bar.
+
 ## Contents
 
+- [What's new in 0.3.0](#whats-new-in-030)
 - [Features](#features)
 - [VS Code](#vs-code)
 - [How it works](#how-it-works)
@@ -62,9 +75,11 @@ Clicking the meter opens the dashboard.
 - A toolbar with **Refresh** and **Settings**, plus `@user · group · Updated HH:mm`
 - The headline: credits used, an **Active** / **Blocked** status and the period with the current day
 - A usage bar with a dashed forecast marker and ticks at each alert threshold
-- Tiles for **Left**, **Forecast** and **Pace** (credits per day)
+- Tiles for **Left**, **Forecast**, **Pace** (credits per day) and **Spent today**: four abreast in a wide tool window,
+  two by two in a narrow one
 - A **daily usage** chart covering the whole month, with the rest of the month shaded, a "today" line and tooltips on the bars
 - A **by feature** breakdown (Developer Flow, Code Review Flow, …)
+- **Shift+Esc** hides it and **Esc** goes back to the editor, as in the IDE's own tool windows
 
 <br clear="right">
 
@@ -163,17 +178,22 @@ The script is interactive:
 1. It finds every **IntelliJ IDEA** (2024.3+) and **VS Code** (also VS Code Insiders, VSCodium and Cursor) on the machine
    and shows, for each, where it is installed, which Duo Watchdog version it has, and whether the IDE is running.
    If it finds no IntelliJ IDEA or no VS Code, it says so.
-2. Press **Enter** to install into all of them, or type the numbers of the ones you want (`1 2`). Type `p` to add an
-   IntelliJ IDEA or VS Code it didn't find (you type its folder), or `q` to quit without installing.
-   A folder you add is **remembered** and listed again on the next run; `f` forgets it, and `p` adds another
-   whenever the editor moves. The list is kept in `~/.config/duo-watchdog/folders` (macOS, Linux) or
-   `%APPDATA%\duo-watchdog\folders.txt` (Windows).
+2. Choose with the **arrow keys** and **Enter**: **Both** (IntelliJ IDEA and VS Code), **IntelliJ IDEA only**,
+   **VS Code only**, or **Exit** (`q` and `Esc` exit too). With several of one kind, *Some of them* takes their
+   numbers (`1 3`). *An IntelliJ IDEA or VS Code that isn't listed* adds one it didn't find: you type its folder.
+   A folder you add is **remembered** and listed again on the next run; *Forget a folder you added* drops it. The list
+   is kept in `~/.config/duo-watchdog/folders` (macOS, Linux) or `%APPDATA%\duo-watchdog\folders.txt` (Windows).
+   Without a terminal (answers from a pipe) the choices are numbered and it reads a number.
 3. It checks that the tools it needs are installed: a JDK 17+ for IntelliJ IDEA, Node.js 20+ for VS Code.
-4. It shows the plan (install, update from one version to another, or reinstall) and asks you to confirm.
-5. **IntelliJ IDEA**: if the IDE is running, it asks you to close it and waits. Then it builds the plugin against that IDE,
-   puts it into the IDE's plugins folder (replacing an older Duo Watchdog) and offers to start the IDE.
-6. **VS Code**: it packages the extension once and installs it with `code --install-extension`. Run
-   *Developer: Reload Window* in open VS Code windows to load the new version.
+4. It shows the plan (install, update from one version to another, or reinstall) and asks you to confirm. If an
+   IntelliJ IDEA it is about to update is running, it asks you to close it (or skip it) now, so nothing interrupts
+   the install.
+5. It installs, one step a line, with a **progress bar** for the whole install under the step that is running.
+   **IntelliJ IDEA**: Gradle builds the plugin against that IDE and puts it into the IDE's plugins folder (replacing an
+   older Duo Watchdog); the bar follows Gradle task by task. **VS Code**: it packages the extension once and installs
+   it with `code --install-extension`; run *Developer: Reload Window* in open VS Code windows to load the new version.
+   The tools' own output goes to a log; a step that fails shows the end of it and where the whole log is.
+6. It sums up and offers to start the IntelliJ IDEAs it installed into.
 
 The script greets you with the Duo Watchdog doberman and title from [`docs/images/logo.ascii`](docs/images/logo.ascii),
 printed as drawn; edit that file to change it. Any `version x.y.z` in it is replaced with the version being installed.
@@ -183,7 +203,7 @@ so nothing wraps.
 
 ```
    (docs/images/logo.ascii: the doberman, with "D U O   W A T C H D O G", the subtitle and
-    "Installer, version 0.2.1" beside it)
+    "Installer, version 0.3.0" beside it)
 
 Looking for IntelliJ IDEA and VS Code...
 
@@ -192,25 +212,31 @@ Found on this computer:
   [1] VS Code 1.130.0
       D:\Tools\Microsoft VS Code
       Duo Watchdog is not installed yet.
-      You added this folder; it is remembered (f forgets it).
+      You added this folder; it is remembered until you forget it in the menu below.
 
   [2] IntelliJ IDEA 2026.2.0.1
       C:\Program Files\JetBrains\IntelliJ IDEA 2026.2
-      Duo Watchdog 0.2.0 is installed; 0.2.1 is available.
+      Duo Watchdog 0.2.1 is installed; 0.3.0 is available.
       It is running now; you'll be asked to close it before installing.
 
-Which of these should get Duo Watchdog?
-  Enter   all of them
-  1 2     only the ones with these numbers
-  p       an IntelliJ IDEA or VS Code that isn't listed (you'll type its folder; it's remembered)
-  f       forget a folder you added
-  q       quit without installing
-Your choice:
+Where should Duo Watchdog go?
+  ↑/↓ to move, Enter to choose
+  ❯ Both: IntelliJ IDEA 2026.2.0.1 and VS Code 1.130.0
+    IntelliJ IDEA only: IntelliJ IDEA 2026.2.0.1
+    VS Code only: VS Code 1.130.0
+    An IntelliJ IDEA or VS Code that isn't listed (you type its folder)...
+    Forget a folder you added...
+    Exit without installing
 
 Plan:
-  - VS Code 1.130.0: install Duo Watchdog 0.2.1
-  - IntelliJ IDEA 2026.2.0.1: update Duo Watchdog 0.2.0 -> 0.2.1 (you'll be asked to close it first)
+  - IntelliJ IDEA 2026.2.0.1: update Duo Watchdog 0.2.1 -> 0.3.0 (you'll be asked to close it first)
+  - VS Code 1.130.0: install Duo Watchdog 0.3.0
 Continue? [Y/n]
+
+Installing (5 steps)
+  ✓ Preparing Gradle (the first run downloads Gradle and a JDK)  0:12
+  ⠼ Building and installing the plugin into IntelliJ IDEA 2026.2.0.1 · compileJava  0:21
+    ██████████████░░░░░░░░░░░░░░░░░░░░░░░░░░  35%  step 2 of 5
 ```
 
 You can also pass the folder of an IntelliJ IDEA or VS Code that the script doesn't find on its own (it's remembered too):
@@ -234,7 +260,7 @@ Or the IDE's own way:
 
 1. [Build the plugin](#building-from-source), or get `duo-watchdog-<version>.zip` from a teammate.
 2. In the IDE, open *Settings → Plugins → ⚙ → Install Plugin from Disk…*
-3. Select `intellij/build/distributions/duo-watchdog-0.2.1.zip` and restart if the IDE asks you to.
+3. Select `intellij/build/distributions/duo-watchdog-0.3.0.zip` and restart if the IDE asks you to.
 
 **Compatibility:** IntelliJ IDEA and any other JetBrains IDE from **2024.3** onward. This holds whichever IDE version the plugin was built against.
 
@@ -245,12 +271,23 @@ Open *Settings → Tools → Duo Watchdog*.
 | Setting | What to enter |
 |---|---|
 | **GitLab URL** | `https://gitlab.com` or the address of your self-managed GitLab |
-| **Group path** | The path of the top-level group that owns the Duo subscription, e.g. `my-company`. **Find my group** goes through your groups and asks GitLab which one holds your credits. Pasting the group's URL also works; the plugin keeps only the path. |
 | **Personal access token** | A token with the **`read_api`** and **`ai_features`** scopes and nothing more. The *Create the token in GitLab* link opens GitLab's new-token page with both scopes already selected. The token is stored in the IDE's **Password Safe**, not in plain settings. |
+| **Group path** | The path of the top-level group that owns the Duo subscription, e.g. `my-company`. Not sure? Click **Find my group**: it asks GitLab, with the token above, which of your groups gives you Duo credits and fills in its path. Pasting the group's URL also works; the plugin keeps only the path. |
 | **Limit (credits)** | Your limit. Default: `100` |
 | **Alert at % of limit** | Comma-separated thresholds, e.g. `50, 80, 95` |
 | **Alert when the month-end forecast passes the limit** | Turns the forecast alert on or off |
 | **Refresh every … minutes** | Polling interval. Default: `15`. GitLab's data can lag a few minutes behind actual use. |
+
+The box under the token field shows the token's state:
+
+| Box | Means |
+|---|---|
+| Green, ✓ **Token saved** | A token is in the Password Safe. It says when it was saved (`Saved on Oct 1, 14:38 EEST`) and, as GitLab reports it, when it expires and its scopes. |
+| Amber, **No token yet** | Nothing saved: create one with the link and paste it. Amber too when the token expires within a week or lacks a scope. |
+| Red | GitLab turns the saved token down (expired or revoked), or **Check connection** failed, with GitLab's reason. |
+
+**Check connection** asks GitLab whose the token is (the one you typed, or else the saved one), when it expires, and
+for your group's credits, without saving anything.
 
 ### VS Code
 
@@ -278,7 +315,7 @@ VS Code extension (`:vscode`, which runs its npm build). Open the root folder in
 
 ```bash
 ./gradlew test            # all tests: the plugin's core and the VS Code extension
-./gradlew buildPlugin     # → intellij/build/distributions/duo-watchdog-0.2.1.zip
+./gradlew buildPlugin     # → intellij/build/distributions/duo-watchdog-0.3.0.zip
 ./gradlew runIde          # launch a sandbox IDE with the plugin installed
 ```
 
@@ -395,11 +432,11 @@ because the path contains spaces:
 **5. Find the result:**
 
 ```powershell
-dir intellij\build\distributions    # → duo-watchdog-0.2.1.zip
+dir intellij\build\distributions    # → duo-watchdog-0.3.0.zip
 ```
 
 Then follow [Installation](#installation): *Settings → Plugins → ⚙ → Install Plugin from Disk…* and pick
-`intellij\build\distributions\duo-watchdog-0.2.1.zip`.
+`intellij\build\distributions\duo-watchdog-0.3.0.zip`.
 
 **Optional:** run the tests or try the plugin in a sandbox IDE:
 
@@ -436,8 +473,8 @@ dir intellij\build\distributions
 - **`no IntelliJ IDEA at ...`**: the path is wrong. Pass the IDEA install folder itself (the one with `bin` and `product-info.json`), not `bin\idea64.exe`.
 - **`running scripts is disabled on this system`**: run `install.bat`, not `install.ps1` directly. The `.bat` starts PowerShell
   with `-ExecutionPolicy Bypass` for that one run.
-- **The script can't find VS Code**: it looks for `code` on the `PATH` and in the default install folders. Type `p` and the
-  VS Code folder (e.g. `D:\Tools\Microsoft VS Code`), or reinstall VS Code with *Add to PATH* checked.
+- **The script can't find VS Code**: it looks for `code` on the `PATH` and in the default install folders. Choose *An IntelliJ IDEA or VS Code
+  that isn't listed* and type the VS Code folder (e.g. `D:\Tools\Microsoft VS Code`), or reinstall VS Code with *Add to PATH* checked.
 - **Corporate proxy**: Gradle doesn't use the IDE's proxy settings. Add your proxy to `%USERPROFILE%\.gradle\gradle.properties`:
   ```properties
   systemProp.https.proxyHost=proxy.example.com
@@ -476,7 +513,7 @@ The VS Code extension builds with npm (Node.js 20+), from the root through Gradl
 
 ```bash
 ./gradlew :vscode:test               # 32 tests, no VS Code needed          (npm ci && npm test)
-./gradlew :vscode:packageExtension   # → vscode/duo-watchdog-0.2.1.vsix      (npm run package)
+./gradlew :vscode:packageExtension   # → vscode/duo-watchdog-0.3.0.vsix      (npm run package)
 ./gradlew :vscode:installExtension   # into VS Code; -PcodePath=codium for another CLI
 ```
 

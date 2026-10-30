@@ -10,7 +10,9 @@ import duowatchdog.core.CreditsReport.FlowUsage;
 
 import java.io.IOException;
 import java.net.URI;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -40,6 +42,12 @@ public final class CreditsClient {
             }
             """;
 
+    static final String USER_QUERY = """
+            query DuoWhoAmI {
+              currentUser { username }
+            }
+            """;
+
     static final String GROUPS_QUERY = """
             query DuoMyGroups {
               currentUser {
@@ -47,6 +55,12 @@ public final class CreditsClient {
               }
             }
             """;
+
+    /** The scopes the token needs, and nothing more. */
+    public static final List<String> SCOPES = List.of("read_api", "ai_features");
+
+    private static final String NOT_A_USER =
+            "GitLab did not accept the token as a user. Check the token and its read_api and ai_features scopes.";
 
     /** Each feature is one more aliased call to GitLab's billing backend; past this many the rest stay unpriced. */
     static final int MAX_PRICED_FLOWS = 12;
@@ -64,6 +78,19 @@ public final class CreditsClient {
 
     /** @param checked the top-level groups asked about; {@code withCredits} those GitLab gave the user's credits for */
     public record Groups(List<String> checked, List<GroupMatch> withCredits) {
+    }
+
+    /**
+     * The token's own details, as {@code GET /personal_access_tokens/self} gives them.
+     *
+     * @param expiresAt the day GitLab stops taking it, null when it never expires
+     */
+    public record TokenInfo(String name, List<String> scopes, LocalDate expiresAt, Instant createdAt, Instant lastUsedAt) {
+
+        /** Of the scopes Duo Watchdog needs, those the token lacks. */
+        public List<String> missingScopes() {
+            return SCOPES.stream().filter(scope -> !scopes.contains(scope)).toList();
+        }
     }
 
     private final URI endpoint;
@@ -99,9 +126,7 @@ public final class CreditsClient {
 
         JsonObject user = obj(self.data(), "currentUser");
         if (user == null) {
-            throw new GitLabException(self.errors().isEmpty()
-                    ? "GitLab did not accept the token as a user. Check the token and its read_api and ai_features scopes."
-                    : String.join("; ", self.errors()));
+            throw new GitLabException(self.errors().isEmpty() ? NOT_A_USER : String.join("; ", self.errors()));
         }
         String username = str(user, "username");
         JsonObject usage = obj(user, "creditsUsage");
@@ -125,9 +150,7 @@ public final class CreditsClient {
         Result result = graphql(GROUPS_QUERY, new JsonObject());
         JsonObject user = obj(result.data(), "currentUser");
         if (user == null) {
-            throw new GitLabException(result.errors().isEmpty()
-                    ? "GitLab did not accept the token as a user. Check the token and its read_api and ai_features scopes."
-                    : String.join("; ", result.errors()));
+            throw new GitLabException(result.errors().isEmpty() ? NOT_A_USER : String.join("; ", result.errors()));
         }
         Map<String, String> names = new LinkedHashMap<>();
         for (JsonElement e : arr(obj(user, "groups"), "nodes")) {
@@ -165,6 +188,34 @@ public final class CreditsClient {
             }
         }
         return new Groups(List.copyOf(checked), matches);
+    }
+
+    /** Whose the token is: Check connection's proof that GitLab takes it for GraphQL. */
+    public String username() throws GitLabException {
+        Result result = graphql(USER_QUERY, new JsonObject());
+        String username = str(obj(result.data(), "currentUser"), "username");
+        if (username == null) {
+            throw new GitLabException(result.errors().isEmpty() ? NOT_A_USER : String.join("; ", result.errors()));
+        }
+        return username;
+    }
+
+    /** The token's name, scopes and expiry, from the REST API, which tells any token about itself. */
+    public TokenInfo tokenInfo() throws GitLabException {
+        URI uri = endpoint.resolve("v4/personal_access_tokens/self");
+        JsonElement parsed = json(request(() -> transport.get(uri, token)));
+        if (!parsed.isJsonObject()) {
+            throw new GitLabException("GitLab returned a response that is not JSON. Is the URL the GitLab root?");
+        }
+        JsonObject o = parsed.getAsJsonObject();
+        List<String> scopes = new ArrayList<>();
+        for (JsonElement e : arr(o, "scopes")) {
+            if (e.isJsonPrimitive()) {
+                scopes.add(e.getAsString());
+            }
+        }
+        return new TokenInfo(str(o, "name"), List.copyOf(scopes), date(o, "expires_at"), instant(o, "created_at"),
+                instant(o, "last_used_at"));
     }
 
     private static CreditsReport report(String username, JsonObject usage) {
@@ -251,33 +302,7 @@ public final class CreditsClient {
         body.addProperty("query", query);
         body.add("variables", variables);
 
-        Transport.Response response;
-        try {
-            response = transport.post(endpoint, token, body.toString());
-        } catch (IOException e) {
-            throw new GitLabException("Cannot reach " + endpoint.getHost() + ": "
-                    + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()), e);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new GitLabException("Interrupted while reading GitLab credits", e);
-        }
-
-        if (response.status() == 401) {
-            throw new GitLabException("GitLab rejected the token (HTTP 401). Create a personal access token with the read_api and ai_features scopes.");
-        }
-        if (response.status() == 403) {
-            throw new GitLabException("GitLab refused the request (HTTP 403). The token needs the read_api and ai_features scopes.");
-        }
-        if (response.status() < 200 || response.status() >= 300) {
-            throw new GitLabException("GitLab returned HTTP " + response.status() + " from " + endpoint.getHost() + ".");
-        }
-
-        JsonElement parsed;
-        try {
-            parsed = JsonParser.parseString(response.body() == null ? "" : response.body());
-        } catch (JsonParseException e) {
-            throw new GitLabException("GitLab returned a response that is not JSON. Is the URL the GitLab root?", e);
-        }
+        JsonElement parsed = json(request(() -> transport.post(endpoint, token, body.toString())));
         if (!parsed.isJsonObject()) {
             throw new GitLabException("GitLab returned a response that is not JSON. Is the URL the GitLab root?");
         }
@@ -290,6 +315,45 @@ public final class CreditsClient {
             }
         }
         return new Result(obj(root, "data"), errors);
+    }
+
+    @FunctionalInterface
+    private interface Call {
+        Transport.Response send() throws IOException, InterruptedException;
+    }
+
+    /** Sends one request and turns what goes wrong on the way into the user's words. */
+    private Transport.Response request(Call call) throws GitLabException {
+        Transport.Response response;
+        try {
+            response = call.send();
+        } catch (IOException e) {
+            throw new GitLabException("Cannot reach " + endpoint.getHost() + ": "
+                    + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()), e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new GitLabException("Interrupted while reading GitLab credits", e);
+        }
+
+        if (response.status() == 401) {
+            throw new GitLabException("GitLab rejected the token (HTTP 401): it is mistyped, expired or revoked. Create a personal access token with the read_api and ai_features scopes.", 401);
+        }
+        if (response.status() == 403) {
+            throw new GitLabException("GitLab refused the request (HTTP 403). The token needs the read_api and ai_features scopes.", 403);
+        }
+        if (response.status() < 200 || response.status() >= 300) {
+            throw new GitLabException("GitLab returned HTTP " + response.status() + " from " + endpoint.getHost() + ".",
+                    response.status());
+        }
+        return response;
+    }
+
+    private static JsonElement json(Transport.Response response) throws GitLabException {
+        try {
+            return JsonParser.parseString(response.body() == null ? "" : response.body());
+        } catch (JsonParseException e) {
+            throw new GitLabException("GitLab returned a response that is not JSON. Is the URL the GitLab root?", e);
+        }
     }
 
     private static JsonObject obj(JsonObject o, String key) {
@@ -331,6 +395,18 @@ public final class CreditsClient {
         }
         try {
             return LocalDate.parse(value.length() > 10 ? value.substring(0, 10) : value);
+        } catch (DateTimeParseException e) {
+            return null;
+        }
+    }
+
+    private static Instant instant(JsonObject o, String key) {
+        String value = str(o, key);
+        if (value == null) {
+            return null;
+        }
+        try {
+            return OffsetDateTime.parse(value).toInstant();
         } catch (DateTimeParseException e) {
             return null;
         }

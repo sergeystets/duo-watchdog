@@ -41,7 +41,8 @@ class RenderTest {
         return new CreditsReport("jane.doe", LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 18), used, blocked,
                 blocked ? "USER_OVERRIDE_CAP" : null,
                 List.of(new DailyUsage(LocalDate.of(2026, 10, 8), 0.3), new DailyUsage(LocalDate.of(2026, 10, 9), 0.3),
-                        new DailyUsage(LocalDate.of(2026, 10, 13), 0.5), new DailyUsage(LocalDate.of(2026, 10, 16), 20.5)),
+                        new DailyUsage(LocalDate.of(2026, 10, 13), 0.5), new DailyUsage(LocalDate.of(2026, 10, 16), 20.5),
+                        new DailyUsage(LocalDate.of(2026, 10, 18), 0.4)),
                 List.of(new FlowUsage("code_review", "Code Review Flow", 1.0),
                         new FlowUsage("developer", "Developer Flow", 20.5)), null);
     }

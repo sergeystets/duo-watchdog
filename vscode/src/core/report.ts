@@ -27,6 +27,11 @@ export interface CreditsReport {
     flowsError: string | null;
 }
 
+/** The credits GitLab counted on a day; none when it has no entry for it. */
+export function spentOn(report: CreditsReport, day: IsoDate): number {
+    return report.daily.filter(d => d.date === day).reduce((sum, d) => sum + d.credits, 0);
+}
+
 export type Status = 'notConfigured' | 'loading' | 'ok' | 'error';
 
 /** What the editor currently knows: the last good report, and why the latest refresh failed if it did. */
