@@ -6,6 +6,7 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.Locale;
 
 /** The words and numbers the plugin shows: the status bar text, its tooltip, and the dashboard's dates. */
@@ -28,6 +29,9 @@ public final class CreditsView {
         if (r == null) {
             return switch (s.status()) {
                 case NOT_CONFIGURED -> "Duo: set up";
+                case NO_TOKEN -> "Duo: no token";
+                case NOT_TRACKED -> "Duo: not tracked";
+                case REJECTED -> "Duo: token rejected";
                 case LOADING, OK -> "Duo: …";
                 case ERROR -> "Duo: error";
             };
@@ -36,15 +40,26 @@ public final class CreditsView {
                 + (s.status() == Snapshot.Status.ERROR ? " ⚠" : "");
     }
 
+    /** Why an account has no numbers, in a line. */
+    public static String reason(Snapshot s) {
+        String why = s.error();
+        return switch (s.status()) {
+            case NOT_CONFIGURED -> why != null ? why
+                    : "Not set up yet: add a token in Settings | Tools | Duo Watchdog.";
+            case NO_TOKEN -> why != null ? why : "No token saved for this account.";
+            case NOT_TRACKED -> why != null ? why : "Usage not tracked: the token lacks the ai_features scope.";
+            case REJECTED -> why != null ? why : "GitLab turns the token down: it expired or was revoked.";
+            case LOADING, OK -> "Loading…";
+            case ERROR -> "Last refresh failed: " + (why != null ? why : "no reason given");
+        };
+    }
+
     public static String tooltipHtml(Snapshot s, double limit, LocalDate today, ZoneId zone) {
         StringBuilder html = new StringBuilder("<html><b>Duo Watchdog</b>");
         CreditsReport r = s.report();
-        if (s.status() == Snapshot.Status.NOT_CONFIGURED) {
-            html.append("<br>Set the GitLab URL, group and token in Settings | Tools | Duo Watchdog.");
-        } else if (r == null && s.status() != Snapshot.Status.ERROR) {
-            html.append("<br>Loading…");
-        }
-        if (r != null) {
+        if (r == null) {
+            html.append("<br>").append(escape(reason(s)));
+        } else {
             BillingPeriod period = BillingPeriod.of(r.startDate(), r.endDate(), today);
             html.append(" — @").append(escape(r.username()))
                     .append("<br>Used ").append(number(r.creditsUsed())).append(" of ").append(number(limit))
@@ -58,9 +73,69 @@ public final class CreditsView {
             }
             html.append("<br><i>Updated ").append(TIME.format(s.fetchedAt().atZone(zone))).append("</i>")
                     .append("<br>$ = credits at GitLab's $1 list price");
+            if (s.error() != null) {
+                html.append("<br>Last refresh failed: ").append(escape(s.error()));
+            }
         }
-        if (s.error() != null) {
-            html.append("<br>Last refresh failed: ").append(escape(s.error()));
+        return html.append("<br>Click for details.</html>").toString();
+    }
+
+    /**
+     * One account in the status bar tooltip.
+     *
+     * @param label "@dana.k · gitlab.com · acme"
+     * @param shown whether the status bar shows this account
+     * @param note  what else to say of it, e.g. that its token expires soon; null for nothing
+     */
+    public record TooltipAccount(String label, Snapshot snapshot, double limit, boolean shown, String note) {
+    }
+
+    /** Every account, in the order given: the one in the status bar in full, the others in a line or two. */
+    public static String tooltipHtml(List<TooltipAccount> accounts, LocalDate today, ZoneId zone) {
+        if (accounts.size() == 1 && accounts.get(0).note() == null) {
+            TooltipAccount only = accounts.get(0);
+            return tooltipHtml(only.snapshot(), only.limit(), today, zone);
+        }
+        StringBuilder html = new StringBuilder("<html><b>Duo Watchdog</b>");
+        if (accounts.isEmpty()) {
+            html.append("<br>").append(escape(reason(Snapshot.notConfigured())));
+        }
+        Instant updated = null;
+        for (TooltipAccount account : accounts) {
+            Snapshot s = account.snapshot();
+            CreditsReport r = s.report();
+            html.append("<br><br><b>").append(escape(account.label())).append("</b>")
+                    .append(account.shown() && accounts.size() > 1 ? " (in the status bar)" : "");
+            if (r == null) {
+                html.append("<br>").append(escape(reason(s)));
+            } else {
+                double limit = account.limit();
+                html.append("<br>Used ").append(number(r.creditsUsed())).append(" of ").append(number(limit))
+                        .append(" (").append(percent(r.creditsUsed(), limit)).append("), left ")
+                        .append(number(Math.max(limit - r.creditsUsed(), 0)));
+                if (account.shown()) {
+                    BillingPeriod period = BillingPeriod.of(r.startDate(), r.endDate(), today);
+                    html.append("<br>Spent today: ").append(number(r.spentOn(today)))
+                            .append(" · forecast by ").append(day(period.end())).append(": ")
+                            .append(number(period.project(r.creditsUsed())));
+                }
+                if (r.blocked()) {
+                    html.append("<br><b>Blocked</b> by ").append(capName(r.blockedBy()));
+                }
+                if (s.error() != null) {
+                    html.append("<br>Last refresh failed: ").append(escape(s.error()));
+                }
+            }
+            if (account.note() != null) {
+                html.append("<br>").append(escape(account.note()));
+            }
+            if (s.fetchedAt() != null && (updated == null || s.fetchedAt().isAfter(updated))) {
+                updated = s.fetchedAt();
+            }
+        }
+        if (updated != null) {
+            html.append("<br><br><i>Updated ").append(TIME.format(updated.atZone(zone))).append("</i>")
+                    .append("<br>$ = credits at GitLab's $1 list price");
         }
         return html.append("<br>Click for details.</html>").toString();
     }

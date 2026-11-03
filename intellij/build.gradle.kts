@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "local.duowatchdog"
-version = "0.3.0"
+version = "0.4.0"
 
 repositories {
     mavenCentral()
@@ -93,6 +93,13 @@ java {
 
 tasks.withType<JavaCompile>().configureEach {
     options.release = 21
+}
+
+// What's New: the page and its pictures live with the VS Code extension's media, and both show them.
+tasks.processResources {
+    from(rootProject.file("vscode/media/whats-new")) {
+        into("whatsnew")
+    }
 }
 
 dependencies {

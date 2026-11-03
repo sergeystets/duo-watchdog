@@ -216,9 +216,116 @@ class CreditsClientTest {
     }
 
     @Test
+    void readsAYearOfHistoryByMonthAndFeature() throws Exception {
+        FakeTransport http = new FakeTransport()
+                .reply(200, """
+                        {"data":{"currentUser":{"creditsUsage":{"startDate":"2026-03-15","endDate":"2026-10-18",
+                          "dailyUsage":[{"date":"2026-03-20","creditsUsed":4},{"date":"2026-09-02","creditsUsed":10},
+                                        {"date":"2026-10-01","creditsUsed":6}],
+                          "usedFlowTypes":[{"id":"chat","title":"Duo Chat"},{"id":"review","title":"Code Review"}]}}}}
+                        """)
+                .reply(200, """
+                        {"data":{"currentUser":{
+                          "f0":{"dailyUsage":[{"date":"2026-03-20","creditsUsed":4},{"date":"2026-10-01","creditsUsed":1}]},
+                          "f1":{"dailyUsage":[{"date":"2026-09-02","creditsUsed":10},{"date":"2026-10-01","creditsUsed":5}]}}}}
+                        """)
+                .reply(200, """
+                        {"data":{"currentUser":{"creditsUsage":{"nonBillableUsage":[
+                          {"dailyUsage":[{"date":"2026-10-01","creditsUsed":2.5}]}]}}}}
+                        """);
+
+        History h = new CreditsClient("https://gitlab.com", "t", http)
+                .history("acme", LocalDate.of(2025, 11, 1), LocalDate.of(2026, 10, 18));
+
+        JsonObject variables = http.requests.get(0).getAsJsonObject("variables");
+        assertEquals("2025-11-01", variables.get("startDate").getAsString());
+        assertEquals("2026-10-18", variables.get("endDate").getAsString());
+        assertEquals(LocalDate.of(2026, 3, 15), h.start(), "GitLab moves the start to the subscription's");
+        List<History.Month> months = h.months();
+        assertEquals(8, months.size(), "March to October");
+        assertEquals(4, months.get(0).credits(), 1e-9);
+        assertEquals(0, months.get(1).credits(), 1e-9, "April: nothing used");
+        assertEquals(6, months.get(7).credits(), 1e-9);
+        assertEquals(List.of("review", "chat"), List.copyOf(months.get(7).byFlow().keySet()), "most credits first");
+        assertEquals(5, months.get(7).byFlow().get("review"), 1e-9);
+        assertEquals(2.5, months.get(7).nonBillable(), 1e-9);
+        assertEquals(20, h.total(), 1e-9);
+        assertNull(h.flowsError());
+    }
+
+    @Test
+    void theAverageStartsAtTheFirstMonthWithUse() {
+        History h = new History(LocalDate.of(2025, 12, 1), LocalDate.of(2026, 11, 3),
+                List.of(new CreditsReport.DailyUsage(LocalDate.of(2026, 5, 3), 280),
+                        new CreditsReport.DailyUsage(LocalDate.of(2026, 6, 3), 720),
+                        new CreditsReport.DailyUsage(LocalDate.of(2026, 7, 3), 0.5),
+                        new CreditsReport.DailyUsage(LocalDate.of(2026, 11, 2), 27)),
+                List.of(), List.of(), null);
+        // December to April unused; May to October: 1000.5 over six months.
+        assertEquals(1000.5 / 6, h.monthlyAverage(java.time.YearMonth.of(2026, 11)), 1e-9);
+        History fresh = new History(LocalDate.of(2026, 11, 1), LocalDate.of(2026, 11, 3),
+                List.of(new CreditsReport.DailyUsage(LocalDate.of(2026, 11, 2), 27)), List.of(), List.of(), null);
+        assertEquals(27, fresh.monthlyAverage(java.time.YearMonth.of(2026, 11)), 1e-9, "no month over yet: this one");
+    }
+
+    @Test
+    void historyGoesMonthByMonthWhenGitLabFailsOnTheYear() throws Exception {
+        FakeTransport http = new FakeTransport()
+                .reply(500, "")
+                .reply(200, """
+                        {"data":{"currentUser":{"creditsUsage":{"startDate":"2026-10-01","endDate":"2026-10-31",
+                          "dailyUsage":[{"date":"2026-10-02","creditsUsed":5}],"usedFlowTypes":[]}}}}
+                        """)
+                .reply(200, "{\"data\":{\"currentUser\":{\"creditsUsage\":{}}}}")
+                .reply(200, """
+                        {"data":{"currentUser":{"creditsUsage":{"startDate":"2026-09-01","endDate":"2026-09-30",
+                          "dailyUsage":[{"date":"2026-09-10","creditsUsed":7}],"usedFlowTypes":[]}}}}
+                        """)
+                .reply(200, "{\"data\":{\"currentUser\":{\"creditsUsage\":{}}}}");
+        // August and July then fail too (the fake answers 500 when it runs out), and the search stops there.
+
+        History h = new CreditsClient("https://gitlab.com", "t", http)
+                .history("acme", LocalDate.of(2025, 11, 1), LocalDate.of(2026, 10, 18));
+
+        assertEquals(12, h.total(), 1e-9);
+        assertEquals(LocalDate.of(2026, 9, 1), h.start(), "the oldest month GitLab answered");
+        assertEquals(2, h.months().size());
+        assertFalse(http.requests.get(1).getAsJsonObject("variables").has("startDate"),
+                "the current month as the Usage view asks it, without dates");
+        assertEquals("2026-09-01", http.requests.get(3).getAsJsonObject("variables").get("startDate").getAsString());
+        assertEquals(7, http.requests.size(), "the year, two months with their not-billed, then August and July");
+    }
+
+    @Test
+    void historyStandsWithoutTheFeaturesOrTheNotBilled() throws Exception {
+        FakeTransport http = new FakeTransport()
+                .reply(200, """
+                        {"data":{"currentUser":{"creditsUsage":{"startDate":"2026-10-01","endDate":"2026-10-18",
+                          "dailyUsage":[{"date":"2026-10-01","creditsUsed":6}],
+                          "usedFlowTypes":[{"id":"chat","title":"Duo Chat"}]}}}}
+                        """)
+                .reply(502, "")
+                .reply(200, """
+                        {"errors":[{"message":"Field 'nonBillableUsage' doesn't exist on type 'CreditsUsage'"}]}
+                        """);
+
+        History h = new CreditsClient("https://gitlab.com", "t", http)
+                .history("acme", LocalDate.of(2025, 11, 1), LocalDate.of(2026, 10, 18));
+
+        assertEquals(6, h.total(), 1e-9);
+        assertTrue(h.flows().isEmpty());
+        assertTrue(h.flowsError().contains("HTTP 502"), h.flowsError());
+        assertEquals(0, h.nonBillableTotal(), 1e-9);
+    }
+
+    @Test
     void namesTheScopesATokenLacks() {
         CreditsClient.TokenInfo info = new CreditsClient.TokenInfo("x", List.of("read_api", "api"), null, null, null);
         assertEquals(List.of("ai_features"), info.missingScopes());
+        // api covers read_api: a token made for glab and Duo Watchdog both.
+        CreditsClient.TokenInfo glab = new CreditsClient.TokenInfo("x", List.of("api", "write_repository", "ai_features"),
+                null, null, null);
+        assertEquals(List.of(), glab.missingScopes());
     }
 
     @Test
@@ -282,6 +389,82 @@ class CreditsClientTest {
         GitLabException e = assertThrows(GitLabException.class,
                 () -> new CreditsClient("https://gitlab.com", "glpat-secret", http).fetch("acme"));
         assertFalse(e.getMessage().contains("glpat-secret"));
+    }
+
+    @Test
+    void readsTheSessionsPageByPageUntilOlderOnes() throws Exception {
+        FakeTransport http = new FakeTransport()
+                .reply(200, """
+                        {"data":{"duoWorkflowWorkflows":{"pageInfo":{"hasNextPage":true,"endCursor":"c1"},"nodes":[
+                          {"id":"gid://gitlab/Ai::DuoWorkflows::Workflow/10208239","title":"Review the gateway",
+                           "workflowDefinition":"chat","humanStatus":"Finished","createdAt":"2026-10-28T14:35:25Z",
+                           "updatedAt":"2026-10-28T15:08:33Z","webUrl":"https://gitlab.com/s/10208239",
+                           "project":{"fullPath":"acme/mobile/gateway"},"namespace":{"fullPath":"acme/mobile"},
+                           "modelMetadataName":"Claude Sonnet"}]}}}
+                        """)
+                .reply(200, """
+                        {"data":{"duoWorkflowWorkflows":{"pageInfo":{"hasNextPage":true,"endCursor":"c2"},"nodes":[
+                          {"id":"gid://gitlab/Ai::DuoWorkflows::Workflow/7","title":null,"goal":"Fix the build\\nand more",
+                           "workflowDefinition":"developer/v1","humanStatus":"Running","createdAt":"2026-10-27T09:00:00Z",
+                           "updatedAt":"2026-10-27T10:00:00Z","project":null,"namespace":null},
+                          {"id":"gid://gitlab/Ai::DuoWorkflows::Workflow/5","title":"Old","workflowDefinition":"chat",
+                           "humanStatus":"Finished","createdAt":"2026-10-01T09:00:00Z","updatedAt":"2026-10-01T09:30:00Z"}]}}}
+                        """);
+
+        List<Sessions.Session> sessions = new CreditsClient("https://gitlab.com", "glpat-x", http)
+                .sessions(Instant.parse("2026-10-20T00:00:00Z"));
+
+        assertEquals(2, http.requests.size(), "stops at the page that reaches before the range");
+        assertEquals("2026-10-20T00:00:00Z", http.requests.get(0).getAsJsonObject("variables").get("updatedAfter").getAsString());
+        assertEquals("c1", http.requests.get(1).getAsJsonObject("variables").get("after").getAsString());
+        assertEquals(List.of(10208239L, 7L), sessions.stream().map(Sessions.Session::id).toList());
+        Sessions.Session first = sessions.get(0);
+        assertEquals("Review the gateway", first.title());
+        assertEquals("acme/mobile/gateway", first.project());
+        assertEquals("Claude Sonnet", first.model());
+        assertEquals(Instant.parse("2026-10-28T14:35:25Z"), first.created());
+        assertEquals("Fix the build", sessions.get(1).title(), "the goal's first line, when it has no title");
+        assertNull(sessions.get(1).project());
+    }
+
+    @Test
+    void anOlderGitLabIsAskedForSessionsWithoutTheModelAndTheDateFilter() throws Exception {
+        FakeTransport http = new FakeTransport()
+                .reply(200, """
+                        {"errors":[{"message":"Field 'modelMetadataName' doesn't exist on type 'DuoWorkflow'"}]}
+                        """)
+                .reply(200, """
+                        {"data":{"duoWorkflowWorkflows":{"pageInfo":{"hasNextPage":false},"nodes":[
+                          {"id":"gid://gitlab/Ai::DuoWorkflows::Workflow/9","title":"New","createdAt":"2026-10-28T09:00:00Z",
+                           "updatedAt":"2026-10-28T09:30:00Z"},
+                          {"id":"gid://gitlab/Ai::DuoWorkflows::Workflow/8","title":"Old","createdAt":"2026-10-01T09:00:00Z",
+                           "updatedAt":"2026-10-01T09:30:00Z"}]}}}
+                        """);
+
+        List<Sessions.Session> sessions = new CreditsClient("https://gitlab.example.com", "glpat-x", http)
+                .sessions(Instant.parse("2026-10-20T00:00:00Z"));
+
+        String retried = http.requests.get(1).get("query").getAsString();
+        assertFalse(retried.contains("modelMetadataName"));
+        assertFalse(retried.contains("updatedAfter"));
+        assertEquals(List.of(9L), sessions.stream().map(Sessions.Session::id).toList());
+    }
+
+    @Test
+    void findsASessionByItsNumber() throws Exception {
+        FakeTransport http = new FakeTransport().reply(200, """
+                {"data":{"duoWorkflowWorkflows":{"pageInfo":{"hasNextPage":false},"nodes":[
+                  {"id":"gid://gitlab/Ai::DuoWorkflows::Workflow/42","title":"Found","createdAt":"2026-10-28T09:00:00Z",
+                   "updatedAt":"2026-10-28T09:30:00Z"}]}}}
+                """).reply(200, """
+                {"data":{"duoWorkflowWorkflows":{"pageInfo":{"hasNextPage":false},"nodes":[]}}}
+                """);
+        CreditsClient client = new CreditsClient("https://gitlab.com", "glpat-x", http);
+
+        assertEquals("Found", client.session(42).title());
+        assertEquals("gid://gitlab/Ai::DuoWorkflows::Workflow/42",
+                http.requests.get(0).getAsJsonObject("variables").get("workflowId").getAsString());
+        assertNull(client.session(43));
     }
 
     private static void assertMessage(int status, String body, String expected) {

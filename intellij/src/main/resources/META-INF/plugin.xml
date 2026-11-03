@@ -3,14 +3,40 @@
     <name>Duo Watchdog</name>
     <vendor>local</vendor>
     <description><![CDATA[
-    Watches your own GitLab Credits (GitLab Duo) for the current billing period:
+    Watches your own GitLab Credits (GitLab Duo) for the current billing period, for one GitLab account or several:
     used, left, the month-end forecast, usage by feature and by day.
     Set a limit and the percents to be warned at; Duo Watchdog alerts once a period
     when the forecast passes the limit, at each threshold, at the limit, and when GitLab blocks you.
     ]]></description>
 
     <change-notes><![CDATA[
-    <h3>What's new in 0.3.0</h3>
+    <h3>What's new in 0.4.0</h3>
+    <ul>
+      <li><b>Several accounts</b>, one token each. An account is one GitLab user on one GitLab: when you add a
+          token, GitLab says whose it is, and a token for an account already listed replaces its token, keeping its
+          group and limit. Each account has its own group path and limit.</li>
+      <li><b>Accounts in Settings</b>: credits left, the token and its expiry date for each, most credits left
+          first, with <b>All / Has credits / Expired</b> filters and a search. A saved token shows as dots in a
+          locked field, a missing one as an empty field; the token itself is never shown.</li>
+      <li><b>Add Token</b> says what OK will do: add an account, replace a token, or add an account whose usage
+          can't be tracked (no ai_features scope), instead of failing.</li>
+      <li>The tool window has an <b>account switcher</b>; the status bar follows it, with a dot when another
+          account needs a look, and its tooltip lists every account.</li>
+      <li>Popups that stay until closed: the <b>last alert threshold</b>, the limit or a block, a token that
+          <b>expires within 3 days</b>, and a token GitLab turns down.</li>
+      <li><b>glab and the GitLab Duo CLI</b>: an account can hand its token to glab, and so to the Duo CLI. Both
+          are off unless you tick them.</li>
+      <li>A <b>Statistics</b> tab next to the dashboard: the last 3, 6 or 12 months by month and by feature, with what
+          GitLab did not bill, for one account or all of them.</li>
+      <li>A <b>Sessions</b> tab: your Agent Platform sessions over the days you pick, each with its credits estimated
+          from the day's credits per feature and, where the Duo CLI's logs on this machine count them, the agent's
+          steps. Look a session up by its ID or link, or show the last one.</li>
+      <li><b>What's New</b>: after an update a window shows what the version brings, with pictures; Help | What's
+          New in Duo Watchdog opens it again.</li>
+      <li>The token saved by 0.3.0 moves to its account on the first refresh, with its group, limit and last
+          alert.</li>
+    </ul>
+    <h3>0.3.0</h3>
     <ul>
       <li><b>Spent today</b>: a new tile on the dashboard, and a line in the status bar tooltip.</li>
       <li><b>Token status in Settings</b>: green with a check mark when a token is saved, amber when there is none
@@ -41,6 +67,9 @@
                     icon="/icons/duoWatchdog.svg"
                     factoryClass="duowatchdog.plugin.CreditsToolWindowFactory"/>
         <notificationGroup id="Duo Watchdog" displayType="BALLOON"/>
+        <!-- The last threshold, the limit, a block, a token about to expire or turned down: these stay until closed. -->
+        <notificationGroup id="Duo Watchdog Important" displayType="STICKY_BALLOON"/>
+        <postStartupActivity implementation="duowatchdog.plugin.WhatsNew$Activity"/>
     </extensions>
 
     <actions>
@@ -50,6 +79,19 @@
                 description="Read your GitLab Credits usage now"
                 icon="AllIcons.Actions.Refresh">
             <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+        <action id="duowatchdog.CopyDiagnostics"
+                class="duowatchdog.plugin.Diagnostics"
+                text="Duo Watchdog: Copy Diagnostics"
+                description="Copy what Duo Watchdog knows and did, without tokens, to paste into a bug report"
+                icon="AllIcons.Actions.Copy">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+        <action id="duowatchdog.WhatsNew"
+                class="duowatchdog.plugin.WhatsNew$ShowAction"
+                text="What's New in Duo Watchdog"
+                description="What the latest Duo Watchdog brings, with pictures">
+            <add-to-group group-id="HelpMenu" anchor="last"/>
         </action>
     </actions>
 </idea-plugin>

@@ -3,6 +3,8 @@ package duowatchdog.core.ui;
 import duowatchdog.core.CreditsReport;
 import duowatchdog.core.CreditsReport.DailyUsage;
 import duowatchdog.core.CreditsReport.FlowUsage;
+import duowatchdog.core.History;
+import duowatchdog.core.Sessions;
 import duowatchdog.core.Snapshot;
 import org.junit.jupiter.api.Test;
 
@@ -45,6 +47,94 @@ class RenderTest {
                         new DailyUsage(LocalDate.of(2026, 10, 18), 0.4)),
                 List.of(new FlowUsage("code_review", "Code Review Flow", 1.0),
                         new FlowUsage("developer", "Developer Flow", 20.5)), null);
+    }
+
+    /** A year of use: five features and a sixth, small one, which goes to Other; some not billed in October. */
+    static History history() {
+        String[][] flows = {{"review", "Code Review Flow"}, {"developer", "Developer Flow"}, {"chat", "Duo Chat"},
+                {"fix", "Fix Pipeline Flow"}, {"tests", "Unit Test Flow"}, {"docs", "Docs Flow"}};
+        double[][] perMonth = {
+                {20, 35, 10, 4, 2, 1}, {25, 30, 12, 5, 3, 0}, {18, 40, 9, 6, 2, 1}, {30, 45, 14, 3, 4, 2},
+                {28, 38, 11, 8, 5, 1}, {35, 52, 16, 7, 3, 2}, {40, 60, 15, 9, 6, 1}, {38, 55, 18, 6, 4, 3},
+                {45, 70, 20, 10, 7, 2}, {50, 64, 22, 12, 8, 2}, {61, 80, 25, 14, 9, 3}, {30, 42, 12, 6, 4, 1}};
+        java.time.LocalDate start = java.time.LocalDate.of(2025, 11, 1);
+        List<DailyUsage> daily = new java.util.ArrayList<>();
+        List<History.FlowHistory> byFlow = new java.util.ArrayList<>();
+        for (int f = 0; f < flows.length; f++) {
+            List<DailyUsage> days = new java.util.ArrayList<>();
+            for (int m = 0; m < perMonth.length; m++) {
+                days.add(new DailyUsage(start.plusMonths(m).plusDays(9), perMonth[m][f]));
+            }
+            byFlow.add(new History.FlowHistory(flows[f][0], flows[f][1], days));
+            daily.addAll(days);
+        }
+        return new History(start, TODAY, daily, byFlow,
+                List.of(new DailyUsage(java.time.LocalDate.of(2026, 10, 2), 6.5)), null);
+    }
+
+    @Test
+    void theStatisticsShowAYearByMonthAndFeature() throws IOException {
+        Statistics light = new Statistics(Theme.light(FONT));
+        light.show(history(), TODAY, "@jane.doe · acme");
+        BufferedImage image = save("statistics-light", light, 470);
+        assertTrue(image.getHeight() > 700, "tiles, chart, months, features, not billed and note: " + image.getHeight());
+
+        Statistics dark = new Statistics(Theme.dark(FONT));
+        dark.show(history(), TODAY, "All accounts");
+        save("statistics-dark", dark, 470);
+
+        Statistics wide = new Statistics(Theme.light(FONT));
+        wide.show(history(), TODAY, "@jane.doe · acme");
+        save("statistics-wide", wide, 720);
+    }
+
+    /** A week of sessions: two in the CLI with their steps counted, two in the IDE without; one picked. */
+    @Test
+    void theSessionsShowTheDaysSessionsAndOnePicked() throws IOException {
+        LocalDate oct28 = LocalDate.of(2026, 10, 28);
+        LocalDate oct27 = LocalDate.of(2026, 10, 27);
+        History history = new History(LocalDate.of(2026, 10, 1), oct28,
+                List.of(new DailyUsage(oct27, 41.5), new DailyUsage(oct28, 96.2)),
+                List.of(new History.FlowHistory("agentic_chat", "Agentic Chat",
+                                List.of(new DailyUsage(oct27, 12.0), new DailyUsage(oct28, 64.0))),
+                        new History.FlowHistory("developer", "Developer Flow",
+                                List.of(new DailyUsage(oct27, 29.5), new DailyUsage(oct28, 30.0)))),
+                List.of(), null);
+        List<Sessions.Session> sessions = List.of(
+                new Sessions.Session(10208239, "Review the gateway's security findings", "chat", "acme/mobile/gateway-service",
+                        null, "Claude Sonnet 4.5", "Finished", Instant.parse("2026-10-28T14:35:25Z"),
+                        Instant.parse("2026-10-28T15:41:02Z"), "https://gitlab.com/acme/mobile/gateway-service/-/automate/agent-sessions/10208239"),
+                new Sessions.Session(10207711, "Why does the build fail on main", "chat", "acme/mobile/gateway-service",
+                        null, "Claude Sonnet 4.5", "Finished", Instant.parse("2026-10-28T09:02:11Z"),
+                        Instant.parse("2026-10-28T09:20:45Z"), null),
+                new Sessions.Session(10207100, "Add retries to the device sync", "developer/v1", "acme/mobile/device-sync",
+                        null, null, "Finished", Instant.parse("2026-10-28T07:15:00Z"),
+                        Instant.parse("2026-10-28T08:01:00Z"), null),
+                new Sessions.Session(10201420, "Explain the billing module", "chat", "acme/platform/billing",
+                        null, null, "Finished", Instant.parse("2026-10-27T16:40:00Z"),
+                        Instant.parse("2026-10-27T17:05:00Z"), null),
+                new Sessions.Session(10199000, "Convert the pipeline", "developer/v1", "acme/platform/billing",
+                        null, null, "Failed", Instant.parse("2026-10-27T11:00:00Z"),
+                        Instant.parse("2026-10-27T11:30:00Z"), null));
+        java.util.Map<Long, Sessions.Steps> steps = java.util.Map.of(
+                10208239L, new Sessions.Steps(10208239, java.util.Map.of(oct28, 412), "dana-projects-gateway-service"),
+                10207711L, new Sessions.Steps(10207711, java.util.Map.of(oct28, 96), "dana-projects-gateway-service"));
+        List<Sessions.Estimate> estimates = Sessions.estimate(sessions, steps, history);
+        Sessions.Summary summary = Sessions.summarize(estimates, history, new Sessions.Range(oct27.minusDays(5), oct28), "acme");
+
+        SessionsView light = new SessionsView(Theme.light(FONT));
+        light.show(summary, estimates.get(0), "@jane.doe · acme", "acme", 2, java.time.ZoneId.of("America/Chicago"));
+        BufferedImage image = save("sessions-light", light, 470);
+        assertTrue(image.getHeight() > 600, "details, tiles, projects, rows and note: " + image.getHeight());
+
+        SessionsView dark = new SessionsView(Theme.dark(FONT));
+        dark.show(summary, null, "@jane.doe · acme", "acme", 0, java.time.ZoneId.of("America/Chicago"));
+        save("sessions-dark", dark, 470);
+
+        SessionsView empty = new SessionsView(Theme.light(FONT));
+        empty.show(Sessions.summarize(List.of(), history, new Sessions.Range(oct28, oct28), "acme"), null,
+                "@jane.doe · acme", "acme", 0, java.time.ZoneId.of("UTC"));
+        save("sessions-empty", empty, 470);
     }
 
     @Test
