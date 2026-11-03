@@ -1,24 +1,46 @@
 import * as vscode from 'vscode';
-import { host, tokenPage } from './core/address';
-import { CreditsClient, GitLabError, groupLabel, Groups } from './core/client';
-import { DashboardView } from './dashboardView';
-import { nodeTransport } from './httpTransport';
-import { CreditsService } from './service';
-import { SECTION, settings, TOKEN_KEY } from './settings';
-import { StatusBar } from './statusBar';
+import { AccountStore, TOKEN_PREFIX } from './accounts';
+import { Commands } from './commands';
 import { parsePercents } from './core/alert';
+import { DashboardView } from './dashboardView';
+import { DuoCliLogScanner } from './duoCliLogs';
+import { SessionsService } from './sessions';
+import { copyDiagnostics } from './diagnostics';
+import { GlabSync } from './glabSync';
+import { HistoryCache } from './history';
+import { nodeTransport } from './httpTransport';
+import { log } from './log';
+import { CreditsService } from './service';
+import { OLD_TOKEN_KEY, SECTION, settings } from './settings';
+import { StatusBar } from './statusBar';
+import { announceRelease, showWhatsNew } from './whatsNew';
 
 export function activate(context: vscode.ExtensionContext): void {
-    const service = new CreditsService(context, nodeTransport);
+    context.subscriptions.push(log.attach(vscode.window.createOutputChannel('Duo Watchdog', { log: true })));
+    log.info('Duo Watchdog ' + String(context.extension.packageJSON.version ?? '') + ' on VS Code ' + vscode.version + ', '
+        + process.platform + ' ' + process.arch + (vscode.env.remoteName != null ? ', remote ' + vscode.env.remoteName : ''));
+    const store = new AccountStore(context);
+    const service = new CreditsService(context, store, nodeTransport);
     const statusBar = new StatusBar();
-    const dashboard = new DashboardView(context.extensionUri, service);
+    const glab = new GlabSync(store, service);
+    const commands = new Commands(store, service, nodeTransport, glab);
+    const history = new HistoryCache(store, nodeTransport, context.globalStorageUri);
+    const logs = new DuoCliLogScanner(context.globalStorageUri);
+    const sessions = new SessionsService(store, nodeTransport, history, logs);
+    const dashboard = new DashboardView(context.extensionUri, service, commands, history, context.globalState, sessions);
 
     context.subscriptions.push(
         service,
         statusBar,
+        history,
+        history.onDidChange(() => dashboard.update()),
+        sessions,
+        sessions.onDidChange(() => dashboard.update()),
+        // glab follows the picked account; a refresh catches up with tokens added or glab installed since.
+        service.onDidRefresh(() => void glab.sync()),
         vscode.window.registerWebviewViewProvider(DashboardView.ID, dashboard),
-        service.onDidChange(snapshot => {
-            statusBar.update(snapshot);
+        service.onDidChange(() => {
+            statusBar.update(service.overview());
             dashboard.update();
         }),
         vscode.workspace.onDidChangeConfiguration(e => {
@@ -27,102 +49,34 @@ export function activate(context: vscode.ExtensionContext): void {
                 service.reschedule();
             }
         }),
+        // A token saved or deleted here or in another window.
         context.secrets.onDidChange(e => {
-            if (e.key === TOKEN_KEY) {
-                service.reschedule();
+            if (e.key === OLD_TOKEN_KEY || e.key.startsWith(TOKEN_PREFIX)) {
+                service.refreshSoon();
             }
         }),
-        vscode.commands.registerCommand('duoWatchdog.refresh', () => service.refresh()),
+        vscode.commands.registerCommand('duoWatchdog.refresh', () => {
+            dashboard.refreshStatistics();
+            return service.refresh();
+        }),
+        vscode.commands.registerCommand('duoWatchdog.whatsNew', () => showWhatsNew(context.extensionUri)),
+        vscode.commands.registerCommand('duoWatchdog.copyDiagnostics', () => copyDiagnostics(context, store, service, logs)),
+        vscode.commands.registerCommand('duoWatchdog.sessions', () => dashboard.show('sessions')),
+        vscode.commands.registerCommand('duoWatchdog.showLog', () => log.show()),
         vscode.commands.registerCommand('duoWatchdog.openDashboard',
             () => vscode.commands.executeCommand(DashboardView.ID + '.focus')),
         vscode.commands.registerCommand('duoWatchdog.openSettings',
             () => vscode.commands.executeCommand('workbench.action.openSettings', '@ext:local.duo-watchdog')),
-        vscode.commands.registerCommand('duoWatchdog.createToken',
-            () => vscode.env.openExternal(vscode.Uri.parse(tokenPage(settings().gitlabUrl)))),
-        vscode.commands.registerCommand('duoWatchdog.setToken', () => setToken(context)),
-        vscode.commands.registerCommand('duoWatchdog.findGroup', () => findGroup(context)),
+        ...commands.register(),
     );
 
-    statusBar.update(service.snapshot);
+    statusBar.update(service.overview());
+    // Before the first refresh, which may move the token saved by 0.3 to an account.
+    announceRelease(context, store).catch(e => console.error('[duo-watchdog] the release notice failed', e));
     service.reschedule();
 }
 
 export function deactivate(): void {
-}
-
-/** Asks for the token in a password box, with a button to GitLab's new-token page; empty keeps the saved one. */
-function setToken(context: vscode.ExtensionContext): Promise<void> {
-    return new Promise(resolve => {
-        const input = vscode.window.createInputBox();
-        input.title = 'Duo Watchdog: GitLab Token';
-        input.prompt = 'The token needs two scopes: read_api and ai_features. Leave everything else unticked: '
-            + 'api can change code. Kept in VS Code\'s secret storage; leave empty to keep the saved one.';
-        input.placeholder = 'glpat-…';
-        input.password = true;
-        input.ignoreFocusOut = true;
-        const create: vscode.QuickInputButton = {
-            iconPath: new vscode.ThemeIcon('link-external'),
-            tooltip: 'Create the token in GitLab',
-        };
-        input.buttons = [create];
-        input.onDidTriggerButton(() => void vscode.commands.executeCommand('duoWatchdog.createToken'));
-        input.onDidAccept(async () => {
-            const token = input.value.trim();
-            input.hide();
-            if (token !== '') {
-                await context.secrets.store(TOKEN_KEY, token);
-            }
-        });
-        input.onDidHide(() => {
-            input.dispose();
-            resolve();
-        });
-        input.show();
-    });
-}
-
-/** Asks GitLab which of the user's top-level groups give their credits, and fills in the one, or offers the few. */
-async function findGroup(context: vscode.ExtensionContext): Promise<void> {
-    const { gitlabUrl } = settings();
-    const token = (await context.secrets.get(TOKEN_KEY))?.trim();
-    if (!token) {
-        const set = 'Set GitLab Token';
-        const choice = await vscode.window.showWarningMessage(
-            'Enter the personal access token first: Find my group asks GitLab with it.', set);
-        if (choice === set) {
-            await vscode.commands.executeCommand('duoWatchdog.setToken');
-        }
-        return;
-    }
-    let groups: Groups;
-    try {
-        groups = await vscode.window.withProgress(
-            { location: vscode.ProgressLocation.Notification, title: 'Finding your group' },
-            () => new CreditsClient(gitlabUrl, token, nodeTransport).findGroups());
-    } catch (e) {
-        void vscode.window.showErrorMessage(e instanceof GitLabError ? e.message : String(e));
-        return;
-    }
-
-    const found = groups.withCredits;
-    let path: string | undefined;
-    if (found.length === 1) {
-        path = found[0].path;
-    } else if (found.length === 0) {
-        void vscode.window.showWarningMessage(groups.checked.length === 0
-            ? "The token's user is not a member of any group on " + host(gitlabUrl) + '.'
-            : 'GitLab gave no Duo credits for you in any of your groups: ' + groups.checked.join(', ')
-            + ". Check the token's read_api and ai_features scopes.");
-    } else {
-        const pick = await vscode.window.showQuickPick(
-            found.map(match => ({ label: match.path, description: groupLabel(match) === match.path ? undefined : match.name ?? undefined })),
-            { title: 'Your Groups with Duo Credits' });
-        path = pick?.label;
-    }
-    if (path) {
-        await vscode.workspace.getConfiguration(SECTION).update('groupPath', path, vscode.ConfigurationTarget.Global);
-        void vscode.window.showInformationMessage('Duo Watchdog: group set to ' + path + '.');
-    }
 }
 
 /** Settings take any text; a percents list that does not parse is pointed out, and the default ones are used. */

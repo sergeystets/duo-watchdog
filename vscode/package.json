@@ -1,8 +1,8 @@
 {
   "name": "duo-watchdog",
   "displayName": "Duo Watchdog",
-  "description": "Watches your own GitLab Credits (GitLab Duo) for the current billing period: used, left, the month-end forecast, usage by day and by feature, with alerts before you hit your limit.",
-  "version": "0.3.0",
+  "description": "Watches your own GitLab Credits (GitLab Duo) for each of your GitLab accounts: used, left, the month-end forecast, usage by day and by feature, a year of statistics, with alerts before you hit your limit.",
+  "version": "0.4.0",
   "publisher": "local",
   "license": "UNLICENSED",
   "repository": {
@@ -58,13 +58,45 @@
         "category": "Duo Watchdog"
       },
       {
+        "command": "duoWatchdog.sessions",
+        "title": "Sessions",
+        "category": "Duo Watchdog"
+      },
+      {
         "command": "duoWatchdog.openSettings",
         "title": "Open Settings",
         "category": "Duo Watchdog"
       },
       {
+        "command": "duoWatchdog.whatsNew",
+        "title": "What's New",
+        "category": "Duo Watchdog"
+      },
+      {
+        "command": "duoWatchdog.copyDiagnostics",
+        "title": "Copy Diagnostics",
+        "category": "Duo Watchdog"
+      },
+      {
+        "command": "duoWatchdog.showLog",
+        "title": "Show Log",
+        "category": "Duo Watchdog"
+      },
+      {
+        "command": "duoWatchdog.accounts",
+        "title": "Accounts",
+        "category": "Duo Watchdog",
+        "icon": "$(account)"
+      },
+      {
+        "command": "duoWatchdog.addToken",
+        "title": "Add or Replace a Token",
+        "category": "Duo Watchdog",
+        "icon": "$(key)"
+      },
+      {
         "command": "duoWatchdog.setToken",
-        "title": "Set GitLab Token",
+        "title": "Set GitLab Token (now Add or Replace a Token)",
         "category": "Duo Watchdog"
       },
       {
@@ -78,6 +110,14 @@
         "category": "Duo Watchdog"
       }
     ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "duoWatchdog.setToken",
+          "when": "false"
+        }
+      ]
+    },
     "configuration": {
       "title": "Duo Watchdog",
       "properties": {
@@ -86,14 +126,16 @@
           "default": "https://gitlab.com",
           "scope": "application",
           "order": 0,
-          "markdownDescription": "`https://gitlab.com` or the address of your self-managed GitLab."
+          "markdownDescription": "The GitLab a new token is for, unless you type another: `https://gitlab.com` or the address of your self-managed GitLab. Each account keeps its own.\n\nTokens are not settings: run **Duo Watchdog: Add or Replace a Token** (they are kept in VS Code's secret storage), and **Duo Watchdog: Accounts** to see and manage them."
         },
         "duoWatchdog.groupPath": {
           "type": "string",
           "default": "",
           "scope": "application",
           "order": 1,
-          "markdownDescription": "The path of the top-level group that owns the Duo subscription, e.g. `my-company`: the path from the group's address, not the name GitLab shows on its pages. A pasted group URL works too. Run **Duo Watchdog: Find My Group** to fill it in.\n\nThe token is not a setting: run **Duo Watchdog: Set GitLab Token** (it is kept in VS Code's secret storage)."
+          "markdownDescription": "Before accounts: the path of the top-level group that owns the Duo subscription. Read once, to set up the first account from the token saved before.",
+          "markdownDeprecationMessage": "Each account has its own group path now: run **Duo Watchdog: Accounts** and use *Set Group Path*, or **Duo Watchdog: Find My Group**. This setting was read once, to set up the first account.",
+          "deprecationMessage": "Each account has its own group path now: run Duo Watchdog: Accounts and use Set Group Path, or Duo Watchdog: Find My Group. This setting was read once, to set up the first account."
         },
         "duoWatchdog.limit": {
           "type": "number",
@@ -101,14 +143,16 @@
           "exclusiveMinimum": 0,
           "scope": "application",
           "order": 2,
-          "markdownDescription": "Your limit in credits: your GitLab cap, or a lower budget of your own. GitLab shows a user's cap only to the group owner, so you keep it here."
+          "markdownDescription": "Before accounts: your limit in credits. Read once, to set up the first account from the token saved before.",
+          "markdownDeprecationMessage": "Each account has its own limit now: run **Duo Watchdog: Accounts** and use *Set Limit*. This setting was read once, to set up the first account.",
+          "deprecationMessage": "Each account has its own limit now: run Duo Watchdog: Accounts and use Set Limit. This setting was read once, to set up the first account."
         },
         "duoWatchdog.alertPercents": {
           "type": "string",
           "default": "80, 95",
           "scope": "application",
           "order": 3,
-          "markdownDescription": "Percents of the limit to be alerted at, comma-separated, e.g. `50, 80, 95`. Each alert shows once per billing period."
+          "markdownDescription": "Percents of each account's limit to be alerted at, comma-separated, e.g. `50, 80, 95`. Each alert shows once per billing period and account."
         },
         "duoWatchdog.forecastAlert": {
           "type": "boolean",
@@ -124,7 +168,7 @@
           "maximum": 1440,
           "scope": "application",
           "order": 5,
-          "markdownDescription": "How often to read your credits, in minutes. GitLab's usage data can lag a few minutes behind actual use."
+          "markdownDescription": "How often to read the credits of every account, in minutes. GitLab's usage data can lag a few minutes behind actual use."
         }
       }
     }

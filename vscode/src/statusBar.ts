@@ -1,16 +1,19 @@
 import * as vscode from 'vscode';
+import { accountStatusText, othersNeedAttention, tooltipModel } from './core/accountsView';
 import { clamp, level, Level } from './core/dashboard';
 import { localToday } from './core/dates';
-import { Snapshot } from './core/report';
-import { statusText, tooltipLines } from './core/view';
+import { Overview } from './service';
 import { settings } from './settings';
 
 const ICONS: Record<Level, string> = { normal: '$(pulse)', warning: '$(warning)', blocked: '$(error)' };
 const SEGMENTS = 6;
+/** Appended when an account other than the one shown needs attention; the tooltip says which. */
+const BELL = ' $(bell-dot)';
 
 /**
- * "$21.5 / 300" with a mini meter in the status bar, amber from the lowest alert percent and red once GitLab blocks
- * Duo; the tooltip summarises, a click opens the dashboard.
+ * "$21.5 / 300" with a mini meter in the status bar for the selected account, amber from the lowest alert percent
+ * and red once GitLab blocks Duo or turns the token down, with a bell when another account needs attention. The
+ * tooltip lists every account; a click opens the dashboard.
  */
 export class StatusBar implements vscode.Disposable {
 
@@ -22,20 +25,43 @@ export class StatusBar implements vscode.Disposable {
         this.item.show();
     }
 
-    update(snapshot: Snapshot): void {
-        const { limit, percents } = settings();
-        const report = snapshot.report;
-        const lvl = level(report, limit, percents);
+    update(overview: Overview): void {
+        const { percents } = settings();
+        const today = localToday();
+        const selected = overview.selected;
+        const report = selected != null && selected.problem == null ? selected.snapshot.report : null;
+        const limit = selected?.account.limit ?? 0;
+        const lvl: Level = selected?.problem === 'rejected' ? 'blocked' : level(report, limit, percents);
         const meter = report == null ? '' : meterText(lvl === 'blocked' ? 1 : limit > 0 ? report.creditsUsed / limit : 0) + ' ';
-        this.item.text = ICONS[lvl] + ' ' + meter + statusText(snapshot, limit);
+        const bell = othersNeedAttention(overview.states, selected?.id ?? null, percents, today) ? BELL : '';
+        this.item.text = ICONS[lvl] + ' ' + meter + accountStatusText(selected, overview.setup) + bell;
         this.item.backgroundColor = lvl === 'warning' ? new vscode.ThemeColor('statusBarItem.warningBackground')
             : lvl === 'blocked' ? new vscode.ThemeColor('statusBarItem.errorBackground')
                 : undefined;
+
+        const model = tooltipModel(overview.states, selected?.id ?? null, overview.setup, percents, today);
         const tip = new vscode.MarkdownString('**Duo Watchdog**');
-        for (const line of tooltipLines(snapshot, limit, localToday())) {
-            tip.appendMarkdown('  \n');
-            tip.appendText(line);
+        if (model.attention != null) {
+            tip.appendMarkdown('  \n$(bell-dot) ');
+            tip.appendText(model.attention);
         }
+        tip.supportThemeIcons = true;
+        for (const block of model.blocks) {
+            tip.appendMarkdown('\n\n**');
+            tip.appendText(block.title);
+            tip.appendMarkdown('**');
+            for (const line of block.lines) {
+                tip.appendMarkdown('  \n');
+                tip.appendText(line);
+            }
+        }
+        tip.appendMarkdown('\n\n');
+        model.footer.forEach((line, i) => {
+            if (i > 0) {
+                tip.appendMarkdown('  \n');
+            }
+            tip.appendText(line);
+        });
         this.item.tooltip = tip;
     }
 

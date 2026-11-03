@@ -1,17 +1,36 @@
 import { trimSlashes } from './address';
-import { IsoDate, parseDate } from './dates';
+import { addDays, firstOfMonth, IsoDate, localToday, parseDate, plusMonths } from './dates';
+import { FlowHistory, History, mergeHistories, months, sumOf } from './history';
+import { Logger, NO_LOG } from './log';
+import { lastDayOf } from './monthly';
+import { Session, sessionId } from './sessions';
 import { CreditsReport, DailyUsage, FlowUsage } from './report';
 
-/** One POST to the GraphQL endpoint. The extension backs it with Node's https; tests with canned JSON. */
+export interface Response {
+    status: number;
+    body: string;
+}
+
+/**
+ * Requests to GitLab: a POST to the GraphQL endpoint, or a GET of a REST one for the token's own details. The
+ * extension backs it with Node's https; tests with canned JSON.
+ */
 export interface Transport {
-    post(endpoint: URL, token: string, jsonBody: string): Promise<{ status: number; body: string }>;
+    post(endpoint: URL, token: string, jsonBody: string): Promise<Response>;
+
+    /** A transport that only posts, as the tests' fakes, cannot GET. */
+    get?(uri: URL, token: string): Promise<Response>;
 }
 
 /** A failure worth showing to the user as it is: the message never carries the token. */
 export class GitLabError extends Error {
-    constructor(message: string) {
+    /** GitLab's HTTP status, e.g. 401 when it turned the token down; 0 when the request did not get that far. */
+    readonly status: number;
+
+    constructor(message: string, status = 0) {
         super(message);
         this.name = 'GitLabError';
+        this.status = status;
     }
 }
 
@@ -28,6 +47,61 @@ export const SELF_QUERY = `query DuoMyCredits($namespacePath: ID!) {
       usedFlowTypes { id title }
     }
   }
+}
+`;
+
+export const HISTORY_QUERY = `query DuoMyHistory($namespacePath: ID!, $startDate: ISO8601Date, $endDate: ISO8601Date) {
+  currentUser {
+    creditsUsage(namespacePath: $namespacePath, startDate: $startDate, endDate: $endDate) {
+      startDate
+      endDate
+      dailyUsage { date creditsUsed }
+      usedFlowTypes { id title }
+    }
+  }
+}
+`;
+
+/** Asked on its own: GitLab before 19.6 has no such field, and the rest still stands without it. */
+export const NON_BILLABLE_QUERY = `query DuoMyNonBillable($namespacePath: ID!, $startDate: ISO8601Date, $endDate: ISO8601Date) {
+  currentUser {
+    creditsUsage(namespacePath: $namespacePath, startDate: $startDate, endDate: $endDate) {
+      nonBillableUsage { dailyUsage { date creditsUsed } }
+    }
+  }
+}
+`;
+
+/**
+ * The user's own Agent Platform sessions, last updated first. Newer GitLabs (19.2+) also give the model and take a
+ * date filter; both are left out when GitLab does not know them.
+ */
+export function sessionsQuery(newer: boolean): string {
+    return 'query DuoMySessions($first: Int, $after: String' + (newer ? ', $updatedAfter: ISO8601DateTime' : '')
+        + ', $workflowId: AiDuoWorkflowsWorkflowID) {\n'
+        + '  duoWorkflowWorkflows(first: $first, after: $after, sort: UPDATED_DESC'
+        + (newer ? ', updatedAfter: $updatedAfter' : '') + ', workflowId: $workflowId) {\n'
+        + '    pageInfo { hasNextPage endCursor }\n'
+        + '    nodes {\n'
+        + '      id title goal workflowDefinition humanStatus createdAt updatedAt webUrl\n'
+        + '      project { fullPath }\n'
+        + '      namespace { fullPath }' + (newer ? '\n      modelMetadataName' : '') + '\n'
+        + '    }\n'
+        + '  }\n'
+        + '}\n';
+}
+
+/** Pages of SESSIONS_PAGE sessions asked for at most, newest first. */
+export const SESSIONS_PAGE = 100;
+export const MAX_SESSION_PAGES = 10;
+
+/** "2026-10-20T00:00:00Z": an instant as GitLab and Java write it. */
+export function instantText(ms: number): string {
+    return new Date(ms).toISOString().replace('.000Z', 'Z');
+}
+
+export const USER_QUERY = `query DuoWhoAmI {
+  currentUser { username }
 }
 `;
 
@@ -60,6 +134,14 @@ export interface Groups {
     withCredits: GroupMatch[];
 }
 
+/** The token's own details, as GET /personal_access_tokens/self gives them. */
+export interface TokenInfo {
+    name: string | null;
+    scopes: string[];
+    /** The day GitLab stops taking it; null when it never expires. */
+    expiresAt: IsoDate | null;
+}
+
 type Json = Record<string, unknown>;
 
 const NOT_A_USER = 'GitLab did not accept the token as a user. Check the token and its read_api and ai_features scopes.';
@@ -88,7 +170,8 @@ export class CreditsClient {
 
     private readonly endpoint: URL;
 
-    constructor(gitlabUrl: string, private readonly token: string, private readonly transport: Transport) {
+    constructor(gitlabUrl: string, private readonly token: string, private readonly transport: Transport,
+                private readonly log: Logger = NO_LOG) {
         this.endpoint = endpoint(gitlabUrl);
     }
 
@@ -160,6 +243,249 @@ export class CreditsClient {
         return { checked, withCredits: matches };
     }
 
+    /** Whose the token is: the proof that GitLab takes it for GraphQL. */
+    async username(): Promise<string> {
+        const result = await this.graphql(USER_QUERY, {});
+        const username = str(obj(result.data, 'currentUser'), 'username');
+        if (username == null) {
+            throw new GitLabError(result.errors.length === 0 ? NOT_A_USER : result.errors.join('; '));
+        }
+        return username;
+    }
+
+    /**
+     * The user's usage from `from` to `to`, at most a year: per day, per feature per day, and what GitLab did not
+     * bill. GitLab moves the start to the subscription's. The per-feature and not-billed figures are details: when
+     * they fail, the totals still stand. When GitLab fails on the whole range (HTTP 5xx, as gitlab.com does on a
+     * year), it is asked a month at a time.
+     */
+    async history(namespace: string, from: IsoDate, to: IsoDate): Promise<History> {
+        this.log.info('history ' + namespace + ': asking ' + from + ' to ' + to + ' at once');
+        try {
+            const year = await this.historyOf(namespace, from, to);
+            this.log.info('history ' + namespace + ': answered ' + year.start + ' to ' + year.end + ', ' + described(year));
+            return year;
+        } catch (e) {
+            if (!(e instanceof GitLabError) || e.status < 500) {
+                throw e;
+            }
+            this.log.warn('history ' + namespace + ': the range failed (' + e.message + '); asking month by month');
+            return this.byMonth(namespace, from, to, e);
+        }
+    }
+
+    /**
+     * history() a month at a time, newest first: the current month as the Usage view asks for it, without dates,
+     * then each month before it, until GitLab fails twice in a row, which is where its data ends.
+     */
+    private async byMonth(namespace: string, from: IsoDate, to: IsoDate, whole: GitLabError): Promise<History> {
+        const months: History[] = [];
+        let failures = 0;
+        for (let month = firstOfMonth(to); month.slice(0, 7) >= from.slice(0, 7) && failures < 2;
+             month = plusMonths(month, -1)) {
+            try {
+                const current = month.slice(0, 7) === to.slice(0, 7);
+                const answer = current ? await this.historyOf(namespace, null, null)
+                    : await this.historyOf(namespace, month < from ? from : month, addDays(plusMonths(month, 1), -1));
+                months.push(answer);
+                this.log.info('history ' + namespace + ' ' + month.slice(0, 7) + (current ? ' (no dates, as Usage asks)' : '')
+                    + ': answered, ' + described(answer));
+                failures = 0;
+            } catch (e) {
+                if (!(e instanceof GitLabError) || (e.status > 0 && e.status < 500)) {
+                    // Turned down, not out of range: the same for every month.
+                    throw e;
+                }
+                this.log.warn('history ' + namespace + ' ' + month.slice(0, 7) + ': failed (' + e.message + ')');
+                failures++;
+            }
+        }
+        if (months.length === 0) {
+            this.log.warn('history ' + namespace + ': no month answered');
+            throw whole;
+        }
+        this.log.info('history ' + namespace + ': ' + months.length + (months.length === 1 ? ' month' : ' months')
+            + ' answered month by month');
+        return months.length === 1 ? months[0] : mergeHistories(months)!;
+    }
+
+    /**
+     * One month's usage, as the Statistics view asks it: the current month without dates, as the Usage view does; a
+     * past month from its first to its last day.
+     */
+    historyOfMonth(namespace: string, month: string, today: IsoDate): Promise<History> {
+        return month === today.slice(0, 7) ? this.historyOf(namespace, null, null, today)
+            : this.historyOf(namespace, month + '-01', lastDayOf(month), today);
+    }
+
+    /** One range, or with null dates the current period, as the Usage view asks. */
+    private async historyOf(namespace: string, from: IsoDate | null, to: IsoDate | null,
+                            today: IsoDate = localToday()): Promise<History> {
+        const variables: Json = { namespacePath: namespace };
+        if (from != null) {
+            variables.startDate = from;
+        }
+        if (to != null) {
+            variables.endDate = to;
+        }
+        const result = await this.graphql(HISTORY_QUERY, variables);
+        const user = obj(result.data, 'currentUser');
+        if (user == null) {
+            throw new GitLabError(result.errors.length === 0 ? NOT_A_USER : result.errors.join('; '));
+        }
+        const usage = obj(user, 'creditsUsage');
+        if (usage == null) {
+            const why = result.errors.length === 0 ? 'no data returned' : result.errors.join('; ');
+            throw new GitLabError('GitLab returned no history for "' + namespace + '": ' + why + '.');
+        }
+        const used = flows(usage);
+
+        const perFlow: FlowHistory[] = [];
+        let flowsError: string | null = null;
+        const priced = Math.min(used.length, MAX_PRICED_FLOWS);
+        if (priced > 0) {
+            let header = 'query DuoMyHistoryByFlow($namespacePath: ID!, $startDate: ISO8601Date, $endDate: ISO8601Date';
+            let fields = '';
+            const flowVariables: Json = { ...variables };
+            for (let i = 0; i < priced; i++) {
+                header += ', $f' + i + ': [String!]';
+                fields += '    f' + i + ': creditsUsage(namespacePath: $namespacePath, startDate: $startDate, '
+                    + 'endDate: $endDate, flowTypes: $f' + i + ') { dailyUsage { date creditsUsed } }\n';
+                flowVariables['f' + i] = [used[i].id];
+            }
+            try {
+                const byFlow = await this.graphql(header + ') {\n  currentUser {\n' + fields + '  }\n}\n', flowVariables);
+                const figures = obj(byFlow.data, 'currentUser');
+                for (let i = 0; i < priced; i++) {
+                    const flow = obj(figures, 'f' + i);
+                    if (flow == null) {
+                        flowsError = byFlow.errors.length === 0 ? 'GitLab returned no figures' : byFlow.errors.join('; ');
+                        continue;
+                    }
+                    perFlow.push({ id: used[i].id, title: used[i].title, daily: dailies(flow) });
+                }
+            } catch (e) {
+                if (!(e instanceof GitLabError)) {
+                    throw e;
+                }
+                flowsError = e.message;
+            }
+        }
+
+        const nonBillable: DailyUsage[] = [];
+        try {
+            const extra = obj(obj((await this.graphql(NON_BILLABLE_QUERY, variables)).data, 'currentUser'), 'creditsUsage');
+            const entries = extra == null ? undefined : extra['nonBillableUsage'];
+            if (Array.isArray(entries)) {
+                for (const e of entries) {
+                    if (isObj(e)) {
+                        nonBillable.push(...dailies(e));
+                    }
+                }
+            } else if (isObj(entries)) {
+                nonBillable.push(...dailies(entries));
+            }
+        } catch (e) {
+            // Before GitLab 19.6: nothing to say about it.
+            if (!(e instanceof GitLabError)) {
+                throw e;
+            }
+        }
+        return {
+            start: date_(usage, 'startDate') ?? from ?? firstOfMonth(today), end: date_(usage, 'endDate') ?? to ?? today,
+            daily: dailies(usage), flows: perFlow, nonBillable, flowsError,
+        };
+    }
+
+    /**
+     * The user's sessions updated since `since` (ms), last updated first: as many pages as reach back that far, at
+     * most MAX_SESSION_PAGES.
+     */
+    async sessions(since: number): Promise<Session[]> {
+        const all: Session[] = [];
+        let after: string | null = null;
+        for (let page = 0; page < MAX_SESSION_PAGES; page++) {
+            const p: SessionsPage = await this.sessionsPage(SESSIONS_PAGE, after, since, null);
+            let older = false;
+            for (const s of p.sessions) {
+                if (s.updated < since) {
+                    older = true;
+                } else {
+                    all.push(s);
+                }
+            }
+            if (older || p.next == null) {
+                break;
+            }
+            after = p.next;
+        }
+        this.log.info('sessions since ' + instantText(since) + ': ' + all.length);
+        return all;
+    }
+
+    /** One session by its number, or null when the user has none such. */
+    async session(id: number): Promise<Session | null> {
+        return (await this.sessionsPage(1, null, null, id)).sessions[0] ?? null;
+    }
+
+    /** The session last updated, or null when the user has none. */
+    async lastSession(): Promise<Session | null> {
+        return (await this.sessionsPage(1, null, null, null)).sessions[0] ?? null;
+    }
+
+    /** Whether this GitLab lacks the model field or the date filter, as learnt from its first refusal. */
+    private olderSessionsApi = false;
+
+    private async sessionsPage(first: number, after: string | null, since: number | null, id: number | null): Promise<SessionsPage> {
+        for (;;) {
+            const newer = !this.olderSessionsApi;
+            const variables: Json = { first };
+            if (after != null) {
+                variables.after = after;
+            }
+            if (newer && since != null) {
+                variables.updatedAfter = instantText(since);
+            }
+            if (id != null) {
+                variables.workflowId = 'gid://gitlab/Ai::DuoWorkflows::Workflow/' + id;
+            }
+            const result = await this.graphql(sessionsQuery(newer), variables);
+            const connection = obj(result.data, 'duoWorkflowWorkflows');
+            if (connection == null && newer) {
+                this.log.info('sessions: ' + result.errors.join('; ') + '; asking again without the model and the date filter');
+                this.olderSessionsApi = true;
+                continue;
+            }
+            if (connection == null) {
+                throw new GitLabError(result.errors.length === 0 ? 'GitLab returned no sessions.'
+                    : 'GitLab returned no sessions: ' + result.errors.join('; '));
+            }
+            const sessions: Session[] = [];
+            for (const e of arr(connection, 'nodes')) {
+                const s = isObj(e) ? sessionOf(e) : null;
+                if (s != null) {
+                    sessions.push(s);
+                }
+            }
+            const info = obj(connection, 'pageInfo');
+            return { sessions, next: bool(info, 'hasNextPage') ? str(info, 'endCursor') : null };
+        }
+    }
+
+    /** The token's name, scopes and expiry, from the REST API, which tells any token about itself. */
+    async tokenInfo(): Promise<TokenInfo> {
+        const uri = new URL('v4/personal_access_tokens/self', this.endpoint);
+        const transport = this.transport;
+        const parsed = json(await this.request(() => transport.get
+            ? transport.get(uri, this.token)
+            : Promise.reject(new Error('this transport sends only GraphQL requests'))));
+        if (!isObj(parsed)) {
+            throw new GitLabError(NOT_JSON);
+        }
+        const scopes = arr(parsed, 'scopes').filter((e): e is string => typeof e === 'string');
+        return { name: str(parsed, 'name'), scopes, expiresAt: date_(parsed, 'expires_at') };
+    }
+
     /**
      * Prices each feature the user spent on with one aliased query, creditsUsage filtered by flow type. The
      * breakdown is a detail: when it fails, the total still stands, the features stay listed unpriced, and the
@@ -207,33 +533,9 @@ export class CreditsClient {
 
     private async graphql(query: string, variables: Json): Promise<{ data: Json | null; errors: string[] }> {
         const body = JSON.stringify({ query, variables });
-        const host = this.endpoint.hostname;
-        let response: { status: number; body: string };
-        try {
-            response = await this.transport.post(this.endpoint, this.token, body);
-        } catch (e) {
-            const message = e instanceof Error && e.message ? e.message : e instanceof Error ? e.name : String(e);
-            throw new GitLabError('Cannot reach ' + host + ': ' + message);
-        }
-
-        if (response.status === 401) {
-            throw new GitLabError('GitLab rejected the token (HTTP 401). Create a personal access token with the read_api and ai_features scopes.');
-        }
-        if (response.status === 403) {
-            throw new GitLabError('GitLab refused the request (HTTP 403). The token needs the read_api and ai_features scopes.');
-        }
-        if (response.status < 200 || response.status >= 300) {
-            throw new GitLabError('GitLab returned HTTP ' + response.status + ' from ' + host + '.');
-        }
-
-        let parsed: unknown;
-        try {
-            parsed = JSON.parse(response.body ?? '');
-        } catch {
-            parsed = null;
-        }
+        const parsed = json(await this.request(() => this.transport.post(this.endpoint, this.token, body)));
         if (!isObj(parsed)) {
-            throw new GitLabError('GitLab returned a response that is not JSON. Is the URL the GitLab root?');
+            throw new GitLabError(NOT_JSON);
         }
         const errors: string[] = [];
         for (const e of arr(parsed, 'errors')) {
@@ -244,10 +546,89 @@ export class CreditsClient {
         }
         return { data: obj(parsed, 'data'), errors };
     }
+
+    /** Sends one request and turns what goes wrong on the way into the user's words. */
+    private async request(send: () => Promise<Response>): Promise<Response> {
+        const host = this.endpoint.hostname;
+        let response: Response;
+        try {
+            response = await send();
+        } catch (e) {
+            const message = e instanceof Error && e.message ? e.message : e instanceof Error ? e.name : String(e);
+            throw new GitLabError('Cannot reach ' + host + ': ' + message);
+        }
+
+        if (response.status === 401) {
+            throw new GitLabError('GitLab rejected the token (HTTP 401): it is mistyped, expired or revoked. '
+                + 'Create a personal access token with the read_api and ai_features scopes.', 401);
+        }
+        if (response.status === 403) {
+            throw new GitLabError('GitLab refused the request (HTTP 403). The token needs the read_api and ai_features scopes.', 403);
+        }
+        if (response.status < 200 || response.status >= 300) {
+            throw new GitLabError('GitLab returned HTTP ' + response.status + ' from ' + host + '.', response.status);
+        }
+        return response;
+    }
+}
+
+const NOT_JSON = 'GitLab returned a response that is not JSON. Is the URL the GitLab root?';
+
+/** "12 credits, 2 features": what a history holds, for the log. */
+function described(history: History): string {
+    const credits = Math.round(sumOf(history.daily) * 10) / 10;
+    return credits + ' credits over ' + months(history).length + ' months, ' + history.flows.length
+        + (history.flows.length === 1 ? ' feature' : ' features') + (history.flowsError != null ? ' (features: ' + history.flowsError + ')' : '');
+}
+
+function json(response: Response): unknown {
+    try {
+        return JSON.parse(response.body ?? '');
+    } catch {
+        return null;
+    }
+}
+
+interface SessionsPage {
+    sessions: Session[];
+    next: string | null;
+}
+
+function instant(o: Json | null, key: string): number | null {
+    const text = str(o, key);
+    const ms = text == null ? NaN : Date.parse(text);
+    return Number.isNaN(ms) ? null : ms;
+}
+
+function sessionOf(o: Json): Session | null {
+    const id = sessionId(str(o, 'id'));
+    const created = instant(o, 'createdAt');
+    const updated = instant(o, 'updatedAt');
+    if (id == null || created == null) {
+        return null;
+    }
+    let title = str(o, 'title');
+    if (title == null || title.trim() === '') {
+        const line = (str(o, 'goal') ?? '').trim().split(/\r?\n/)[0].trim();
+        title = line === '' ? 'Session ' + id : line.length > 80 ? line.slice(0, 79) + '…' : line;
+    }
+    return {
+        id, title: title.trim(), flow: str(o, 'workflowDefinition'), project: str(obj(o, 'project'), 'fullPath'),
+        group: str(obj(o, 'namespace'), 'fullPath'), model: str(o, 'modelMetadataName'), status: str(o, 'humanStatus'),
+        created, updated: updated ?? created, webUrl: str(o, 'webUrl'),
+    };
 }
 
 function report(username: string | null, usage: Json): CreditsReport {
     const blocked = obj(usage, 'blockedStatus');
+    return {
+        username, startDate: date_(usage, 'startDate'), endDate: date_(usage, 'endDate'),
+        creditsUsed: num(usage, 'creditsUsed') ?? 0, blocked: bool(blocked, 'blocked'),
+        blockedBy: str(blocked, 'capType'), daily: dailies(usage), flows: flows(usage), flowsError: null,
+    };
+}
+
+function dailies(usage: Json): DailyUsage[] {
     const daily: DailyUsage[] = [];
     for (const e of arr(usage, 'dailyUsage')) {
         if (isObj(e)) {
@@ -257,11 +638,7 @@ function report(username: string | null, usage: Json): CreditsReport {
             }
         }
     }
-    return {
-        username, startDate: date_(usage, 'startDate'), endDate: date_(usage, 'endDate'),
-        creditsUsed: num(usage, 'creditsUsed') ?? 0, blocked: bool(blocked, 'blocked'),
-        blockedBy: str(blocked, 'capType'), daily, flows: flows(usage), flowsError: null,
-    };
+    return daily;
 }
 
 function flows(usage: Json): FlowUsage[] {

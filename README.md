@@ -17,7 +17,7 @@ GitLab Credits usage for the current billing period, forecast where the month wi
 ![Java](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-VS_Code_extension-3178C6?logo=typescript&logoColor=white)
 ![GitLab](https://img.shields.io/badge/GitLab-Duo-FC6D26?logo=gitlab&logoColor=white)
-![Version](https://img.shields.io/badge/version-0.3.0-blue)
+![Version](https://img.shields.io/badge/version-0.4.0-blue)
 
 </div>
 
@@ -29,21 +29,33 @@ GitLab Credits usage for the current billing period, forecast where the month wi
 
 ---
 
-## What's new in 0.3.0
+## What's new in 0.4.0
 
-- **Spent today**: a new tile on the dashboard (IntelliJ IDEA and VS Code) and a line in the status bar tooltip.
-- **Token status in Settings** (IntelliJ IDEA): green with a check mark when a token is saved, amber when there is
-  none or it expires within a week, red when GitLab turns it down. It says when the token was saved
-  (`Saved on Oct 1, 14:38 EEST`), when it expires and which scopes it has; GitLab gives the expiry date through
-  `GET /personal_access_tokens/self`.
-- **Check connection** asks GitLab whose the token is, when it expires, and for your group's credits.
-- **Find my group** says what it does, and the token now comes before the group, since Find my group asks GitLab with it.
-- **Shift+Esc** hides the Duo Watchdog tool window and **Esc** goes back to the editor, as in the IDE's own tool windows.
-- **Installers**: choose IntelliJ IDEA, VS Code or both with the arrow keys, and follow the install on a progress bar.
+- **Several accounts**, one token each, in IntelliJ IDEA and VS Code. An account is one GitLab user on one GitLab:
+  when you add a token, GitLab says whose it is, and a token for an account already listed replaces its token,
+  keeping its group and limit. See [Several accounts](#several-accounts).
+- **Accounts in Settings** (IntelliJ IDEA): credits left, the token and its expiry date for each, most credits left
+  first, with **All / Has credits / Expired** filters and a search. A saved token shows as dots in a locked field, a
+  missing one as an empty field. VS Code has the same list in **Duo Watchdog: Accounts**.
+- **Add Token** says what OK will do: add an account, replace a token, or add an account whose usage can't be
+  tracked (no `ai_features` scope) instead of failing.
+- An **account switcher** in the tool window and the dashboard; the status bar follows it, with a dot (a bell in
+  VS Code) when another account needs a look, and the tooltip lists every account.
+- **Popups** for a token that expires within 3 days and a token GitLab turns down; in IntelliJ IDEA these, the last
+  alert threshold, the limit and a block stay on screen until closed.
+- **glab and the GitLab Duo CLI** (optional, off by default): an account can hand its token to glab, and so to the
+  Duo CLI. See [glab and the GitLab Duo CLI](#glab-and-the-gitlab-duo-cli-optional).
+- A **Statistics** tab next to the dashboard: your last 3, 6 or 12 months by month and by feature, with what GitLab did
+  not bill, for one account or all of them. See [Statistics](#statistics).
+- A **Sessions** tab: your Agent Platform sessions over the days you pick, each with its credits, estimated, and the
+  projects that cost most. Look a session up by its ID or link, or show your last one. See [Sessions](#sessions).
+- **What's New**: after an update, a window shows what the version brings, with pictures (*Help → What's New in Duo
+  Watchdog* in IntelliJ IDEA, **Duo Watchdog: What's New** in VS Code).
+- Upgrading from 0.3.0 moves the saved token to its account, with its group, limit and last alert.
 
 ## Contents
 
-- [What's new in 0.3.0](#whats-new-in-030)
+- [What's new in 0.4.0](#whats-new-in-040)
 - [Features](#features)
 - [VS Code](#vs-code)
 - [How it works](#how-it-works)
@@ -83,9 +95,107 @@ Clicking the meter opens the dashboard.
 
 <br clear="right">
 
+### Statistics
+
+<img align="right" src="vscode/media/whats-new/statistics.png" alt="The Statistics tab" width="300">
+
+The tool window's **Statistics** tab shows the last **3, 6 or 12 months** (3 until you pick more) of the chosen account,
+or of **All Accounts** added up (features merged by name):
+
+- **This month**, **Last month**, the monthly **Average** (from the first month with any use) and the total
+- A bar a month, split by the five costliest features of the range; the rest is folded into *Other*. Hover a bar for
+  the month's figures.
+- Every month as a row, newest first, with its costliest feature and what GitLab did not bill
+- The features over the range
+- **Not billed**: credits GitLab counted as promotional or beta. GitLab's own usage page includes them in its total,
+  so it can show more than Duo Watchdog's billed figures.
+
+It reads `creditsUsage` a month at a time, which a group member may read about themselves: per day and per feature.
+Per project, per model and per session take the group's Owner role. GitLab is asked for at most three months at once,
+and only for the months still changing: a month two days past its end is kept in the IDE's system folder
+(`duo-watchdog/history`) and never asked for again, so after the first time Statistics asks about as much as the
+Usage tab. A month GitLab has nothing for, before the subscription, is kept as empty. **Reload Statistics** asks again
+for the months still changing.
+
+<br clear="right">
+
+### Sessions
+
+<img align="right" src="vscode/media/whats-new/sessions.png" alt="The Sessions tab" width="300">
+
+The **Sessions** tab lists your GitLab Duo Agent Platform sessions (the Duo CLI, Agentic Chat, flows) over **Today**,
+**Yesterday**, the **last 7 or 30 days** or a custom range, with what each cost, **estimated**:
+
+- The number of **sessions**, the days' **credits**, the part estimated to be **≈ in sessions**, and **Other use**:
+  Code Suggestions, classic Chat, and what no session accounts for
+- Credits per **project**
+- Every session, newest first: title, project, flow, status, the agent's steps and ≈ credits. Click one for its
+  details: model, start and last update, how its estimate was made, and a link to it in GitLab.
+- Paste a **session ID** (the number the Duo CLI shows), its `gid://` or its link into the search field and press
+  Enter to show it, whichever days it falls on; other text narrows the list. **Last Session** shows the session you
+  last worked in.
+
+GitLab tells a group member their credits per day and per feature, not per session (that takes the group's Owner), so
+the estimate splits each feature's credits on a day among that day's sessions of that feature: **by the agent's
+steps** when the Duo CLI's logs on this machine count them for every one of those sessions, else equally. Sessions
+whose flow matches no feature share what the matched ones leave. The logs (`duo log list`: `gitlab-duo-cli` in the
+temporary folder; for a project in WSL, in the distribution's `/tmp`) are read for one kind of line only,
+`[DuoWorkflowNodeExecutor][<session>] [requestID: …] Action received`, and of it only the time, the session and the
+request: the logs also hold prompts and code, and none of that is read on or kept. The counts are kept in the IDE's
+system folder (`duo-watchdog/cli-logs.json`), since the temporary folder is emptied now and then. Sessions in other
+groups are left out, since another group's credits are not the account's. Days are UTC days, as GitLab counts them,
+and GitLab lists sessions for about 30 days.
+
+<br clear="right">
+
+### Several accounts
+
+Duo Watchdog keeps **one token per account**. An account is one GitLab user on one GitLab: when you add a token,
+GitLab says whose it is, so the same `@user` on gitlab.com and on your company's GitLab are two accounts. A token for
+an account already in the list **replaces** that account's token; its group and limit stay.
+
+- The list in Settings puts the **most credits left first**, accounts without numbers last. **Show: All / Has credits /
+  Expired** filters it, and the search box finds an account by user, GitLab or group.
+- Every account shows its token's **expiry date**. The token itself is never shown: a saved one shows as dots in a
+  locked field, a missing one leaves the field empty with *No token saved*, so you can tell them apart.
+- Each account has its own **group path** and **limit**; the alert percents, the forecast alert and the refresh
+  interval are shared.
+- The tool window shows **one account at a time**: pick it in the switcher next to Refresh and Settings (type to
+  filter). The status bar follows it, a **dot** on the meter says another account needs a look, and the tooltip
+  lists every account.
+- A token GitLab takes but that **cannot read usage** (no `ai_features` scope) is still added, as *not tracked*, so
+  glab and the Duo CLI can use it.
+
+### glab and the GitLab Duo CLI (optional)
+
+Each account has two boxes, **off unless you tick them**: *glab* and *the GitLab Duo CLI*. With glab ticked, Duo
+Watchdog hands the account's token to [glab](https://docs.gitlab.com/cli/) for its GitLab
+(`glab auth login --hostname <host> --stdin`, the token on glab's input) when you click OK or Apply, and again whenever
+you replace the token. glab keeps one token per GitLab, so it **follows the account you pick** in the tool window,
+among those with the box ticked: picking another one hands glab its token ("glab now signs in to gitlab.com as
+@olena"), and the Duo CLI follows, since it signs in through glab.
+
+The [GitLab Duo CLI](https://docs.gitlab.com/user/gitlab_duo_cli/) signs in through glab (glab 1.85.2 and duo 8.68.0 or
+later), so ticking it turns glab on too. If the Duo CLI already has a login of its own in `~/.gitlab/storage.json`, it
+keeps using that; Duo Watchdog never writes that file.
+
+Where glab is looked for: on the PATH (and in Homebrew on macOS). **On Windows with the project in WSL**, IntelliJ IDEA
+uses the glab inside that WSL distribution (`wsl.exe -d <distro> -e bash -lc '…glab auth login …'`, the token on its
+input), since that is where Git and glab run; otherwise `glab.exe` on the Windows PATH, then WSL's default
+distribution. VS Code needs nothing of the kind: with its WSL remote the extension runs inside WSL. Once glab is
+installed, the next refresh hands it the token.
+
+glab uses the token for its API calls with `api`; `write_repository` only matters for `git push` over HTTPS, not SSH.
+So a token for everything needs `api`, `write_repository` and `ai_features`. **The Duo CLI needs `api` and
+`ai_features`**: with Duo Watchdog's own `read_api` it reports its GitLab Duo access as unavailable, so the settings
+say so when the Duo CLI box is ticked and the token lacks one of them. glab keeps the token in the system
+keyring when there is one; WSL usually has none, so there it goes to `~/.config/glab-cli/config.yml` as plain text,
+as `glab auth status` says.
+
 ### Alerts
 
-Balloon notifications with an **Open Duo Watchdog** link. Each one fires **at most once per billing period**:
+Balloon notifications with an **Open Duo Watchdog** link, for every account, named under the title. Each one fires
+**at most once per billing period**:
 
 | Alert | When it fires |
 |---|---|
@@ -93,6 +203,14 @@ Balloon notifications with an **Open Duo Watchdog** link. Each one fires **at mo
 | Threshold | usage reaches each configured percentage of the limit (default `80, 95`) |
 | Limit reached | usage reaches 100% of the limit |
 | Blocked | GitLab has blocked Duo because of the cap |
+
+The **last threshold**, the limit and a block stay on screen until you close them, as do two notices about tokens,
+each shown once:
+
+| Notice | When it shows |
+|---|---|
+| Token expires in N days | an account's token expires within 3 days (**Replace Token…**, **Create a New Token in GitLab**) |
+| The token no longer works | GitLab turns an account's token down: it expired or was revoked (**Replace Token…**) |
 
 ## VS Code
 
@@ -107,8 +225,10 @@ alerts and texts:
 | Token storage | IDE Password Safe | VS Code Secret Storage (the OS keychain) |
 | Alerts | Balloon notifications | Notifications with an **Open Duo Watchdog** button |
 
-Commands (*Ctrl/Cmd+Shift+P*, type "Duo Watchdog"): **Set GitLab Token**, **Create the Token in GitLab**, **Find My Group**,
-**Refresh**, **Open Dashboard**, **Open Settings**.
+Commands (*Ctrl/Cmd+Shift+P*, type "Duo Watchdog"): **Accounts**, **Add or Replace a Token**, **Create the Token in
+GitLab**, **Find My Group**, **Refresh**, **Open Dashboard**, **Open Settings**. Several accounts work as in IntelliJ
+IDEA: **Accounts** lists them, most credits left first, with the Has credits and Expired filters in its title bar and
+buttons on each account for glab, the Duo CLI, its group path, its limit, its token and removing it.
 
 The extension has no runtime dependencies. Its requests use Node's `https` module, so they go through VS Code's
 proxy settings (`http.proxy`) and the system certificates.
@@ -144,7 +264,7 @@ Requests go through the IDE's proxy and trusted certificates
 | VS Code | **1.74** | Also VS Code Insiders, VSCodium and Cursor. |
 | GitLab | **19.4** | The first version with `currentUser.creditsUsage`. Works on GitLab.com and self-managed. |
 | GitLab account | Member of the top-level group | The group must own a GitLab Duo subscription. You don't need the Owner role. |
-| Personal access token | Scopes `read_api` + `ai_features` | No other scopes are needed. |
+| Personal access token | Scopes `read_api` + `ai_features` | One per account. For glab and the Duo CLI too: `api`, `write_repository` + `ai_features`. |
 | OS | Windows, macOS, Linux | Any OS the editor runs on. |
 
 ### Building from source
@@ -203,7 +323,7 @@ so nothing wraps.
 
 ```
    (docs/images/logo.ascii: the doberman, with "D U O   W A T C H D O G", the subtitle and
-    "Installer, version 0.3.0" beside it)
+    "Installer, version 0.4.0" beside it)
 
 Looking for IntelliJ IDEA and VS Code...
 
@@ -216,7 +336,7 @@ Found on this computer:
 
   [2] IntelliJ IDEA 2026.2.0.1
       C:\Program Files\JetBrains\IntelliJ IDEA 2026.2
-      Duo Watchdog 0.2.1 is installed; 0.3.0 is available.
+      Duo Watchdog 0.3.0 is installed; 0.4.0 is available.
       It is running now; you'll be asked to close it before installing.
 
 Where should Duo Watchdog go?
@@ -229,8 +349,8 @@ Where should Duo Watchdog go?
     Exit without installing
 
 Plan:
-  - IntelliJ IDEA 2026.2.0.1: update Duo Watchdog 0.2.1 -> 0.3.0 (you'll be asked to close it first)
-  - VS Code 1.130.0: install Duo Watchdog 0.3.0
+  - IntelliJ IDEA 2026.2.0.1: update Duo Watchdog 0.3.0 -> 0.4.0 (you'll be asked to close it first)
+  - VS Code 1.130.0: install Duo Watchdog 0.4.0
 Continue? [Y/n]
 
 Installing (5 steps)
@@ -260,21 +380,44 @@ Or the IDE's own way:
 
 1. [Build the plugin](#building-from-source), or get `duo-watchdog-<version>.zip` from a teammate.
 2. In the IDE, open *Settings → Plugins → ⚙ → Install Plugin from Disk…*
-3. Select `intellij/build/distributions/duo-watchdog-0.3.0.zip` and restart if the IDE asks you to.
+3. Select `intellij/build/distributions/duo-watchdog-0.4.0.zip` and restart if the IDE asks you to.
 
 **Compatibility:** IntelliJ IDEA and any other JetBrains IDE from **2024.3** onward. This holds whichever IDE version the plugin was built against.
 
 ## Configuration
 
-Open *Settings → Tools → Duo Watchdog*.
+Open *Settings → Tools → Duo Watchdog*. Nothing is saved, and no token written or handed to glab, until you click
+**OK** or **Apply**.
+
+**Accounts.** Click **+** (*Add Token…*), pick the GitLab URL and paste a token. As soon as it is pasted, GitLab says
+whose it is, and the dialog says what OK will do:
+
+| Box | Means |
+|---|---|
+| Green, **A new account** | OK adds it. Find my group fills in its group when GitLab gives it credits in one group; set its limit. |
+| Blue, **Already in the list** | OK replaces that account's token. Its group and limit stay. |
+| Amber, **usage can't be tracked** | GitLab takes the token, but it lacks `ai_features`. OK adds the account as *not tracked*. |
+| Red | GitLab turned the token down, or can't be reached: OK stays off. |
+
+The **Create the token in GitLab** link opens GitLab's new-token page with `read_api` and `ai_features` selected, or with
+`api`, `write_repository` and `ai_features` when glab or the Duo CLI box is ticked. Tokens are stored in the IDE's
+password safe (the macOS Keychain by default on a Mac), one entry per account, never in plain settings.
+**−** removes the chosen account and deletes its token from the password safe; glab keeps any login it has.
+
+Under the list, for the chosen account:
 
 | Setting | What to enter |
 |---|---|
-| **GitLab URL** | `https://gitlab.com` or the address of your self-managed GitLab |
-| **Personal access token** | A token with the **`read_api`** and **`ai_features`** scopes and nothing more. The *Create the token in GitLab* link opens GitLab's new-token page with both scopes already selected. The token is stored in the IDE's **Password Safe**, not in plain settings. |
-| **Group path** | The path of the top-level group that owns the Duo subscription, e.g. `my-company`. Not sure? Click **Find my group**: it asks GitLab, with the token above, which of your groups gives you Duo credits and fills in its path. Pasting the group's URL also works; the plugin keeps only the path. |
-| **Limit (credits)** | Your limit. Default: `100` |
-| **Alert at % of limit** | Comma-separated thresholds, e.g. `50, 80, 95` |
+| **Group path** | The path of the top-level group that owns the Duo subscription, e.g. `my-company`. Not sure? Click **Find my group**: it asks GitLab, with this account's token, which of its groups gives it Duo credits and fills in its path. Pasting the group's URL also works; the plugin keeps only the path. |
+| **Limit (credits)** | This account's limit. Default: `100` |
+| **Personal access token** | Dots in a locked field when a token is saved, empty with *No token saved* when not. **Replace token…** opens the add dialog with this account's GitLab filled in. |
+| **Also use for** | **glab** and **the GitLab Duo CLI**, off unless ticked: see [glab and the GitLab Duo CLI](#glab-and-the-gitlab-duo-cli-optional). |
+
+Shared by every account:
+
+| Setting | What to enter |
+|---|---|
+| **Alert at % of limit** | Comma-separated thresholds, e.g. `50, 80, 95`, each of the account's own limit |
 | **Alert when the month-end forecast passes the limit** | Turns the forecast alert on or off |
 | **Refresh every … minutes** | Polling interval. Default: `15`. GitLab's data can lag a few minutes behind actual use. |
 
@@ -282,28 +425,35 @@ The box under the token field shows the token's state:
 
 | Box | Means |
 |---|---|
-| Green, ✓ **Token saved** | A token is in the Password Safe. It says when it was saved (`Saved on Oct 1, 14:38 EEST`) and, as GitLab reports it, when it expires and its scopes. |
-| Amber, **No token yet** | Nothing saved: create one with the link and paste it. Amber too when the token expires within a week or lacks a scope. |
+| Green, ✓ **Token saved** | It says when the token was saved (`Saved on Oct 1, 14:38 EEST`) and, as GitLab reports it, when it expires and its scopes. |
+| Amber | No token for this account, the token expires within a week, it lacks a scope, or its usage is not tracked. |
 | Red | GitLab turns the saved token down (expired or revoked), or **Check connection** failed, with GitLab's reason. |
 
-**Check connection** asks GitLab whose the token is (the one you typed, or else the saved one), when it expires, and
-for your group's credits, without saving anything.
+**Check connection** asks GitLab whose the account's token is (a new one not saved yet, or else the saved one), when
+it expires, and for the group's credits, without saving anything.
+
+Upgrading from 0.3.0: on its first refresh Duo Watchdog asks GitLab whose your saved token is and moves it, with your
+group, limit and last alert, to that account.
 
 ### VS Code
 
-1. Run **Duo Watchdog: Create the Token in GitLab** to open GitLab's new-token page with both scopes selected. Then run
-   **Duo Watchdog: Set GitLab Token** and paste the token.
-2. Run **Duo Watchdog: Find My Group**, or set `duoWatchdog.groupPath` yourself.
-3. Adjust the rest in Settings if you need to:
+1. Run **Duo Watchdog: Create the Token in GitLab** to open GitLab's new-token page with the scopes selected. Then run
+   **Duo Watchdog: Add or Replace a Token** and paste the token. GitLab says whose it is: a new account, or a
+   replacement for an account already listed (its group and limit stay). For a new account it finds the group and
+   asks for the limit, then asks whether to use the token for glab and the Duo CLI (No unless you say Yes).
+2. **Duo Watchdog: Accounts** picks the account the dashboard and the status bar show, and changes its group path
+   and limit. The dashboard has the same choice in a list at its top.
+3. Adjust the shared settings if you need to:
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `duoWatchdog.gitlabUrl` | `https://gitlab.com` | Your GitLab address |
-| `duoWatchdog.groupPath` | — | Path of the top-level group that owns the Duo subscription |
-| `duoWatchdog.limit` | `100` | Your limit in credits |
-| `duoWatchdog.alertPercents` | `"80, 95"` | Thresholds in percent of the limit, comma-separated |
+| `duoWatchdog.gitlabUrl` | `https://gitlab.com` | The GitLab address a new token starts with |
+| `duoWatchdog.alertPercents` | `"80, 95"` | Thresholds in percent of each account's limit, comma-separated |
 | `duoWatchdog.forecastAlert` | `true` | Alert when the month-end forecast passes the limit |
 | `duoWatchdog.refreshMinutes` | `15` | Polling interval in minutes |
+
+`duoWatchdog.groupPath` and `duoWatchdog.limit` are deprecated: each account has its own now. They are read once,
+when the token saved by 0.3.0 moves to its account. Tokens are kept in VS Code's secret storage, one per account.
 
 ## Building from source
 
@@ -315,7 +465,7 @@ VS Code extension (`:vscode`, which runs its npm build). Open the root folder in
 
 ```bash
 ./gradlew test            # all tests: the plugin's core and the VS Code extension
-./gradlew buildPlugin     # → intellij/build/distributions/duo-watchdog-0.3.0.zip
+./gradlew buildPlugin     # → intellij/build/distributions/duo-watchdog-0.4.0.zip
 ./gradlew runIde          # launch a sandbox IDE with the plugin installed
 ```
 
@@ -432,11 +582,11 @@ because the path contains spaces:
 **5. Find the result:**
 
 ```powershell
-dir intellij\build\distributions    # → duo-watchdog-0.3.0.zip
+dir intellij\build\distributions    # → duo-watchdog-0.4.0.zip
 ```
 
 Then follow [Installation](#installation): *Settings → Plugins → ⚙ → Install Plugin from Disk…* and pick
-`intellij\build\distributions\duo-watchdog-0.3.0.zip`.
+`intellij\build\distributions\duo-watchdog-0.4.0.zip`.
 
 **Optional:** run the tests or try the plugin in a sandbox IDE:
 
@@ -490,11 +640,12 @@ duo-watchdog/
 ├── gradlew, gradle/          Gradle wrapper (run everything from the root)
 ├── intellij/                 IntelliJ plugin, module :intellij (Java)
 │   ├── core/                 Module :intellij:core: plain Java, no IntelliJ dependencies
-│   │   ├── src/main/…/core/  GraphQL client, billing period & forecast, alert rules, texts
-│   │   ├── src/main/…/ui/    Pure Swing components: dashboard, meter, chart, feature bars, status chip
+│   │   ├── src/main/…/core/  GraphQL client, billing period & forecast, alert rules, account rules, history,
+│   │   │                     session estimates, Duo CLI log reader, texts
+│   │   ├── src/main/…/ui/    Pure Swing components: dashboard, statistics, sessions, meter, charts, status chip
 │   │   └── src/test/         JUnit 5 tests; also paints the UI headless to core/build/ui-previews/*.png
-│   ├── src/                  Thin IntelliJ layer: settings, refresh service, status bar widget,
-│   │                         tool window, notifications
+│   ├── src/                  Thin IntelliJ layer: settings and accounts, add-token dialog, refresh service,
+│   │                         status bar widget, tool window, notifications, glab hand-off
 │   └── build.gradle.kts      Finds the installed IDEA; buildPlugin, installPlugin, runIde
 ├── vscode/                   VS Code extension, module :vscode (TypeScript, npm, no runtime dependencies)
 │   ├── src/core/             Port of intellij/core: GraphQL client, period & forecast, alerts, texts
@@ -512,8 +663,8 @@ Running `./gradlew test` also renders every dashboard state to PNG (in `intellij
 The VS Code extension builds with npm (Node.js 20+), from the root through Gradle or in `vscode/` directly:
 
 ```bash
-./gradlew :vscode:test               # 32 tests, no VS Code needed          (npm ci && npm test)
-./gradlew :vscode:packageExtension   # → vscode/duo-watchdog-0.3.0.vsix      (npm run package)
+./gradlew :vscode:test               # 120 tests, no VS Code needed         (npm ci && npm test)
+./gradlew :vscode:packageExtension   # → vscode/duo-watchdog-0.4.0.vsix      (npm run package)
 ./gradlew :vscode:installExtension   # into VS Code; -PcodePath=codium for another CLI
 ```
 
@@ -521,6 +672,13 @@ The IntelliJ module needs an installed IntelliJ IDEA; without one only its own t
 still run.
 
 ## Troubleshooting
+
+**Diagnostics to send.** *Tools → Duo Watchdog: Copy Diagnostics* (also in the tool window's ⋮ menu) copies a report:
+the IDE, OS and plugin version, where the tokens are kept, the open projects and their WSL distribution, where glab
+was looked for and found (or what WSL printed), each account with its group, scopes, expiry, glab state and last
+refresh, where the Duo CLI's logs were found and how many sessions they count, and the last 100 events. It holds no tokens: anything that looks like a GitLab token is cut to its prefix.
+The same events go to the IDE's log (*Help → Show Log*, lines with `[duo-watchdog]`). In VS Code: **Duo Watchdog: Copy
+Diagnostics** and **Duo Watchdog: Show Log** (the *Duo Watchdog* output channel).
 
 <details>
 <summary><b>"resource … does not exist or you don't have permission"</b></summary>

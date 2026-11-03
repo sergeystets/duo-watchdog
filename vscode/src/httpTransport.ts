@@ -1,6 +1,6 @@
 import * as http from 'http';
 import * as https from 'https';
-import { Transport } from './core/client';
+import { Response, Transport } from './core/client';
 
 /**
  * GitLab through Node's http and https modules, which VS Code patches with its proxy settings (http.proxy) and the
@@ -8,29 +8,35 @@ import { Transport } from './core/client';
  */
 export const nodeTransport: Transport = {
     post(endpoint, token, jsonBody) {
-        return new Promise((resolve, reject) => {
-            const client = endpoint.protocol === 'http:' ? http : https;
-            const request = client.request(endpoint, {
-                method: 'POST',
-                timeout: 30_000,
-                headers: {
-                    'Authorization': 'Bearer ' + token,
-                    'Content-Type': 'application/json',
-                    'Content-Length': Buffer.byteLength(jsonBody),
-                    'User-Agent': 'duo-watchdog-vscode',
-                },
-            }, response => {
-                const chunks: Buffer[] = [];
-                response.on('data', (chunk: Buffer) => chunks.push(chunk));
-                response.on('end', () => resolve({
-                    status: response.statusCode ?? 0,
-                    body: Buffer.concat(chunks).toString('utf8'),
-                }));
-                response.on('error', reject);
-            });
-            request.on('timeout', () => request.destroy(new Error('request timed out')));
-            request.on('error', reject);
-            request.end(jsonBody);
-        });
+        return send(endpoint, 'POST', token, jsonBody);
+    },
+    get(uri, token) {
+        return send(uri, 'GET', token, null);
     },
 };
+
+function send(uri: URL, method: 'GET' | 'POST', token: string, jsonBody: string | null): Promise<Response> {
+    return new Promise((resolve, reject) => {
+        const client = uri.protocol === 'http:' ? http : https;
+        const headers: Record<string, string | number> = {
+            'Authorization': 'Bearer ' + token,
+            'User-Agent': 'duo-watchdog-vscode',
+        };
+        if (jsonBody != null) {
+            headers['Content-Type'] = 'application/json';
+            headers['Content-Length'] = Buffer.byteLength(jsonBody);
+        }
+        const request = client.request(uri, { method, timeout: 30_000, headers }, response => {
+            const chunks: Buffer[] = [];
+            response.on('data', (chunk: Buffer) => chunks.push(chunk));
+            response.on('end', () => resolve({
+                status: response.statusCode ?? 0,
+                body: Buffer.concat(chunks).toString('utf8'),
+            }));
+            response.on('error', reject);
+        });
+        request.on('timeout', () => request.destroy(new Error('request timed out')));
+        request.on('error', reject);
+        request.end(jsonBody ?? undefined);
+    });
+}

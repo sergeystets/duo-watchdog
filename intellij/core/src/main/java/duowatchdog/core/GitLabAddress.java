@@ -48,10 +48,19 @@ public final class GitLabAddress {
 
     /** GitLab's new-token page with the name and both scopes filled in. */
     public static String tokenPage(String gitlabUrl) {
+        return tokenPage(gitlabUrl, false);
+    }
+
+    /**
+     * GitLab's new-token page with the name and scopes filled in: read_api and ai_features, or, for a token glab
+     * and the Duo CLI use too, api, write_repository and ai_features.
+     */
+    public static String tokenPage(String gitlabUrl, boolean forCli) {
         String base = gitlabUrl == null ? "" : gitlabUrl.trim();
         while (base.endsWith("/")) {
             base = base.substring(0, base.length() - 1);
         }
-        return base + "/-/user_settings/personal_access_tokens?name=Duo+Watchdog&scopes=read_api,ai_features";
+        return base + "/-/user_settings/personal_access_tokens?name=Duo+Watchdog&scopes="
+                + (forCli ? "api,write_repository,ai_features" : "read_api,ai_features");
     }
 }
