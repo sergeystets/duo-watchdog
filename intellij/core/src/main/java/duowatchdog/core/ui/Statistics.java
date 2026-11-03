@@ -75,9 +75,7 @@ public final class Statistics extends JPanel implements Scrollable {
         double thisMonth = months.stream().filter(m -> m.month().equals(now)).mapToDouble(History.Month::credits).sum();
         double lastMonth = months.stream().filter(m -> m.month().equals(now.minusMonths(1)))
                 .mapToDouble(History.Month::credits).sum();
-        List<History.Month> complete = months.stream().filter(m -> m.month().isBefore(now)).toList();
-        double average = complete.isEmpty() ? thisMonth
-                : complete.stream().mapToDouble(History.Month::credits).sum() / complete.size();
+        double average = history.monthlyAverage(now);
         Dashboard.Tiles tiles = new Dashboard.Tiles(theme);
         tiles.add(new Dashboard.Tile(theme, "This month", CreditsView.number(thisMonth), null));
         tiles.add(new Dashboard.Tile(theme, "Last month", CreditsView.number(lastMonth), null));

@@ -65,6 +65,8 @@ final class CliHandOff {
     private static volatile Instant foundAt = Instant.EPOCH;
     /** Whether the Duo CLI had a login of its own when glab was last looked for. */
     private static volatile boolean duoOwnLogin;
+    /** What WSL printed the last time glab was not found there: an error of its own, or nothing. */
+    private static volatile String wslSaid = "";
     /** A background look is running, so another is not started. */
     private static final AtomicBoolean LOOKING = new AtomicBoolean();
 
@@ -165,7 +167,16 @@ final class CliHandOff {
 
     /** glab's path in the distribution, or null when it is not there. Starting WSL can take a while. */
     private static @Nullable String inWsl(@Nullable String distro) {
-        return Glab.pathIn(run(Glab.findInWsl(distro), null, 30).output());
+        Result result = run(Glab.findInWsl(distro), null, 30);
+        String path = Glab.pathIn(result.output());
+        wslSaid = path != null ? "" : result.output().lines().map(String::strip).filter(l -> !l.isEmpty())
+                .reduce((a, b) -> b).orElse(result.ok() ? "" : "it failed without a message");
+        return path;
+    }
+
+    /** What WSL printed when glab was last not found there, e.g. that the distribution does not exist; "" for nothing. */
+    static String wslSaid() {
+        return SystemInfo.isWindows ? wslSaid : "";
     }
 
     /** {@code glab auth login --hostname <host> --stdin}, the token written to its input, never on the command line. */
