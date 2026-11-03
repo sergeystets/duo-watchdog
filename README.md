@@ -141,9 +141,18 @@ you replace the token. glab keeps one token per GitLab, so only one account per 
 
 The [GitLab Duo CLI](https://docs.gitlab.com/user/gitlab_duo_cli/) signs in through glab (glab 1.85.2 and duo 8.68.0 or
 later), so ticking it turns glab on too. If the Duo CLI already has a login of its own in `~/.gitlab/storage.json`, it
-keeps using that; Duo Watchdog never writes that file. glab needs the `api` and `write_repository` scopes, so a token
-for both needs `api`, `write_repository` and `ai_features`. glab stores the token as it is set to: in the system
-keyring, or in its config file.
+keeps using that; Duo Watchdog never writes that file.
+
+Where glab is looked for: on the PATH (and in Homebrew on macOS). **On Windows with the project in WSL**, IntelliJ IDEA
+uses the glab inside that WSL distribution (`wsl.exe -d <distro> -- bash -lc 'glab auth login …'`, the token on its
+input), since that is where Git and glab run; otherwise `glab.exe` on the Windows PATH, then WSL's default
+distribution. VS Code needs nothing of the kind: with its WSL remote the extension runs inside WSL. Once glab is
+installed, the next refresh hands it the token.
+
+glab uses the token for its API calls with `api`; `write_repository` only matters for `git push` over HTTPS, not SSH.
+So a token for everything needs `api`, `write_repository` and `ai_features`. glab keeps the token in the system
+keyring when there is one; WSL usually has none, so there it goes to `~/.config/glab-cli/config.yml` as plain text,
+as `glab auth status` says.
 
 ### Alerts
 

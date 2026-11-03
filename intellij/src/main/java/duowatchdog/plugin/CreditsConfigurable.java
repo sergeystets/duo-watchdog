@@ -444,13 +444,15 @@ public final class CreditsConfigurable implements Configurable {
         Account other = working.stream()
                 .filter(w -> w != a && w.glab && w.host().equalsIgnoreCase(host))
                 .findFirst().orElse(null);
-        boolean installed = CliHandOff.glab() != null;
+        // Known without waiting: looking in WSL takes a moment, so the details are drawn again when it is done.
+        Boolean known = CliHandOff.installed(() -> onEdt(this::renderDetails));
+        boolean installed = !Boolean.FALSE.equals(known);
         if (a.glab) {
             boolean newlyOn = live == null || !live.glab;
             if (!installed) {
-                notes.add("glab is not installed where the IDE looks (on the PATH and in Homebrew), so it doesn't have "
-                        + "this token. Install it, e.g. brew install glab, and Duo Watchdog hands the token over on its "
-                        + "next refresh.");
+                notes.add("glab is not installed where the IDE looks (" + CliHandOff.whereLooked() + "), so it "
+                        + "doesn't have this token. " + CliHandOff.howToInstall() + ", and Duo Watchdog hands the token "
+                        + "over on its next refresh.");
             } else if (newlyOn || pending) {
                 notes.add("glab gets this token for " + host + " when you click OK or Apply, and again whenever it is "
                         + "replaced.");
@@ -473,7 +475,7 @@ public final class CreditsConfigurable implements Configurable {
             notes.add("Off: Duo Watchdog leaves glab's login alone.");
         }
         if (!installed && !a.glab) {
-            notes.add("glab is not installed where the IDE looks: on the PATH and in Homebrew.");
+            notes.add("glab is not installed where the IDE looks: " + CliHandOff.whereLooked() + ".");
         }
         glabNote.setText(wrap(String.join(" ", notes)));
         String duoText = "The Duo CLI signs in through glab (glab 1.85.2 and duo 8.68.0 or later), so this turns glab on too.";
