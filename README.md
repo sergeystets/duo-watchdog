@@ -663,7 +663,7 @@ Running `./gradlew test` also renders every dashboard state to PNG (in `intellij
 The VS Code extension builds with npm (Node.js 20+), from the root through Gradle or in `vscode/` directly:
 
 ```bash
-./gradlew :vscode:test               # 119 tests, no VS Code needed         (npm ci && npm test)
+./gradlew :vscode:test               # 120 tests, no VS Code needed         (npm ci && npm test)
 ./gradlew :vscode:packageExtension   # → vscode/duo-watchdog-0.4.0.vsix      (npm run package)
 ./gradlew :vscode:installExtension   # into VS Code; -PcodePath=codium for another CLI
 ```
@@ -677,7 +677,7 @@ still run.
 the IDE, OS and plugin version, where the tokens are kept, the open projects and their WSL distribution, where glab
 was looked for and found (or what WSL printed), each account with its group, scopes, expiry, glab state and last
 refresh, where the Duo CLI's logs were found and how many sessions they count, and the last 100 events. It holds no tokens: anything that looks like a GitLab token is cut to its prefix.
-The same events go to the IDE's log (*Help → Show Log*, lines with `#duowatchdog`). In VS Code: **Duo Watchdog: Copy
+The same events go to the IDE's log (*Help → Show Log*, lines with `[duo-watchdog]`). In VS Code: **Duo Watchdog: Copy
 Diagnostics** and **Duo Watchdog: Show Log** (the *Duo Watchdog* output channel).
 
 <details>

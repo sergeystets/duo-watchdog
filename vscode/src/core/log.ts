@@ -6,6 +6,14 @@ export const TOKEN_PATTERN = /\bgl[a-z]{2,8}-[A-Za-z0-9_-]{8,}/g;
 /** Where a token was. */
 export const MASKED = '•••';
 
+/** What every line of the log starts with, to find them among other extensions' lines. */
+export const TAG = '[duo-watchdog]';
+
+/** A line for the log: the tag, then the message without tokens ({@link scrub}). */
+export function logLine(message: string, secrets: Iterable<string> = []): string {
+    return TAG + ' ' + scrub(message, secrets);
+}
+
 /**
  * The line without tokens: each exact token the caller knows replaced by "•••", and anything shaped like a GitLab
  * token ("glpat-…") by its prefix and "•••", e.g. "glpat-•••".

@@ -12,12 +12,13 @@ import java.util.List;
 
 /**
  * What Duo Watchdog does, for troubleshooting: into the IDE's log (idea.log, category {@code #duowatchdog}) and the
- * last {@link #KEEP} events in memory for Copy Diagnostics. Tokens never get in: every line goes through
- * {@link Redact}.
+ * last {@link #KEEP} events in memory for Copy Diagnostics. Every line starts with {@link #TAG}, to find them among
+ * the other plugins' lines. Tokens never get in: every line goes through {@link Redact}.
  */
 final class DuoLog {
 
     private static final Logger LOG = Logger.getInstance("#duowatchdog");
+    static final String TAG = "[duo-watchdog] ";
     private static final int KEEP = 200;
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm:ss");
     private static final Deque<String> RECENT = new ArrayDeque<>();
@@ -26,13 +27,13 @@ final class DuoLog {
     }
 
     static void info(String message) {
-        String line = Redact.tokens(message);
+        String line = TAG + Redact.tokens(message);
         LOG.info(line);
         keep("INFO " + line);
     }
 
     static void warn(String message) {
-        String line = Redact.tokens(message);
+        String line = TAG + Redact.tokens(message);
         LOG.warn(line);
         keep("WARN " + line);
     }

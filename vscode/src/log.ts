@@ -1,9 +1,10 @@
 import * as vscode from 'vscode';
-import { Logger, RingBuffer, scrub } from './core/log';
+import { Logger, RingBuffer, logLine } from './core/log';
 
 /**
- * The "Duo Watchdog" log (View, Output), and the last 200 lines for Copy Diagnostics. Every line is scrubbed: the
- * tokens the extension has read are masked exactly, and anything shaped like a GitLab token by its prefix.
+ * The "Duo Watchdog" log (View, Output), and the last 200 lines for Copy Diagnostics. Every line starts with
+ * [duo-watchdog] and is scrubbed: the tokens the extension has read are masked exactly, and anything shaped like a
+ * GitLab token by its prefix.
  */
 class Log implements Logger {
 
@@ -46,7 +47,7 @@ class Log implements Logger {
     }
 
     private write(level: 'info' | 'warn', message: string): void {
-        const line = scrub(message, this.secrets);
+        const line = logLine(message, this.secrets);
         this.buffer.push(stamp(new Date()) + ' [' + level + '] ' + line);
         if (level === 'warn') {
             this.channel?.warn(line);

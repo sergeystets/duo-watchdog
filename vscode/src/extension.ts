@@ -72,7 +72,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
     statusBar.update(service.overview());
     // Before the first refresh, which may move the token saved by 0.3 to an account.
-    announceRelease(context, store).catch(e => console.error('Duo Watchdog: the release notice failed', e));
+    announceRelease(context, store).catch(e => console.error('[duo-watchdog] the release notice failed', e));
     service.reschedule();
 }
 

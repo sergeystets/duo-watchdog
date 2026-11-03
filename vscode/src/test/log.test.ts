@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { glabDecisions } from '../core/accounts';
 import { diagnosticsReport, DiagnosticsInput } from '../core/diagnostics';
-import { RingBuffer, scrub } from '../core/log';
+import { logLine, RingBuffer, scrub } from '../core/log';
 import { account, AT } from './fixtures';
 
 /** A made-up token, put together at run time so the source holds nothing shaped like one. */
@@ -25,6 +25,12 @@ test('the scrubber masks the exact tokens it is given, whatever their shape', ()
     assert.equal(scrub(fake('glpat', 'abcdefghijkl'), [fake('glpat', 'abcdefghijkl')]), '•••');
     assert.equal(scrub('abcdefgh and abcdefgh12', ['abcdefgh', 'abcdefgh12']), '••• and •••', 'the longest first');
     assert.equal(scrub('a b c', ['', ' ', 'ab']), 'a b c', 'blank and very short ones are ignored');
+});
+
+test('every log line starts with the tag and holds no token', () => {
+    assert.equal(logLine('refresh gitlab.com/dana.k: ok'), '[duo-watchdog] refresh gitlab.com/dana.k: ok');
+    assert.equal(logLine('Bearer ' + TOKEN), '[duo-watchdog] Bearer glpat-•••');
+    assert.equal(logLine('token=s3cr3t-value-0042', ['s3cr3t-value-0042']), '[duo-watchdog] token=•••');
 });
 
 test('the ring buffer keeps the last lines', () => {
