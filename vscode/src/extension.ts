@@ -3,6 +3,7 @@ import { AccountStore, TOKEN_PREFIX } from './accounts';
 import { Commands } from './commands';
 import { parsePercents } from './core/alert';
 import { DashboardView } from './dashboardView';
+import { GlabSync } from './glabSync';
 import { HistoryCache } from './history';
 import { nodeTransport } from './httpTransport';
 import { CreditsService } from './service';
@@ -14,7 +15,8 @@ export function activate(context: vscode.ExtensionContext): void {
     const store = new AccountStore(context);
     const service = new CreditsService(context, store, nodeTransport);
     const statusBar = new StatusBar();
-    const commands = new Commands(store, service, nodeTransport);
+    const glab = new GlabSync(store, service);
+    const commands = new Commands(store, service, nodeTransport, glab);
     const history = new HistoryCache(store, nodeTransport);
     const dashboard = new DashboardView(context.extensionUri, service, commands, history);
 
@@ -23,6 +25,8 @@ export function activate(context: vscode.ExtensionContext): void {
         statusBar,
         history,
         history.onDidChange(() => dashboard.update()),
+        // glab follows the picked account; a refresh catches up with tokens added or glab installed since.
+        service.onDidRefresh(() => void glab.sync()),
         vscode.window.registerWebviewViewProvider(DashboardView.ID, dashboard),
         service.onDidChange(() => {
             statusBar.update(service.overview());

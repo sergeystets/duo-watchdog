@@ -25,9 +25,17 @@ class GlabTest {
         assertEquals(List.of("/opt/homebrew/bin/glab", "auth", "login", "--hostname", "gitlab.com", "--stdin"),
                 Glab.login("/opt/homebrew/bin/glab", "gitlab.com"));
         assertEquals(List.of("wsl.exe", "-d", "Ubuntu", "--", "bash", "-lc",
-                        "exec glab auth login --hostname \"$0\" --stdin", "gitlab.com"),
-                Glab.loginInWsl("Ubuntu", "gitlab.com"));
-        assertEquals(List.of("wsl.exe", "--", "bash", "-lc", "command -v glab"), Glab.findInWsl(null),
+                        "exec \"$1\" auth login --hostname \"$0\" --stdin", "gitlab.com", "/home/s/.local/bin/glab"),
+                Glab.loginInWsl("Ubuntu", "/home/s/.local/bin/glab", "gitlab.com"));
+        assertEquals(List.of("wsl.exe", "--", "bash", "-lc"), Glab.findInWsl(null).subList(0, 4),
                 "no distribution: WSL's default one");
+    }
+
+    @Test
+    void findsGlabsPathInWhatTheShellPrinted() {
+        assertEquals("/home/linuxbrew/.linuxbrew/bin/glab", Glab.pathIn("/home/linuxbrew/.linuxbrew/bin/glab\n"));
+        assertEquals("/usr/bin/glab", Glab.pathIn("bash: cannot set terminal process group\nbash: no job control\n/usr/bin/glab"));
+        assertNull(Glab.pathIn(""));
+        assertNull(Glab.pathIn("glab: command not found"));
     }
 }

@@ -254,6 +254,34 @@ class CreditsClientTest {
     }
 
     @Test
+    void historyGoesMonthByMonthWhenGitLabFailsOnTheYear() throws Exception {
+        FakeTransport http = new FakeTransport()
+                .reply(500, "")
+                .reply(200, """
+                        {"data":{"currentUser":{"creditsUsage":{"startDate":"2026-10-01","endDate":"2026-10-31",
+                          "dailyUsage":[{"date":"2026-10-02","creditsUsed":5}],"usedFlowTypes":[]}}}}
+                        """)
+                .reply(200, "{\"data\":{\"currentUser\":{\"creditsUsage\":{}}}}")
+                .reply(200, """
+                        {"data":{"currentUser":{"creditsUsage":{"startDate":"2026-09-01","endDate":"2026-09-30",
+                          "dailyUsage":[{"date":"2026-09-10","creditsUsed":7}],"usedFlowTypes":[]}}}}
+                        """)
+                .reply(200, "{\"data\":{\"currentUser\":{\"creditsUsage\":{}}}}");
+        // August and July then fail too (the fake answers 500 when it runs out), and the search stops there.
+
+        History h = new CreditsClient("https://gitlab.com", "t", http)
+                .history("acme", LocalDate.of(2025, 11, 1), LocalDate.of(2026, 10, 18));
+
+        assertEquals(12, h.total(), 1e-9);
+        assertEquals(LocalDate.of(2026, 9, 1), h.start(), "the oldest month GitLab answered");
+        assertEquals(2, h.months().size());
+        assertFalse(http.requests.get(1).getAsJsonObject("variables").has("startDate"),
+                "the current month as the Usage view asks it, without dates");
+        assertEquals("2026-09-01", http.requests.get(3).getAsJsonObject("variables").get("startDate").getAsString());
+        assertEquals(7, http.requests.size(), "the year, two months with their not-billed, then August and July");
+    }
+
+    @Test
     void historyStandsWithoutTheFeaturesOrTheNotBilled() throws Exception {
         FakeTransport http = new FakeTransport()
                 .reply(200, """

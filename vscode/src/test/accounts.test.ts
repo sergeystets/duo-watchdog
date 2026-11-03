@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-    accountId, attention, bareUsername, cliOwner, creditsLeft, expiryPopupKey, glabScopeNote, idOf, isExpired,
+    accountId, afterHandOff, attention, bareUsername, creditsLeft, expiryPopupKey, glabHandOffs, glabOwner, glabScopeNote,
+    idOf, isExpired,
     matchesFilter, migratedAccount, missingUsageScopes, needsMigration, normalized, rejectedPopupKey, sortStates,
     usageReadable, withCli, withToken,
 } from '../core/accounts';
@@ -169,21 +170,61 @@ test("a token for a listed account replaces its token: its group, limit and the 
     assert.equal(fresh.duo, false, 'the Duo CLI is an opt-in');
 });
 
-test('glab and the Duo CLI: one account per GitLab, the Duo CLI through glab', () => {
+test('glab and the Duo CLI are opt-ins, several per GitLab, the Duo CLI through glab', () => {
     const a = account({ glab: true });
-    const b = account({ username: 'dana-contractor' });
+    const b = account({ username: 'dana-contractor', glabRefused: 5 });
     const c = account({ gitlabUrl: 'https://gitlab.acme.dev', glab: true });
     const list = [a, b, c];
     const flags = (accounts: typeof list) => accounts.map(x => (x.glab ? 'g' : '-') + (x.duo ? 'd' : '-'));
 
-    assert.deepEqual(flags(withCli(list, idOf(b), 'glab', true)), ['--', 'g-', 'g-'], 'one account per GitLab');
+    assert.deepEqual(flags(withCli(list, idOf(b), 'glab', true)), ['g-', 'g-', 'g-'], 'the others stay allowed');
     const duo = withCli(list, idOf(b), 'duo', true);
-    assert.deepEqual(flags(duo), ['--', 'gd', 'g-'], 'the Duo CLI turns glab on');
-    assert.deepEqual(flags(withCli(duo, idOf(b), 'glab', false)), ['--', '--', 'g-'], 'glab off turns the Duo CLI off');
-    assert.deepEqual(flags(withCli(duo, idOf(b), 'duo', false)), ['--', 'g-', 'g-'], 'the Duo CLI off keeps glab');
+    assert.deepEqual(flags(duo), ['g-', 'gd', 'g-'], 'the Duo CLI turns glab on');
+    assert.deepEqual(flags(withCli(duo, idOf(b), 'glab', false)), ['g-', '--', 'g-'], 'glab off turns the Duo CLI off');
+    assert.deepEqual(flags(withCli(duo, idOf(b), 'duo', false)), ['g-', 'g-', 'g-'], 'the Duo CLI off keeps glab');
     assert.deepEqual(flags(withCli(list, 'nobody', 'glab', true)), flags(list));
+    assert.equal(withCli(list, idOf(b), 'glab', true)[1].glabRefused, null, 'allowing it again tries a refused token again');
+    assert.equal(normalized({ gitlabUrl: 'https://gitlab.com', username: 'x' }).glabHanded, null);
+});
 
-    assert.equal(cliOwner(list, 'https://GITLAB.com/', 'glab', idOf(b)), a);
-    assert.equal(cliOwner(list, 'https://gitlab.com', 'glab', idOf(a)), undefined);
-    assert.equal(cliOwner(list, 'https://gitlab.com', 'duo'), undefined);
+// On gitlab.com: a and b allowed, glab has b's token, c not allowed; on gitlab.acme.dev: d with the Duo CLI.
+const a = account({ username: 'a', glab: true, tokenSavedAt: 10 });
+const b = account({ username: 'b', glab: true, tokenSavedAt: 20, glabHanded: 20 });
+const c = account({ username: 'c', tokenSavedAt: 30 });
+const d = account({ gitlabUrl: 'https://gitlab.acme.dev', username: 'd', glab: true, duo: true, tokenSavedAt: 40 });
+const LIST = [a, b, c, d];
+const ids = (accounts: readonly { username: string }[]) => accounts.map(x => x.username);
+
+test('glab follows the picked account, else keeps the one it has, else takes the first allowed', () => {
+    assert.equal(glabOwner(LIST, idOf(a), 'gitlab.com'), a, 'the picked account');
+    assert.equal(glabOwner(LIST, idOf(c), 'gitlab.com'), b, 'not allowed for c: glab keeps b');
+    assert.equal(glabOwner(LIST, idOf(d), 'gitlab.com'), b, 'picked on another GitLab: glab keeps b');
+    assert.equal(glabOwner(LIST, idOf(d), 'gitlab.acme.dev'), d);
+    assert.equal(glabOwner([a, { ...b, glabHanded: null }, c], idOf(c), 'gitlab.com'), a, 'else the first allowed');
+    assert.equal(glabOwner([a, { ...b, tokenSavedAt: 21 }, c], null, 'gitlab.com'), a,
+        "b's token was replaced: glab has an old one, so no one's current token");
+    assert.equal(glabOwner(LIST, idOf(a), 'gitlab.lab.io'), undefined);
+});
+
+test('a sync hands over what glab does not have, once a token', () => {
+    assert.deepEqual(ids(glabHandOffs(LIST, idOf(a), true)), ['a', 'd'], 'gitlab.com switches to a; d is new');
+    assert.deepEqual(ids(glabHandOffs(LIST, idOf(b), true)), ['d'], 'glab has b already');
+    assert.deepEqual(ids(glabHandOffs(LIST, idOf(c), true)), ['d'], 'c is not allowed: b stays');
+    const refused = [a, b, c, { ...d, glabRefused: 40 }];
+    assert.deepEqual(ids(glabHandOffs(refused, idOf(b), true)), [], 'a refused token is not tried again');
+    assert.deepEqual(ids(glabHandOffs([a, b, c, { ...d, glabRefused: 40, tokenSavedAt: 41 }], idOf(b), true)), ['d'],
+        'until the token changes');
+    assert.deepEqual(ids(glabHandOffs([a, { ...b, tokenSavedAt: 21 }, c], idOf(b), true)), ['b'], 'a replaced token');
+    assert.deepEqual(glabHandOffs(LIST, idOf(a), false), [], 'glab not installed: nothing');
+    assert.deepEqual(glabHandOffs([c], idOf(c), true), [], 'nobody allowed');
+});
+
+test('after a hand-off glab has that token only, and a refused one is remembered', () => {
+    const took = afterHandOff(LIST, idOf(a), true);
+    assert.deepEqual(took.map(x => x.glabHanded), [10, null, null, null], 'glab has a now, not b');
+    assert.equal(took[0].glabRefused, null);
+    const turnedDown = afterHandOff(LIST, idOf(a), false);
+    assert.deepEqual(turnedDown.map(x => [x.glabHanded, x.glabRefused]), [[null, 10], [20, null], [null, null], [null, null]],
+        'glab still has b');
+    assert.deepEqual(afterHandOff(LIST, idOf(d), true).map(x => x.glabHanded), [null, 20, null, 40], 'another GitLab: b stays');
 });

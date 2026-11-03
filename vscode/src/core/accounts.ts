@@ -26,10 +26,14 @@ export interface Account {
     expiresAt: IsoDate | null;
     /** The token's scopes as GitLab gave them; null when it did not say. */
     scopes: string[] | null;
-    /** The token is handed to glab for this account's GitLab. */
+    /** This account may be handed to glab for its GitLab: glab follows the picked account among those allowed. */
     glab: boolean;
-    /** The GitLab Duo CLI uses the token, through glab. Implies glab. */
+    /** The GitLab Duo CLI may use the token, through glab. Implies glab. */
     duo: boolean;
+    /** The tokenSavedAt of the token glab took, while glab has it; null when glab has another account's. */
+    glabHanded: number | null;
+    /** The tokenSavedAt of a token glab turned down, so it is not tried again until the token changes. */
+    glabRefused: number | null;
     /** The last per-period alert shown, so it is not repeated on every refresh. */
     lastAlertKey: string | null;
     /** The one-time popups already shown: the token expiring soon, and GitLab turning the token down. */
@@ -98,6 +102,8 @@ export function normalized(stored: Partial<Account> & { gitlabUrl: string; usern
         scopes: Array.isArray(stored.scopes) ? stored.scopes : null,
         glab: stored.glab === true || stored.duo === true,
         duo: stored.duo === true,
+        glabHanded: typeof stored.glabHanded === 'number' ? stored.glabHanded : null,
+        glabRefused: typeof stored.glabRefused === 'number' ? stored.glabRefused : null,
         lastAlertKey: stored.lastAlertKey ?? null,
         expiryPopupKey: stored.expiryPopupKey ?? null,
         rejectedPopupKey: stored.rejectedPopupKey ?? null,
@@ -304,39 +310,86 @@ export function withToken(existing: Account | undefined, token: NewToken,
         limit: fresh.limit > 0 ? fresh.limit : DEFAULT_LIMIT,
         glab: false,
         duo: false,
+        glabHanded: null,
+        glabRefused: null,
         lastAlertKey: null,
         expiryPopupKey: null,
         rejectedPopupKey: null,
     };
 }
 
-/** The account on the same GitLab that a tool uses now, other than the given one; undefined when none. */
-export function cliOwner(accounts: readonly Account[], gitlabUrl: string, cli: Cli, except?: string): Account | undefined {
-    const h = accountHost(gitlabUrl);
-    return accounts.find(a => a[cli] && accountHost(a.gitlabUrl) === h && idOf(a) !== except);
+/** The account may be handed to glab: glab or the Duo CLI is on for it. */
+export function allowsGlab(account: Account): boolean {
+    return account.glab || account.duo;
+}
+
+/** glab has this account's current token. */
+export function glabHas(account: Account): boolean {
+    return account.glabHanded != null && account.glabHanded === account.tokenSavedAt;
+}
+
+/** glab turned this account's current token down. */
+export function glabRefusedIt(account: Account): boolean {
+    return account.glabRefused != null && account.glabRefused === account.tokenSavedAt;
+}
+
+/** The account on that GitLab whose current token glab has; undefined when none. */
+export function glabHolder(accounts: readonly Account[], host: string): Account | undefined {
+    return accounts.find(a => accountHost(a.gitlabUrl) === host && glabHas(a));
 }
 
 /**
- * The accounts after turning glab or the Duo CLI on or off for one. glab keeps one token per GitLab, so turning
- * either on for an account turns both off for the others on that GitLab. The Duo CLI signs in through glab: turning
- * it on turns glab on too, and turning glab off turns it off.
+ * The account glab should have for a GitLab: the picked one when glab is allowed for it and it is on that GitLab;
+ * else the one whose current token glab has; else the first allowed one, the list being most credits left first.
+ * The same rule as Accounts.glabOwner in the plugin.
  */
-export function withCli(accounts: readonly Account[], id: string, cli: Cli, on: boolean): Account[] {
-    const target = accounts.find(a => idOf(a) === id);
-    if (target == null) {
+export function glabOwner(accounts: readonly Account[], picked: string | null, host: string): Account | undefined {
+    const allowed = accounts.filter(a => allowsGlab(a) && accountHost(a.gitlabUrl) === host);
+    return allowed.find(a => idOf(a) === picked) ?? allowed.find(glabHas) ?? allowed[0];
+}
+
+/**
+ * The accounts whose token to hand to glab now, one per GitLab: each GitLab's owner, unless glab has its current
+ * token already, or turned that token down. Nothing when glab is not installed.
+ */
+export function glabHandOffs(accounts: readonly Account[], picked: string | null, installed: boolean): Account[] {
+    if (!installed) {
+        return [];
+    }
+    const hosts = [...new Set(accounts.filter(allowsGlab).map(a => accountHost(a.gitlabUrl)))];
+    return hosts.map(h => glabOwner(accounts, picked, h))
+        .filter((owner): owner is Account => owner != null && !glabHas(owner) && !glabRefusedIt(owner));
+}
+
+/**
+ * The accounts after a hand-off: glab took the token (and no longer has the others of that GitLab), or turned it
+ * down (not tried again until the token changes).
+ */
+export function afterHandOff(accounts: readonly Account[], id: string, ok: boolean): Account[] {
+    const handed = accounts.find(a => idOf(a) === id);
+    if (handed == null) {
         return [...accounts];
     }
-    const h = accountHost(target.gitlabUrl);
+    const h = accountHost(handed.gitlabUrl);
     return accounts.map(a => {
         if (idOf(a) === id) {
-            if (cli === 'glab') {
-                return { ...a, glab: on, duo: on && a.duo };
-            }
-            return { ...a, duo: on, glab: on || a.glab };
+            return ok ? { ...a, glabHanded: a.tokenSavedAt, glabRefused: null } : { ...a, glabRefused: a.tokenSavedAt };
         }
-        if (on && accountHost(a.gitlabUrl) === h && (a.glab || a.duo)) {
-            return { ...a, glab: false, duo: false };
+        return ok && accountHost(a.gitlabUrl) === h && a.glabHanded != null ? { ...a, glabHanded: null } : a;
+    });
+}
+
+/**
+ * The accounts after allowing glab or the Duo CLI for one, or not. Several accounts of a GitLab may be allowed; glab
+ * follows the picked one. The Duo CLI signs in through glab: turning it on turns glab on too, and turning glab off
+ * turns it off. Turning one on tries a token glab turned down again. Nothing is ever signed out.
+ */
+export function withCli(accounts: readonly Account[], id: string, cli: Cli, on: boolean): Account[] {
+    return accounts.map(a => {
+        if (idOf(a) !== id) {
+            return a;
         }
-        return a;
+        const retry = on ? { glabRefused: null } : {};
+        return cli === 'glab' ? { ...a, glab: on, duo: on && a.duo, ...retry } : { ...a, duo: on, glab: on || a.glab, ...retry };
     });
 }

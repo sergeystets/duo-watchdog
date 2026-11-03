@@ -33,19 +33,43 @@ public final class Glab {
     }
 
     /**
-     * The same inside WSL: {@code wsl.exe [-d <distro>] -- bash -lc 'exec glab auth login …'}. A login shell, so
-     * glab is found where the user's shell finds it (~/.local/bin, Homebrew); the host goes in as an argument,
-     * never into the script.
+     * The same inside WSL: {@code wsl.exe [-d <distro>] -- bash -lc 'exec "$1" auth login …'} with glab's path as
+     * {@link #findInWsl} printed it. The host and the path go in as arguments, never into the script.
      *
      * @param distro the distribution, or null for WSL's default one
      */
-    public static List<String> loginInWsl(String distro, String host) {
-        return inWsl(distro, "exec glab auth login --hostname \"$0\" --stdin", host);
+    public static List<String> loginInWsl(String distro, String glab, String host) {
+        return inWsl(distro, "exec \"$1\" auth login --hostname \"$0\" --stdin", host, glab);
     }
 
-    /** Whether glab is installed in WSL: {@code command -v glab} in a login shell, which prints its path. */
+    /**
+     * Where glab is in WSL, printed as a path on the last line: what a login shell finds, else the usual install
+     * places, else what an interactive shell finds, since Ubuntu's ~/.bashrc, where Homebrew and ~/go/bin are often
+     * added, does nothing for a shell that is not interactive.
+     */
     public static List<String> findInWsl(String distro) {
-        return inWsl(distro, "command -v glab");
+        return inWsl(distro, String.join("; ",
+                "for c in \"$(command -v glab 2>/dev/null)\" /usr/bin/glab /usr/local/bin/glab "
+                        + "/home/linuxbrew/.linuxbrew/bin/glab \"$HOME/.linuxbrew/bin/glab\" \"$HOME/.local/bin/glab\" "
+                        + "\"$HOME/go/bin/glab\" \"$HOME/bin/glab\" /snap/bin/glab",
+                "do [ -n \"$c\" ] && [ -x \"$c\" ] && { echo \"$c\"; exit 0; }",
+                "done",
+                "bash -ic 'command -v glab' 2>/dev/null | tail -n 1"));
+    }
+
+    /** The path {@link #findInWsl} printed: its last line that is an absolute path, or null. */
+    public static String pathIn(String output) {
+        if (output == null) {
+            return null;
+        }
+        String[] lines = output.strip().split("\\R");
+        for (int i = lines.length - 1; i >= 0; i--) {
+            String line = lines[i].strip();
+            if (line.startsWith("/") && line.endsWith("glab")) {
+                return line;
+            }
+        }
+        return null;
     }
 
     /** The Duo CLI's own login file in WSL, printed when there is one. */

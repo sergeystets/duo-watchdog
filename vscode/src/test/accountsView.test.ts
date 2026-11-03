@@ -3,7 +3,8 @@ import { test } from 'node:test';
 import { glabScopeNote, idOf } from '../core/accounts';
 import {
     accountDetail, accountLabel, accountName, accountsDashboard, accountStatusText, addedText, addPlan, alertText,
-    cliOffText, cliOnText, duoNote, expiryText, glabNote, othersNeedAttention, rejectedText, tooltipModel,
+    cliOffText, cliOnText, duoNote, expiryText, GLAB_FOLLOWS, glabCaption, glabNote, glabNowText, othersNeedAttention,
+    rejectedText, tooltipModel,
 } from '../core/accountsView';
 import { Snapshots } from '../core/report';
 import { account, state, TODAY } from './fixtures';
@@ -31,9 +32,11 @@ test('an account reads as in the mockup', () => {
     assert.equal(accountDetail(platform, TODAY), '9.6 left · ••••••• · expires in 3 days');
     assert.equal(accountDetail(northwind, TODAY), '••••••• · expired Oct 15');
     assert.equal(accountDetail(lab, TODAY), 'no token');
-    assert.equal(accountDetail(untracked, TODAY), 'not tracked · ••••••• · glab uses it');
+    assert.equal(accountDetail(untracked, TODAY), 'not tracked · ••••••• · glab allowed');
+    assert.equal(accountDetail(untracked, TODAY, 'glab signs in to git.northwind.io with this token'),
+        'not tracked · ••••••• · glab signs in to git.northwind.io with this token');
     assert.equal(accountDetail(state(account({ expiresAt: null, glab: true, duo: true }), null, 'rejected'), TODAY),
-        '••••••• · turned down by GitLab · glab and the Duo CLI use it');
+        '••••••• · turned down by GitLab · glab and the Duo CLI allowed');
     assert.equal(accountDetail(state(account({ expiresAt: '2026-12-01' }), null, 'noGroup'), TODAY),
         'no group · ••••••• · expires Dec 1');
 });
@@ -104,7 +107,7 @@ test('the dashboard shows one account, with the picker and what to fix', () => {
     assert.equal(missing.actionLabel, 'Add Token…');
     const notTracked = accountsDashboard(ALL, untracked.id, Snapshots.notConfigured(), PERCENTS, TODAY).notice!;
     assert.equal(notTracked.title, 'Usage is not tracked for this account');
-    assert.ok(notTracked.text.includes('has no ai_features scope') && notTracked.text.endsWith('glab still uses it.'), notTracked.text);
+    assert.ok(notTracked.text.includes('has no ai_features scope') && notTracked.text.endsWith('glab may still use it.'), notTracked.text);
     const noGroup = accountsDashboard([state(account({ groupPath: '' }), null, 'noGroup')], null, Snapshots.notConfigured(), PERCENTS, TODAY);
     assert.equal(noGroup.notice!.action, 'findGroup');
 
@@ -162,21 +165,35 @@ test('after adding, the notification says what happened', () => {
     assert.ok(addedText('untracked', untracked.account, false, null).includes('Its usage is not tracked'));
 });
 
-test('glab and the Duo CLI say who uses which token', () => {
-    assert.equal(glabNote(acme.account, 'dana.ops', 'https://gitlab.com', ['read_api', 'ai_features']),
-        "glab keeps one token per GitLab. It uses @dana.k's for gitlab.com now; Yes switches it to @dana.ops. "
-        + "The token lacks the api scope, so glab can only read with it, and can't git push over HTTPS.");
-    assert.ok(glabNote(undefined, 'dana.ops', 'https://gitlab.com', null).includes('has not given glab a token for gitlab.com'));
-    assert.ok(duoNote(false, acme.account, 'dana.ops', 'https://gitlab.com').includes("also signs glab in to gitlab.com with this token, instead of @dana.k's"));
+test('glab and the Duo CLI say that glab follows the picked account', () => {
+    assert.equal(GLAB_FOLLOWS, 'glab keeps one token per GitLab and follows the account you pick, among those allowed here.');
+    assert.equal(glabNote(['read_api', 'ai_features']), GLAB_FOLLOWS
+        + " The token lacks the api scope, so glab can only read with it, and can't git push over HTTPS.");
+    assert.equal(glabNote(null), GLAB_FOLLOWS);
+    assert.equal(duoNote(true), 'The Duo CLI signs in through glab, which follows the account you pick.');
+    assert.ok(duoNote(false).startsWith('The Duo CLI signs in through glab, so Yes allows glab for this account too.'));
 
-    assert.equal(cliOnText(acme.account, 'glab', undefined, null), 'Duo Watchdog: glab uses the token of @dana.k for gitlab.com now.');
-    assert.equal(cliOnText(acme.account, 'duo', account({ username: 'bob' }), null),
-        "Duo Watchdog: the GitLab Duo CLI uses the token of @dana.k for gitlab.com now, through glab, instead of @bob's. "
-        + 'This turned on glab for this account too.');
-    assert.ok(cliOnText({ ...acme.account, glab: true }, 'glab', undefined, glabScopeNote(['read_api', 'ai_features']))
-        .includes('glab can only read with it'));
+    const a = account({ username: 'a', glab: true, tokenSavedAt: 10 });
+    const b = account({ username: 'b', glab: true, tokenSavedAt: 20, glabHanded: 20 });
+    const list = [a, b];
+    assert.equal(glabCaption(b, list, idOf(b), true), 'glab signs in to gitlab.com with this token');
+    assert.equal(glabCaption({ ...b, duo: true }, list, null, true), 'glab and the Duo CLI sign in to gitlab.com with this token');
+    assert.equal(glabCaption(a, list, idOf(b), true), "glab switches to this token when you pick @a. It has @b's now");
+    assert.equal(glabCaption(a, [a], null, true), 'glab gets this token next', 'the account glab should have, before the sync');
+    assert.equal(glabCaption(a, list, idOf(b), false), "glab isn't found on this computer");
+    assert.equal(glabCaption({ ...a, glabRefused: 10 }, list, idOf(a), true), 'glab turned this token down');
+    assert.equal(glabCaption(account(), list, null, true), null, 'not allowed');
+    assert.equal(glabCaption(b, list, null, false), 'glab signs in to gitlab.com with this token', 'it has it, whatever glab is now');
+
+    assert.equal(glabNowText(account({ scopes: ['api', 'write_repository', 'ai_features'] })),
+        'Duo Watchdog: glab now signs in to gitlab.com as @dana.k.');
+    assert.ok(glabNowText(acme.account).endsWith("The token lacks the api scope, so glab can only read with it, and can't git push over HTTPS."));
+    assert.equal(cliOnText(a, 'glab', false, glabCaption(a, list, idOf(b), true)),
+        "Duo Watchdog: glab may use the token of @a on gitlab.com. glab switches to this token when you pick @a. It has @b's now.");
+    assert.equal(cliOnText({ ...a, duo: true }, 'duo', false, null),
+        'Duo Watchdog: the GitLab Duo CLI may use the token of @a on gitlab.com, through glab. That allows glab too.');
     assert.equal(cliOffText({ ...acme.account, glab: true }, 'glab'),
-        'Duo Watchdog: the token of @dana.k is no longer handed to glab. glab stays signed in to gitlab.com.');
+        'Duo Watchdog: glab no longer gets the token of @dana.k. Nothing is signed out: glab stays signed in to gitlab.com.');
     assert.ok(cliOffText({ ...acme.account, glab: true, duo: true }, 'duo').includes('Nothing is signed out'));
     assert.equal(idOf(acme.account), acme.id);
 });

@@ -30,6 +30,8 @@ export function account(change: Partial<Account> = {}): Account {
         scopes: ['read_api', 'ai_features'],
         glab: false,
         duo: false,
+        glabHanded: null,
+        glabRefused: null,
         lastAlertKey: null,
         expiryPopupKey: null,
         rejectedPopupKey: null,

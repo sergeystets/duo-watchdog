@@ -127,6 +127,17 @@ class AccountsTest {
     }
 
     @Test
+    void glabFollowsThePickedAccountAmongThoseAllowed() {
+        List<String> allowed = List.of("sergii", "olena");
+        assertEquals("olena", Accounts.glabOwner(allowed, "olena", a -> a.equals("sergii")), "picked wins");
+        assertEquals("sergii", Accounts.glabOwner(allowed, "dana", a -> a.equals("sergii")),
+                "picked is not allowed: glab keeps what it has");
+        assertEquals("olena", Accounts.glabOwner(allowed, null, a -> a.equals("olena")));
+        assertEquals("sergii", Accounts.glabOwner(allowed, null, a -> false), "none has it: the first");
+        assertNull(Accounts.glabOwner(List.of(), "olena", a -> true));
+    }
+
+    @Test
     void theTokenPageAsksForWhatGlabNeedsTooWhenAsked() {
         assertTrue(GitLabAddress.tokenPage("https://gitlab.com", true).endsWith("scopes=api,write_repository,ai_features"));
         assertTrue(GitLabAddress.tokenPage("https://gitlab.com", false).endsWith("scopes=read_api,ai_features"));

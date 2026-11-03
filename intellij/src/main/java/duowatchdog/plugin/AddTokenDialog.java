@@ -282,15 +282,8 @@ final class AddTokenDialog extends DialogWrapper {
         glab.setText("Also use it for glab on " + host);
         duo.setText("Also use it for the GitLab Duo CLI on " + host);
         List<String> notes = new ArrayList<>();
-        String self = found != null && found.username() != null ? Accounts.id(found.gitlabUrl(), found.username()) : "";
-        existing.stream()
-                .filter(a -> a.glab && a.host().equalsIgnoreCase(host) && !a.id().equals(self))
-                .findFirst()
-                .ifPresentOrElse(
-                        other -> notes.add("glab keeps one token per GitLab. It uses @" + other.username + "'s for " + host
-                                + " now; ticking this switches it" + (found != null && found.username() != null
-                                ? " to @" + found.username() : "") + "."),
-                        () -> notes.add("glab keeps one token per GitLab; Duo Watchdog gives it this one."));
+        notes.add("glab keeps one token per GitLab and follows the account you pick in the tool window, among those "
+                + "with this ticked.");
         if (ok && found.info() != null) {
             String scopes = Accounts.glabScopeNote(found.info().scopes());
             if (scopes != null) {

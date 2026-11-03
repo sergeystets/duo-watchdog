@@ -137,7 +137,9 @@ an account already in the list **replaces** that account's token; its group and 
 Each account has two boxes, **off unless you tick them**: *glab* and *the GitLab Duo CLI*. With glab ticked, Duo
 Watchdog hands the account's token to [glab](https://docs.gitlab.com/cli/) for its GitLab
 (`glab auth login --hostname <host> --stdin`, the token on glab's input) when you click OK or Apply, and again whenever
-you replace the token. glab keeps one token per GitLab, so only one account per GitLab can have it.
+you replace the token. glab keeps one token per GitLab, so it **follows the account you pick** in the tool window,
+among those with the box ticked: picking another one hands glab its token ("glab now signs in to gitlab.com as
+@olena"), and the Duo CLI follows, since it signs in through glab.
 
 The [GitLab Duo CLI](https://docs.gitlab.com/user/gitlab_duo_cli/) signs in through glab (glab 1.85.2 and duo 8.68.0 or
 later), so ticking it turns glab on too. If the Duo CLI already has a login of its own in `~/.gitlab/storage.json`, it
@@ -624,7 +626,7 @@ Running `./gradlew test` also renders every dashboard state to PNG (in `intellij
 The VS Code extension builds with npm (Node.js 20+), from the root through Gradle or in `vscode/` directly:
 
 ```bash
-./gradlew :vscode:test               # 76 tests, no VS Code needed          (npm ci && npm test)
+./gradlew :vscode:test               # 81 tests, no VS Code needed          (npm ci && npm test)
 ./gradlew :vscode:packageExtension   # → vscode/duo-watchdog-0.4.0.vsix      (npm run package)
 ./gradlew :vscode:installExtension   # into VS Code; -PcodePath=codium for another CLI
 ```

@@ -2,15 +2,16 @@ import * as vscode from 'vscode';
 import { AccountStore } from './accounts';
 import { groupPath, tokenPage, trimSlashes } from './core/address';
 import {
-    accountGroup, accountHost, accountId, AccountState, Cli, cliOwner, DEFAULT_LIMIT, Filter, glabScopeNote, hasCredits, idOf,
+    accountGroup, accountHost, accountId, AccountState, Cli, DEFAULT_LIMIT, Filter, glabScopeNote, hasCredits, idOf,
     isExpired, matchesFilter, withCli, withToken,
 } from './core/accounts';
 import {
-    accountDetail, accountName, addPlan, addedText, cliOffText, cliOnText, duoNote, glabNote,
+    accountDetail, accountName, addPlan, addedText, cliOffText, cliOnText, duoNote, glabCaption, glabNote,
 } from './core/accountsView';
 import { CreditsClient, endpoint, groupLabel, Groups, TokenInfo, Transport } from './core/client';
 import { localToday } from './core/dates';
-import { duoHasItsOwnLogin, handOffToGlab, HandOff } from './glab';
+import { findGlab } from './glab';
+import { GlabSync } from './glabSync';
 import { CreditsService } from './service';
 import { settings } from './settings';
 
@@ -27,14 +28,17 @@ interface AccountItem extends vscode.QuickPickItem {
     showAll?: boolean;
 }
 
-const DUO_OWN_LOGIN = 'Duo Watchdog: the Duo CLI has its own login in ~/.gitlab/storage.json and keeps using it. '
-    + "Delete its settings there to make it use glab's.";
-
 /** The commands that add, replace and manage accounts. */
 export class Commands {
 
     constructor(private readonly store: AccountStore, private readonly service: CreditsService,
-                private readonly transport: Transport) {
+                private readonly transport: Transport, private readonly glab: GlabSync) {
+    }
+
+    /** Shows the account in the status bar and the dashboard, and glab follows it. */
+    async pick(id: string): Promise<void> {
+        await this.service.select(id);
+        await this.glab.sync();
     }
 
     register(): vscode.Disposable[] {
@@ -120,36 +124,31 @@ export class Commands {
             fresh = { groupPath: group, limit };
         }
 
-        // glab and the Duo CLI are opt-ins: only a Yes turns them on. An account that already has them keeps them.
-        const others = this.store.list();
+        // glab and the Duo CLI are opt-ins: only a Yes allows them. An account that already has them keeps them.
         let glab = existing?.glab ?? false;
         let duo = existing?.duo ?? false;
         if (!glab) {
-            glab = await askYesNo('Also use it for glab on ' + host + '?',
-                'sign glab in to ' + host + ' with this token',
-                glabNote(cliOwner(others, gitlabUrl, 'glab', id), who.username, gitlabUrl, scopes));
+            glab = await askYesNo('Also use it for glab on ' + host + '?', 'allow glab to sign in to ' + host + ' with it',
+                glabNote(scopes));
         }
         if (!duo) {
-            duo = await askYesNo('Also use it for the GitLab Duo CLI on ' + host + '?',
-                'the Duo CLI signs in through glab',
-                duoNote(glab, cliOwner(others, gitlabUrl, 'glab', id), who.username, gitlabUrl));
+            duo = await askYesNo('Also use it for the GitLab Duo CLI on ' + host + '?', 'the Duo CLI signs in through glab',
+                duoNote(glab));
         }
 
         await this.store.storeToken(id, token);
-        await this.store.put(withToken(existing, { gitlabUrl, username: who.username, info: who.info, savedAt: Date.now() }, fresh));
+        let saved = withToken(existing, { gitlabUrl, username: who.username, info: who.info, savedAt: Date.now() }, fresh);
+        if (glab || duo) {
+            saved = withCli([saved], id, duo ? 'duo' : 'glab', true)[0];
+        }
+        await this.store.put(saved);
         await this.service.select(id);
         this.service.refreshSoon();
 
-        let cli: HandOff | null = null;
-        if (glab || duo) {
-            cli = await this.signInGlab(host, token);
-            if (cli.ok) {
-                await this.store.saveAll(withCli(this.store.list(), id, duo ? 'duo' : 'glab', true));
-                this.service.changedLocally();
-            }
-        }
+        // The picked account now: glab follows it, and takes the new token.
+        const handed = (await this.glab.sync(id)).find(h => idOf(h.account) === id);
         const account = this.store.get(id)!;
-        const text = addedText(plan.kind, account, cli?.ok === true, glabScopeNote(scopes));
+        const text = addedText(plan.kind, account, handed?.result.ok === true, glabScopeNote(scopes));
         const open = 'Open Dashboard';
         const shown = plan.kind === 'untracked' ? vscode.window.showWarningMessage(text, open)
             : vscode.window.showInformationMessage(text, open);
@@ -158,37 +157,26 @@ export class Commands {
                 void vscode.commands.executeCommand('duoWatchdog.openDashboard');
             }
         });
-        if (cli != null && !cli.ok) {
-            void vscode.window.showWarningMessage('Duo Watchdog: ' + cli.message);
-        } else if (cli?.ok && account.duo && await duoHasItsOwnLogin()) {
-            void vscode.window.showWarningMessage(DUO_OWN_LOGIN);
-        }
-    }
-
-    private signInGlab(host: string, token: string): Thenable<HandOff> {
-        return vscode.window.withProgress(
-            { location: vscode.ProgressLocation.Notification, title: 'Signing glab in to ' + host },
-            () => handOffToGlab(host, token));
     }
 
     /**
-     * Turns glab or the Duo CLI on or off for an account. On hands the token to glab for its GitLab; off only stops
-     * handing it over, and signs nothing out.
+     * Allows glab or the Duo CLI for an account, or not. Allowing it hands the token to glab when the account is the
+     * one glab follows; not allowing it only stops the hand-offs, and signs nothing out.
      */
     async toggleCli(id: string, cli: Cli): Promise<void> {
         const account = this.store.get(id);
         if (account == null) {
             return;
         }
-        const host = accountHost(account.gitlabUrl);
         if (account[cli]) {
             await this.store.saveAll(withCli(this.store.list(), id, cli, false));
             this.service.changedLocally();
             void vscode.window.showInformationMessage(cliOffText(account, cli));
+            // Another allowed account may be the one glab follows now.
+            await this.glab.sync();
             return;
         }
-        const token = await this.store.token(id);
-        if (!token) {
+        if (!await this.store.token(id)) {
             const add = 'Add Token';
             const choice = await vscode.window.showWarningMessage('Duo Watchdog: ' + accountName(account)
                 + ' has no token to give glab. Add one first.', add);
@@ -197,18 +185,20 @@ export class Commands {
             }
             return;
         }
-        const previous = cliOwner(this.store.list(), account.gitlabUrl, 'glab', id);
-        const result = await this.signInGlab(host, token);
-        if (!result.ok) {
-            void vscode.window.showWarningMessage('Duo Watchdog: ' + result.message);
-            return;
-        }
         await this.store.saveAll(withCli(this.store.list(), id, cli, true));
         this.service.changedLocally();
-        void vscode.window.showInformationMessage(cliOnText(account, cli, previous, glabScopeNote(account.scopes)));
-        if (cli === 'duo' && await duoHasItsOwnLogin()) {
-            void vscode.window.showWarningMessage(DUO_OWN_LOGIN);
+        const handed = (await this.glab.sync()).find(h => idOf(h.account) === id);
+        if (handed?.result.ok && (cli === 'glab' || account.glab)) {
+            return; // "glab now signs in to <host> as @<user>." said it.
         }
+        if (handed != null && !handed.result.ok) {
+            return; // glab's own words said it.
+        }
+        const now = this.store.get(id)!;
+        const installed = await findGlab() != null;
+        const caption = handed?.result.ok ? null : glabCaption(now, this.service.overview().states.map(s => s.account),
+            this.service.overview().selected?.id ?? null, installed);
+        void vscode.window.showInformationMessage(cliOnText(now, cli, account.glab, caption));
     }
 
     /**
@@ -224,6 +214,7 @@ export class Commands {
         let current = filter;
         let first = true;
         let open = true;
+        let installed: boolean | null = null;
 
         const render = () => {
             if (!open) {
@@ -247,7 +238,9 @@ export class Commands {
             if (states.length > 0) {
                 items.push({ label: 'accounts, most credits left first', kind: vscode.QuickPickItemKind.Separator });
             }
-            items.push(...shown.map(s => accountItem(s, s.id === selected?.id, today)));
+            const accounts = states.map(s => s.account);
+            items.push(...shown.map(s => accountItem(s, s.id === selected?.id, today,
+                glabCaption(s.account, accounts, selected?.id ?? null, installed))));
             if (shown.length === 0 && states.length > 0) {
                 items.push({
                     label: '$(filter) ' + (current === 'credits' ? 'No account has credits left.' : 'No expired tokens.'),
@@ -308,7 +301,7 @@ export class Commands {
             if (item?.add) {
                 void this.addToken();
             } else if (item?.id != null) {
-                void this.service.select(item.id);
+                void this.pick(item.id);
             }
         });
         const changes = this.service.onDidChange(render);
@@ -319,6 +312,10 @@ export class Commands {
         });
         render();
         pick.show();
+        void findGlab().then(found => {
+            installed = found != null;
+            render();
+        });
     }
 
     async setGroup(id: string): Promise<void> {
@@ -440,7 +437,7 @@ export class Commands {
     }
 }
 
-function accountItem(state: AccountState, selected: boolean, today: string): AccountItem {
+function accountItem(state: AccountState, selected: boolean, today: string, glab: string | null): AccountItem {
     const account = state.account;
     const host = accountHost(account.gitlabUrl);
     const button = (icon: string, tooltip: string, action: Action): ActionButton =>
@@ -449,12 +446,12 @@ function accountItem(state: AccountState, selected: boolean, today: string): Acc
         id: state.id,
         label: (selected ? '$(check) ' : '$(account) ') + '@' + account.username,
         description: [host, accountGroup(account)].filter(part => part !== '').join(' · '),
-        detail: accountDetail(state, today),
+        detail: accountDetail(state, today, glab),
         buttons: [
-            button('terminal', account.glab ? 'Stop handing this token to glab (glab stays signed in)'
-                : 'Use this token for glab on ' + host, 'glab'),
-            button('hubot', account.duo ? 'Stop using this token for the GitLab Duo CLI (nothing is signed out)'
-                : 'Use this token for the GitLab Duo CLI on ' + host + ' (through glab)', 'duo'),
+            button('terminal', account.glab ? 'Stop allowing glab to use this token (nothing is signed out)'
+                : 'Use for glab on ' + host + ': glab follows the account you pick, among those allowed', 'glab'),
+            button('hubot', account.duo ? 'Stop allowing the GitLab Duo CLI to use this token (nothing is signed out)'
+                : 'Use for the GitLab Duo CLI on ' + host + ' (it signs in through glab)', 'duo'),
             button('organization', 'Set Group Path', 'group'),
             button('dashboard', 'Set Limit', 'limit'),
             button('key', state.problem === 'noToken' ? 'Add Token' : 'Replace Token', 'replace'),
