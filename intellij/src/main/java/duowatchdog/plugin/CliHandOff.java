@@ -80,6 +80,8 @@ final class CliHandOff {
             return last.orElse(null);
         }
         Optional<Target> now = Optional.ofNullable(look());
+        DuoLog.info("glab lookup (" + whereLooked() + "): " + now.map(t -> t.name() + " at "
+                + (t.wsl() ? t.wslPath() : t.exe().getPath())).orElse("not found" + (wslSaid.isEmpty() ? "" : "; WSL said: " + wslSaid)));
         found = now;
         foundAt = Instant.now();
         duoOwnLogin = readDuoLogin(now.orElse(null));
@@ -243,11 +245,19 @@ final class CliHandOff {
             }
             String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8)
                     .replace("\u0000", "").trim();
+            if (input != null) {
+                output = output.replace(input.trim(), "•••");
+            }
             if (output.length() > 400) {
                 output = output.substring(output.length() - 400);
             }
+            // The command never holds a token: that goes on the input.
+            DuoLog.info("ran " + String.join(" ", command.subList(0, Math.min(command.size(), 6)))
+                    + (command.size() > 6 ? " …" : "") + ": exit " + process.exitValue()
+                    + (output.isEmpty() ? "" : ", " + output.replace('\n', ' ')));
             return new Result(process.exitValue() == 0, output);
         } catch (IOException e) {
+            DuoLog.warn("could not run " + command.get(0) + ": " + e.getMessage());
             return new Result(false, "Could not run " + command.get(0) + ": " + e.getMessage());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

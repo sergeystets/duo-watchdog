@@ -348,17 +348,36 @@ export function glabOwner(accounts: readonly Account[], picked: string | null, h
     return allowed.find(a => idOf(a) === picked) ?? allowed.find(glabHas) ?? allowed[0];
 }
 
+/** What a sync does for a GitLab: hand the owner's token over, or why not. */
+export type GlabAction = 'hand' | 'has' | 'refused' | 'notInstalled';
+
+export interface GlabDecision {
+    host: string;
+    /** The accounts of that GitLab glab may have, in the list's order. */
+    allowed: string[];
+    /** The account glab should have (glabOwner). */
+    owner: string;
+    action: GlabAction;
+}
+
+/** For each GitLab with an account glab may have: which one it should have, and whether its token is handed now. */
+export function glabDecisions(accounts: readonly Account[], picked: string | null, installed: boolean): GlabDecision[] {
+    const hosts = [...new Set(accounts.filter(allowsGlab).map(a => accountHost(a.gitlabUrl)))];
+    return hosts.map(host => {
+        const owner = glabOwner(accounts, picked, host)!;
+        const action: GlabAction = glabHas(owner) ? 'has' : glabRefusedIt(owner) ? 'refused' : installed ? 'hand' : 'notInstalled';
+        const allowed = accounts.filter(a => allowsGlab(a) && accountHost(a.gitlabUrl) === host).map(idOf);
+        return { host, allowed, owner: idOf(owner), action };
+    });
+}
+
 /**
  * The accounts whose token to hand to glab now, one per GitLab: each GitLab's owner, unless glab has its current
  * token already, or turned that token down. Nothing when glab is not installed.
  */
 export function glabHandOffs(accounts: readonly Account[], picked: string | null, installed: boolean): Account[] {
-    if (!installed) {
-        return [];
-    }
-    const hosts = [...new Set(accounts.filter(allowsGlab).map(a => accountHost(a.gitlabUrl)))];
-    return hosts.map(h => glabOwner(accounts, picked, h))
-        .filter((owner): owner is Account => owner != null && !glabHas(owner) && !glabRefusedIt(owner));
+    return glabDecisions(accounts, picked, installed).filter(d => d.action === 'hand')
+        .map(d => accounts.find(a => idOf(a) === d.owner)!);
 }
 
 /**

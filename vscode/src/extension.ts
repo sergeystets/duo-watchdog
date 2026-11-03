@@ -3,15 +3,20 @@ import { AccountStore, TOKEN_PREFIX } from './accounts';
 import { Commands } from './commands';
 import { parsePercents } from './core/alert';
 import { DashboardView } from './dashboardView';
+import { copyDiagnostics } from './diagnostics';
 import { GlabSync } from './glabSync';
 import { HistoryCache } from './history';
 import { nodeTransport } from './httpTransport';
+import { log } from './log';
 import { CreditsService } from './service';
 import { OLD_TOKEN_KEY, SECTION, settings } from './settings';
 import { StatusBar } from './statusBar';
 import { announceRelease, showWhatsNew } from './whatsNew';
 
 export function activate(context: vscode.ExtensionContext): void {
+    context.subscriptions.push(log.attach(vscode.window.createOutputChannel('Duo Watchdog', { log: true })));
+    log.info('Duo Watchdog ' + String(context.extension.packageJSON.version ?? '') + ' on VS Code ' + vscode.version + ', '
+        + process.platform + ' ' + process.arch + (vscode.env.remoteName != null ? ', remote ' + vscode.env.remoteName : ''));
     const store = new AccountStore(context);
     const service = new CreditsService(context, store, nodeTransport);
     const statusBar = new StatusBar();
@@ -49,6 +54,8 @@ export function activate(context: vscode.ExtensionContext): void {
             return service.refresh();
         }),
         vscode.commands.registerCommand('duoWatchdog.whatsNew', () => showWhatsNew(context.extensionUri)),
+        vscode.commands.registerCommand('duoWatchdog.copyDiagnostics', () => copyDiagnostics(context, store, service)),
+        vscode.commands.registerCommand('duoWatchdog.showLog', () => log.show()),
         vscode.commands.registerCommand('duoWatchdog.openDashboard',
             () => vscode.commands.executeCommand(DashboardView.ID + '.focus')),
         vscode.commands.registerCommand('duoWatchdog.openSettings',

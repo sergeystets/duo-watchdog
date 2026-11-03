@@ -62,6 +62,8 @@ final class WhatsNew {
         }
         // Before 0.4.0 nothing was remembered: a group path or an account means it was in use.
         boolean upgrade = !s.lastSeenVersion.isEmpty() || !s.accounts.isEmpty() || !s.namespace.isBlank();
+        DuoLog.info("what's new: " + (s.lastSeenVersion.isEmpty() ? "first seen" : "was " + s.lastSeenVersion) + ", now "
+                + version + (upgrade ? ", showing what's new" : ", first install"));
         s.lastSeenVersion = version;
         if (upgrade) {
             show(project);
