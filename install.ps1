@@ -159,7 +159,7 @@ function Remove-Remembered([string]$Place) {
 
 function Get-NewVersion($Target) { if ($Target.Kind -eq 'idea') { $PluginVersion } else { $ExtensionVersion } }
 
-# What installing does to the target, e.g. "update Duo Watchdog 0.2.1 -> 0.3.0".
+# What installing does to the target, e.g. "update Duo Watchdog 0.3.0 -> 0.4.0".
 function Get-Plan($Target) {
     $new = Get-NewVersion $Target
     if (-not $Target.Current) { "install Duo Watchdog $new" }
