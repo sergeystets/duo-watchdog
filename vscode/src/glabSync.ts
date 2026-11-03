@@ -1,12 +1,20 @@
 import * as vscode from 'vscode';
 import { AccountStore } from './accounts';
-import { Account, accountHost, afterHandOff, glabHandOffs, idOf } from './core/accounts';
+import { Account, accountHost, afterHandOff, GlabAction, glabDecisions, idOf } from './core/accounts';
 import { glabNowText } from './core/accountsView';
 import { duoHasItsOwnLogin, findGlab, handOffToGlab, HandOff } from './glab';
+import { log } from './log';
 import { CreditsService } from './service';
 
 export const DUO_OWN_LOGIN = 'Duo Watchdog: the Duo CLI has its own login in ~/.gitlab/storage.json and keeps using it. '
     + "Delete its settings there to make it use glab's.";
+
+const WHY: Record<GlabAction, string> = {
+    hand: 'handing its token to glab',
+    has: 'glab has its token already',
+    refused: 'glab turned this token down; not tried again until it changes',
+    notInstalled: 'glab is not installed; nothing said',
+};
 
 export interface Handed {
     account: Account;
@@ -36,22 +44,26 @@ export class GlabSync {
     private async run(quiet?: string): Promise<Handed[]> {
         const overview = this.service.overview();
         const accounts = overview.states.map(s => s.account);
-        if (glabHandOffs(accounts, overview.selected?.id ?? null, true).length === 0) {
-            return [];
+        const picked = overview.selected?.id ?? null;
+        let decisions = glabDecisions(accounts, picked, true);
+        if (decisions.some(d => d.action === 'hand') && await findGlab() == null) {
+            decisions = glabDecisions(accounts, picked, false);
         }
-        const installed = await findGlab() != null;
-        const plan = glabHandOffs(accounts, overview.selected?.id ?? null, installed);
         const handed: Handed[] = [];
-        for (const owner of plan) {
-            const id = idOf(owner);
-            const token = await this.store.token(id);
-            if (!token) {
+        for (const decision of decisions) {
+            const owner = accounts.find(a => idOf(a) === decision.owner)!;
+            const id = decision.owner;
+            const token = decision.action === 'hand' ? await this.store.token(id) : undefined;
+            const why = decision.action === 'hand' && !token ? 'it has no token' : WHY[decision.action];
+            log.info('glab sync ' + decision.host + ': allowed ' + decision.allowed.join(', ') + '; picked ' + (picked ?? 'none')
+                + '; owner ' + id + '; ' + why);
+            if (decision.action !== 'hand' || !token) {
                 continue;
             }
             const host = accountHost(owner.gitlabUrl);
             const result = await vscode.window.withProgress(
                 { location: vscode.ProgressLocation.Window, title: 'Signing glab in to ' + host },
-                () => handOffToGlab(host, token));
+                () => handOffToGlab(host, token, id));
             if (!result.ok && result.missing) {
                 break;
             }

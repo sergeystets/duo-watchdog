@@ -1,6 +1,7 @@
 import { trimSlashes } from './address';
 import { addDays, firstOfMonth, IsoDate, localToday, parseDate, plusMonths } from './dates';
-import { FlowHistory, History, mergeHistories } from './history';
+import { FlowHistory, History, mergeHistories, months, sumOf } from './history';
+import { Logger, NO_LOG } from './log';
 import { CreditsReport, DailyUsage, FlowUsage } from './report';
 
 export interface Response {
@@ -139,7 +140,8 @@ export class CreditsClient {
 
     private readonly endpoint: URL;
 
-    constructor(gitlabUrl: string, private readonly token: string, private readonly transport: Transport) {
+    constructor(gitlabUrl: string, private readonly token: string, private readonly transport: Transport,
+                private readonly log: Logger = NO_LOG) {
         this.endpoint = endpoint(gitlabUrl);
     }
 
@@ -228,12 +230,16 @@ export class CreditsClient {
      * year), it is asked a month at a time.
      */
     async history(namespace: string, from: IsoDate, to: IsoDate): Promise<History> {
+        this.log.info('history ' + namespace + ': asking ' + from + ' to ' + to + ' at once');
         try {
-            return await this.historyOf(namespace, from, to);
+            const year = await this.historyOf(namespace, from, to);
+            this.log.info('history ' + namespace + ': answered ' + year.start + ' to ' + year.end + ', ' + described(year));
+            return year;
         } catch (e) {
             if (!(e instanceof GitLabError) || e.status < 500) {
                 throw e;
             }
+            this.log.warn('history ' + namespace + ': the range failed (' + e.message + '); asking month by month');
             return this.byMonth(namespace, from, to, e);
         }
     }
@@ -248,24 +254,28 @@ export class CreditsClient {
         for (let month = firstOfMonth(to); month.slice(0, 7) >= from.slice(0, 7) && failures < 2;
              month = plusMonths(month, -1)) {
             try {
-                if (month.slice(0, 7) === to.slice(0, 7)) {
-                    months.push(await this.historyOf(namespace, null, null));
-                } else {
-                    months.push(await this.historyOf(namespace, month < from ? from : month,
-                        addDays(plusMonths(month, 1), -1)));
-                }
+                const current = month.slice(0, 7) === to.slice(0, 7);
+                const answer = current ? await this.historyOf(namespace, null, null)
+                    : await this.historyOf(namespace, month < from ? from : month, addDays(plusMonths(month, 1), -1));
+                months.push(answer);
+                this.log.info('history ' + namespace + ' ' + month.slice(0, 7) + (current ? ' (no dates, as Usage asks)' : '')
+                    + ': answered, ' + described(answer));
                 failures = 0;
             } catch (e) {
                 if (!(e instanceof GitLabError) || (e.status > 0 && e.status < 500)) {
                     // Turned down, not out of range: the same for every month.
                     throw e;
                 }
+                this.log.warn('history ' + namespace + ' ' + month.slice(0, 7) + ': failed (' + e.message + ')');
                 failures++;
             }
         }
         if (months.length === 0) {
+            this.log.warn('history ' + namespace + ': no month answered');
             throw whole;
         }
+        this.log.info('history ' + namespace + ': ' + months.length + (months.length === 1 ? ' month' : ' months')
+            + ' answered month by month');
         return months.length === 1 ? months[0] : mergeHistories(months)!;
     }
 
@@ -449,6 +459,13 @@ export class CreditsClient {
 }
 
 const NOT_JSON = 'GitLab returned a response that is not JSON. Is the URL the GitLab root?';
+
+/** "12 credits, 2 features": what a history holds, for the log. */
+function described(history: History): string {
+    const credits = Math.round(sumOf(history.daily) * 10) / 10;
+    return credits + ' credits over ' + months(history).length + ' months, ' + history.flows.length
+        + (history.flows.length === 1 ? ' feature' : ' features') + (history.flowsError != null ? ' (features: ' + history.flowsError + ')' : '');
+}
 
 function json(response: Response): unknown {
     try {

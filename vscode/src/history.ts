@@ -5,6 +5,7 @@ import { CreditsClient, Transport } from './core/client';
 import { localToday } from './core/dates';
 import { historyFrom } from './core/history';
 import { HistoryEntry, historyKey } from './core/statistics';
+import { log } from './log';
 
 /** A history is asked again after an hour; a failure after five minutes, or on Refresh. */
 export const HISTORY_TTL_MS = 60 * 60_000;
@@ -63,10 +64,13 @@ export class HistoryCache implements vscode.Disposable {
                 throw new Error('No token for @' + account.username + '.');
             }
             const today = localToday();
-            const history = await new CreditsClient(account.gitlabUrl, token, this.transport)
+            log.info('statistics ' + idOf(account) + ': fetching ' + historyFrom(today) + ' to ' + today);
+            const history = await new CreditsClient(account.gitlabUrl, token, this.transport, log)
                 .history(accountGroup(account), historyFrom(today), today);
             entry = { history, error: null, loading: false, fetchedAt: Date.now() };
+            log.info('statistics ' + idOf(account) + ': from ' + history.start + ' to ' + history.end);
         } catch (e) {
+            log.warn('statistics ' + idOf(account) + ': ' + (e instanceof Error ? e.message : String(e)));
             // The message is the user's to read; it never carries the token.
             entry = {
                 history: this.entries.get(key)?.history ?? null, error: e instanceof Error ? e.message : String(e),

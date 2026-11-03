@@ -626,7 +626,7 @@ Running `./gradlew test` also renders every dashboard state to PNG (in `intellij
 The VS Code extension builds with npm (Node.js 20+), from the root through Gradle or in `vscode/` directly:
 
 ```bash
-./gradlew :vscode:test               # 81 tests, no VS Code needed          (npm ci && npm test)
+./gradlew :vscode:test               # 87 tests, no VS Code needed          (npm ci && npm test)
 ./gradlew :vscode:packageExtension   # → vscode/duo-watchdog-0.4.0.vsix      (npm run package)
 ./gradlew :vscode:installExtension   # into VS Code; -PcodePath=codium for another CLI
 ```
@@ -635,6 +635,13 @@ The IntelliJ module needs an installed IntelliJ IDEA; without one only its own t
 still run.
 
 ## Troubleshooting
+
+**Diagnostics to send.** *Tools → Duo Watchdog: Copy Diagnostics* (also in the tool window's ⋮ menu) copies a report:
+the IDE, OS and plugin version, where the tokens are kept, the open projects and their WSL distribution, where glab
+was looked for and found (or what WSL printed), each account with its group, scopes, expiry, glab state and last
+refresh, and the last 100 events. It holds no tokens: anything that looks like a GitLab token is cut to its prefix.
+The same events go to the IDE's log (*Help → Show Log*, lines with `#duowatchdog`). In VS Code: **Duo Watchdog: Copy
+Diagnostics** and **Duo Watchdog: Show Log** (the *Duo Watchdog* output channel).
 
 <details>
 <summary><b>"resource … does not exist or you don't have permission"</b></summary>

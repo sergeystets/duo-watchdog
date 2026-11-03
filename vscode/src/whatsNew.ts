@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { AccountStore } from './accounts';
 import { FRESH_TEXT, releaseNotice, upgradeText, WHATS_NEW_MISSING, whatsNewHtml } from './core/release';
+import { log } from './log';
 import { OLD_TOKEN_KEY, SECTION } from './settings';
 
 /** The version the user last saw a notice for, so it shows once a version. */
@@ -16,6 +17,7 @@ export async function announceRelease(context: vscode.ExtensionContext, store: A
     const version = String(context.extension.packageJSON.version ?? '');
     const lastSeen = context.globalState.get<string>(LAST_SEEN_KEY);
     if (lastSeen === version) {
+        log.info("what's new: " + version + ' seen already; nothing to say');
         return;
     }
     const oldToken = await context.secrets.get(OLD_TOKEN_KEY);
@@ -23,6 +25,8 @@ export async function announceRelease(context: vscode.ExtensionContext, store: A
     const configured = store.list().length > 0 || (oldToken != null && oldToken.trim() !== '')
         || SETTINGS.some(key => config.inspect(key)?.globalValue !== undefined);
     const notice = releaseNotice(version, lastSeen, configured);
+    log.info("what's new: " + version + ', last seen ' + (lastSeen || 'none') + ', set up before: ' + (configured ? 'yes' : 'no')
+        + ' → ' + (notice ?? 'same'));
     await context.globalState.update(LAST_SEEN_KEY, version);
 
     const whatsNew = "What's New";

@@ -10,6 +10,10 @@
   (gitlab.com can answer HTTP 500), it is read a month at a time, back to where GitLab's data ends.
 - **What's New:** after an update, a notification links to the new **What's New in Duo Watchdog** page; after a fresh
   install, it says how to start. **Duo Watchdog: What's New** shows the page any time.
+- **Troubleshooting:** a *Duo Watchdog* log (**Duo Watchdog: Show Log**) with each refresh, the statistics requests,
+  the glab lookups, hand-offs and decisions, and the What's New decision; **Duo Watchdog: Copy Diagnostics** puts the
+  versions, the platform, where glab is, every account's settings and last refresh, and the last 100 log lines on the
+  clipboard. Neither ever holds a token: tokens are masked as `glpat-•••`.
 - **Accounts:** one token per account; an account is one GitLab user on one GitLab. GitLab says whose a token is
   when you add it: a token for an account already listed replaces its token, and its group and limit stay. Each
   account has its own group path and limit; alert percents, the forecast alert and the refresh interval are shared.

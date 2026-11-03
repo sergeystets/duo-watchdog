@@ -68,6 +68,16 @@
         "category": "Duo Watchdog"
       },
       {
+        "command": "duoWatchdog.copyDiagnostics",
+        "title": "Copy Diagnostics",
+        "category": "Duo Watchdog"
+      },
+      {
+        "command": "duoWatchdog.showLog",
+        "title": "Show Log",
+        "category": "Duo Watchdog"
+      },
+      {
         "command": "duoWatchdog.accounts",
         "title": "Accounts",
         "category": "Duo Watchdog",

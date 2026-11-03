@@ -1,5 +1,7 @@
 package duowatchdog.plugin;
 
+import com.intellij.openapi.actionSystem.ActionManager;
+import com.intellij.openapi.actionSystem.DefaultActionGroup;
 import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.wm.ToolWindow;
@@ -40,6 +42,11 @@ public final class CreditsToolWindowFactory implements ToolWindowFactory, DumbAw
             }
         });
         toolWindow.getContentManager().setSelectedContent(usage);
+        // The tool window's ⋮ menu: what to send when something goes wrong.
+        DefaultActionGroup gear = new DefaultActionGroup();
+        gear.add(ActionManager.getInstance().getAction("duowatchdog.CopyDiagnostics"));
+        gear.add(ActionManager.getInstance().getAction("duowatchdog.WhatsNew"));
+        toolWindow.setAdditionalGearActions(gear);
     }
 
     static void show(@Nullable Project project) {

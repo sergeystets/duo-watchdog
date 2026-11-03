@@ -123,11 +123,20 @@ public final class CreditsClient {
     private final URI endpoint;
     private final String token;
     private final Transport transport;
+    /** Where the client says what it tries, for a log; nothing by default. Never given a token. */
+    private java.util.function.Consumer<String> log = line -> {
+    };
 
     public CreditsClient(String gitlabUrl, String token, Transport transport) throws GitLabException {
         this.endpoint = endpoint(gitlabUrl);
         this.token = token;
         this.transport = transport;
+    }
+
+    /** Says what the client tries, such as the history's fallback, to {@code sink}. */
+    public CreditsClient log(java.util.function.Consumer<String> sink) {
+        this.log = sink;
+        return this;
     }
 
     public static URI endpoint(String gitlabUrl) throws GitLabException {
@@ -235,11 +244,15 @@ public final class CreditsClient {
      */
     public History history(String namespace, LocalDate from, LocalDate to) throws GitLabException {
         try {
-            return historyOf(namespace, from, to);
+            History h = historyOf(namespace, from, to);
+            log.accept("history " + namespace + " " + from + ".." + to + ": answered from " + h.start());
+            return h;
         } catch (GitLabException e) {
             if (e.status() < 500) {
+                log.accept("history " + namespace + " " + from + ".." + to + ": " + e.getMessage());
                 throw e;
             }
+            log.accept("history " + namespace + " " + from + ".." + to + ": HTTP " + e.status() + ", asking month by month");
             return byMonth(namespace, from, to, e);
         }
     }
@@ -261,7 +274,9 @@ public final class CreditsClient {
                     months.add(historyOf(namespace, start, m.atEndOfMonth()));
                 }
                 failures = 0;
+                log.accept("history " + namespace + " " + m + ": answered");
             } catch (GitLabException e) {
+                log.accept("history " + namespace + " " + m + ": " + e.getMessage());
                 if (e.status() > 0 && e.status() < 500) {
                     // Turned down, not out of range: the same for every month.
                     throw e;

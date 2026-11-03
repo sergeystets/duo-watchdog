@@ -77,6 +77,13 @@
                 icon="AllIcons.Actions.Refresh">
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
+        <action id="duowatchdog.CopyDiagnostics"
+                class="duowatchdog.plugin.Diagnostics"
+                text="Duo Watchdog: Copy Diagnostics"
+                description="Copy what Duo Watchdog knows and did, without tokens, to paste into a bug report"
+                icon="AllIcons.Actions.Copy">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
         <action id="duowatchdog.WhatsNew"
                 class="duowatchdog.plugin.WhatsNew$ShowAction"
                 text="What's New in Duo Watchdog"

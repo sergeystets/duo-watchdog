@@ -8,7 +8,6 @@ import com.intellij.notification.NotificationType;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.components.Service;
-import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.options.ShowSettingsUtil;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.util.concurrency.AppExecutorUtil;
@@ -54,7 +53,6 @@ public final class CreditsService implements Disposable {
     /** Must match the {@code notificationGroup id}s in plugin.xml: balloons that go, and ones that stay. */
     static final String NOTIFICATION_GROUP = "Duo Watchdog";
     static final String STICKY_GROUP = "Duo Watchdog Important";
-    private static final Logger LOG = Logger.getInstance(CreditsService.class);
 
     private final AtomicBoolean loading = new AtomicBoolean();
     private final Map<String, Snapshot> snapshots = new ConcurrentHashMap<>();
@@ -124,9 +122,14 @@ public final class CreditsService implements Disposable {
             }
         }
         List<Account> due = new ArrayList<>();
-        for (List<Account> onHost : allowed.values()) {
-            Account owner = Accounts.glabOwner(onHost, picked, Account::glabHasToken);
-            if (owner != null && (!owner.glabHasToken() || replaced.contains(owner.id())) && !owner.glabRefused()) {
+        for (Map.Entry<String, List<Account>> onHost : allowed.entrySet()) {
+            Account owner = Accounts.glabOwner(onHost.getValue(), picked, Account::glabHasToken);
+            boolean hand = owner != null && (!owner.glabHasToken() || replaced.contains(owner.id())) && !owner.glabRefused();
+            DuoLog.info("glab sync " + onHost.getKey() + ": allowed " + onHost.getValue().stream().map(Account::id).toList()
+                    + ", picked " + (picked != null ? picked.id() : "none") + ", owner " + (owner != null ? owner.id() : "none")
+                    + (owner == null ? "" : owner.glabHasToken() && !replaced.contains(owner.id()) ? ", glab has it"
+                    : owner.glabRefused() ? ", glab refused this token before" : ", handing it over"));
+            if (hand) {
                 due.add(owner);
             }
         }
@@ -165,6 +168,7 @@ public final class CreditsService implements Disposable {
         }
         LocalDate today = LocalDate.now();
         History history = new CreditsClient(account.gitlabUrl, token.trim(), transport())
+                .log(line -> DuoLog.info(account.id() + " " + line))
                 .history(group, History.from(today), today);
         histories.put(account.id(), new CachedHistory(Instant.now(), token, history));
         return history;
@@ -200,6 +204,9 @@ public final class CreditsService implements Disposable {
                 for (Account account : accounts) {
                     Snapshot next = load(account, settings.token(account.id()));
                     snapshots.put(account.id(), next);
+                    DuoLog.info("refresh " + account.id() + ": " + next.status()
+                            + (next.report() != null ? ", " + CreditsView.number(next.report().creditsUsed()) + " used" : "")
+                            + (next.error() != null ? ", " + next.error() : ""));
                     notifyOnce(account, next);
                 }
                 // glab still to get a token: installed since, or its hand-off was not done yet.
@@ -244,9 +251,11 @@ public final class CreditsService implements Disposable {
             state.selected = account.id();
             settings.clearLegacyToken();
             migrationError = null;
+            DuoLog.info("migrated the 0.3.0 token to " + account.id());
         } catch (GitLabException e) {
             // Kept until GitLab says whose it is, so it can go to the right account.
             migrationError = "The saved token is not moved to its account yet: " + e.getMessage();
+            DuoLog.warn("migration: " + e.getMessage());
         }
     }
 
@@ -284,10 +293,10 @@ public final class CreditsService implements Disposable {
                 return Snapshot.notTracked(notTracked(account));
             }
             // The message is the user's to read; it never carries the token.
-            LOG.info("Duo Watchdog refresh failed for " + account.id() + ": " + e.getMessage());
+            DuoLog.warn("refresh " + account.id() + ": " + e.getMessage());
             return previous.failed(e.getMessage());
         } catch (RuntimeException e) {
-            LOG.info("Duo Watchdog refresh failed for " + account.id(), e);
+            DuoLog.warn("refresh " + account.id() + ": " + e);
             return previous.failed(e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
         }
     }
@@ -393,10 +402,12 @@ public final class CreditsService implements Disposable {
             }
             boolean installed = CliHandOff.glab() != null;
             if (quiet && !installed) {
+                DuoLog.info("glab hand-off " + account.id() + ": glab not found, " + CliHandOff.whereLooked());
                 return;
             }
             String key = String.valueOf(account.tokenSavedAt);
             CliHandOff.Result result = CliHandOff.login(account.host(), token.trim());
+            DuoLog.info("glab hand-off " + account.id() + ": " + (result.ok() ? "done" : "failed") + ", " + result.output());
             if (!result.ok()) {
                 if (installed) {
                     // Not tried again until the token changes: glab said why, and saying it every refresh helps no one.

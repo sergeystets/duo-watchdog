@@ -10,6 +10,8 @@ import { alertFor, AlertKind } from './core/alert';
 import { CreditsClient, GitLabError, Transport } from './core/client';
 import { localToday } from './core/dates';
 import { Snapshot, Snapshots } from './core/report';
+import { number } from './core/view';
+import { log } from './log';
 import { OLD_LAST_ALERT_KEY, OLD_TOKEN_KEY, oldSettings, settings } from './settings';
 
 /** Every account with what the last refresh found, and the one the status bar and the dashboard show. */
@@ -114,6 +116,7 @@ export class CreditsService implements vscode.Disposable {
         await Promise.all(accounts.map(async account => {
             const id = idOf(account);
             const result = await this.loadAccount(id, account);
+            logResult(id, result);
             this.results.set(id, result);
             this.changed.fire();
             this.notifyOnce(id, result);
@@ -170,6 +173,8 @@ export class CreditsService implements vscode.Disposable {
             return;
         }
         const old = oldSettings(this.context);
+        log.remember(oldToken);
+        log.info('migration: asking ' + old.gitlabUrl + " whose the token saved before accounts is");
         try {
             const client = new CreditsClient(old.gitlabUrl, oldToken!, this.transport);
             const username = await client.username();
@@ -182,8 +187,11 @@ export class CreditsService implements vscode.Disposable {
             await secrets.delete(OLD_TOKEN_KEY);
             await this.context.globalState.update(OLD_LAST_ALERT_KEY, undefined);
             this.setup = Snapshots.notConfigured();
+            log.info('migration: the token is now account ' + id + ' (group ' + (account.groupPath || 'none') + ', limit '
+                + account.limit + ', scopes ' + (account.scopes?.join(', ') ?? 'unknown') + ')');
         } catch (e) {
             const message = e instanceof Error ? e.message : String(e);
+            log.warn('migration failed: ' + message + '; the old token stays, and the next refresh tries again');
             this.setup = Snapshots.failed(Snapshots.loading(), 'The saved token is not moved to an account yet: ' + message);
         }
     }
@@ -244,6 +252,18 @@ export class CreditsService implements vscode.Disposable {
         }
         this.changed.dispose();
         this.refreshed.dispose();
+    }
+}
+
+/** "refresh gitlab.com/dana.k: ok, 148.6 used", "refresh …: error: Cannot reach gitlab.com: …". */
+function logResult(id: string, result: Result): void {
+    const s = result.snapshot;
+    const line = 'refresh ' + id + ': ' + s.status + (result.problem != null ? ' (' + result.problem + ')' : '')
+        + (s.report != null ? ', ' + number(s.report.creditsUsed) + ' used' : '') + (s.error != null ? ': ' + s.error : '');
+    if (s.status === 'error' || result.problem === 'rejected') {
+        log.warn(line);
+    } else {
+        log.info(line);
     }
 }
 

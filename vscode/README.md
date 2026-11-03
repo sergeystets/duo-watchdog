@@ -138,7 +138,8 @@ Open *Settings → Extensions → Duo Watchdog*:
 | `duoWatchdog.refreshMinutes` | `15` | How often to fetch new data for every account |
 
 Commands (*Ctrl/Cmd+Shift+P*, type "Duo Watchdog"): **Accounts**, **Add or Replace a Token**, **Find My Group**,
-**Create the Token in GitLab**, **Refresh**, **Open Dashboard**, **Open Settings**, **What's New**.
+**Create the Token in GitLab**, **Refresh**, **Open Dashboard**, **Open Settings**, **What's New**, **Copy Diagnostics**,
+**Show Log**.
 
 `duoWatchdog.groupPath` and `duoWatchdog.limit` are deprecated: each account has its own group and limit now.
 
@@ -149,6 +150,21 @@ old GitLab URL, group path, limit and the last alert shown. The token moves to t
 storage. If GitLab can't be reached, the old token stays and the next refresh tries again.
 
 Requests use VS Code's proxy settings (`http.proxy`) and your system's trusted certificates.
+
+## Troubleshooting
+
+**Duo Watchdog: Show Log** opens the *Duo Watchdog* log (also in *View → Output*). It says what each refresh found
+for each account, how the statistics were read (the year at once, or month by month and which months answered),
+where glab was looked for, and, for each GitLab, which account glab follows and whether its token was handed over,
+with glab's exit code and words.
+
+**Duo Watchdog: Copy Diagnostics** puts a report on the clipboard to send to whoever helps you: the extension's and
+VS Code's versions, the platform and whether the extension runs remotely (e.g. in WSL), where glab is, each account's
+group, limit, token dates, scopes and glab settings, its last refresh, and the last 100 log lines. It says whether each
+account has a token, never what it is.
+
+Neither holds a token: every line is scrubbed of the tokens Duo Watchdog has read, and of anything shaped like a
+GitLab token (`glpat-…`, `gldt-…`), which shows as `glpat-•••`.
 
 ## Requirements
 

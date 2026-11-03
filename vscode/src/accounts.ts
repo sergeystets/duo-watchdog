@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { Account, idOf, normalized } from './core/accounts';
+import { log } from './log';
 
 /** The accounts, without their tokens, in VS Code's global state. */
 export const ACCOUNTS_KEY = 'duoWatchdog.accounts';
@@ -77,10 +78,13 @@ export class AccountStore {
 
     async token(id: string): Promise<string | undefined> {
         const token = (await this.context.secrets.get(tokenKey(id)))?.trim();
+        // Masked in the log from now on, wherever it might turn up.
+        log.remember(token);
         return token ? token : undefined;
     }
 
     storeToken(id: string, token: string): Thenable<void> {
+        log.remember(token);
         return this.context.secrets.store(tokenKey(id), token);
     }
 
