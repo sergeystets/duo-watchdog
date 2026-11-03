@@ -391,6 +391,82 @@ class CreditsClientTest {
         assertFalse(e.getMessage().contains("glpat-secret"));
     }
 
+    @Test
+    void readsTheSessionsPageByPageUntilOlderOnes() throws Exception {
+        FakeTransport http = new FakeTransport()
+                .reply(200, """
+                        {"data":{"duoWorkflowWorkflows":{"pageInfo":{"hasNextPage":true,"endCursor":"c1"},"nodes":[
+                          {"id":"gid://gitlab/Ai::DuoWorkflows::Workflow/10208239","title":"Review the gateway",
+                           "workflowDefinition":"chat","humanStatus":"Finished","createdAt":"2026-10-28T14:35:25Z",
+                           "updatedAt":"2026-10-28T15:08:33Z","webUrl":"https://gitlab.com/s/10208239",
+                           "project":{"fullPath":"acme/mobile/gateway"},"namespace":{"fullPath":"acme/mobile"},
+                           "modelMetadataName":"Claude Sonnet"}]}}}
+                        """)
+                .reply(200, """
+                        {"data":{"duoWorkflowWorkflows":{"pageInfo":{"hasNextPage":true,"endCursor":"c2"},"nodes":[
+                          {"id":"gid://gitlab/Ai::DuoWorkflows::Workflow/7","title":null,"goal":"Fix the build\\nand more",
+                           "workflowDefinition":"developer/v1","humanStatus":"Running","createdAt":"2026-10-27T09:00:00Z",
+                           "updatedAt":"2026-10-27T10:00:00Z","project":null,"namespace":null},
+                          {"id":"gid://gitlab/Ai::DuoWorkflows::Workflow/5","title":"Old","workflowDefinition":"chat",
+                           "humanStatus":"Finished","createdAt":"2026-10-01T09:00:00Z","updatedAt":"2026-10-01T09:30:00Z"}]}}}
+                        """);
+
+        List<Sessions.Session> sessions = new CreditsClient("https://gitlab.com", "glpat-x", http)
+                .sessions(Instant.parse("2026-10-20T00:00:00Z"));
+
+        assertEquals(2, http.requests.size(), "stops at the page that reaches before the range");
+        assertEquals("2026-10-20T00:00:00Z", http.requests.get(0).getAsJsonObject("variables").get("updatedAfter").getAsString());
+        assertEquals("c1", http.requests.get(1).getAsJsonObject("variables").get("after").getAsString());
+        assertEquals(List.of(10208239L, 7L), sessions.stream().map(Sessions.Session::id).toList());
+        Sessions.Session first = sessions.get(0);
+        assertEquals("Review the gateway", first.title());
+        assertEquals("acme/mobile/gateway", first.project());
+        assertEquals("Claude Sonnet", first.model());
+        assertEquals(Instant.parse("2026-10-28T14:35:25Z"), first.created());
+        assertEquals("Fix the build", sessions.get(1).title(), "the goal's first line, when it has no title");
+        assertNull(sessions.get(1).project());
+    }
+
+    @Test
+    void anOlderGitLabIsAskedForSessionsWithoutTheModelAndTheDateFilter() throws Exception {
+        FakeTransport http = new FakeTransport()
+                .reply(200, """
+                        {"errors":[{"message":"Field 'modelMetadataName' doesn't exist on type 'DuoWorkflow'"}]}
+                        """)
+                .reply(200, """
+                        {"data":{"duoWorkflowWorkflows":{"pageInfo":{"hasNextPage":false},"nodes":[
+                          {"id":"gid://gitlab/Ai::DuoWorkflows::Workflow/9","title":"New","createdAt":"2026-10-28T09:00:00Z",
+                           "updatedAt":"2026-10-28T09:30:00Z"},
+                          {"id":"gid://gitlab/Ai::DuoWorkflows::Workflow/8","title":"Old","createdAt":"2026-10-01T09:00:00Z",
+                           "updatedAt":"2026-10-01T09:30:00Z"}]}}}
+                        """);
+
+        List<Sessions.Session> sessions = new CreditsClient("https://gitlab.example.com", "glpat-x", http)
+                .sessions(Instant.parse("2026-10-20T00:00:00Z"));
+
+        String retried = http.requests.get(1).get("query").getAsString();
+        assertFalse(retried.contains("modelMetadataName"));
+        assertFalse(retried.contains("updatedAfter"));
+        assertEquals(List.of(9L), sessions.stream().map(Sessions.Session::id).toList());
+    }
+
+    @Test
+    void findsASessionByItsNumber() throws Exception {
+        FakeTransport http = new FakeTransport().reply(200, """
+                {"data":{"duoWorkflowWorkflows":{"pageInfo":{"hasNextPage":false},"nodes":[
+                  {"id":"gid://gitlab/Ai::DuoWorkflows::Workflow/42","title":"Found","createdAt":"2026-10-28T09:00:00Z",
+                   "updatedAt":"2026-10-28T09:30:00Z"}]}}}
+                """).reply(200, """
+                {"data":{"duoWorkflowWorkflows":{"pageInfo":{"hasNextPage":false},"nodes":[]}}}
+                """);
+        CreditsClient client = new CreditsClient("https://gitlab.com", "glpat-x", http);
+
+        assertEquals("Found", client.session(42).title());
+        assertEquals("gid://gitlab/Ai::DuoWorkflows::Workflow/42",
+                http.requests.get(0).getAsJsonObject("variables").get("workflowId").getAsString());
+        assertNull(client.session(43));
+    }
+
     private static void assertMessage(int status, String body, String expected) {
         FakeTransport http = new FakeTransport().reply(status, body);
         GitLabException e = assertThrows(GitLabException.class,

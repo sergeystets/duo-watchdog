@@ -28,6 +28,9 @@
           are off unless you tick them.</li>
       <li>A <b>Statistics</b> tab next to the dashboard: the last 3, 6 or 12 months by month and by feature, with what
           GitLab did not bill, for one account or all of them.</li>
+      <li>A <b>Sessions</b> tab: your Agent Platform sessions over the days you pick, each with its credits estimated
+          from the day's credits per feature and, where the Duo CLI's logs on this machine count them, the agent's
+          steps. Look a session up by its ID or link, or show the last one.</li>
       <li><b>What's New</b>: after an update a window shows what the version brings, with pictures; Help | What's
           New in Duo Watchdog opens it again.</li>
       <li>The token saved by 0.3.0 moves to its account on the first refresh, with its group, limit and last

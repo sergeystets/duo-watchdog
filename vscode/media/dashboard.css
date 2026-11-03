@@ -328,6 +328,8 @@ button.link:hover {
     font-size: 17px;
     font-weight: 700;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .tile .unit {
@@ -663,4 +665,164 @@ svg text.year {
     max-width: 120px;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+/* Sessions: the range, the text box and the Last session button, the rows and the details card. */
+.switch.kinds {
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+}
+
+.switch.kinds button {
+    flex: 1 1 auto;
+}
+
+.custom-range {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 6px;
+    font-size: 12px;
+}
+
+.custom-range input,
+.session-find input {
+    min-width: 0;
+    height: 24px;
+    padding: 0 6px;
+    border: 1px solid var(--vscode-input-border, var(--border));
+    border-radius: 2px;
+    background: var(--vscode-input-background, var(--background));
+    color: var(--vscode-input-foreground, var(--text));
+    font: inherit;
+}
+
+.custom-range input:focus,
+.session-find input:focus {
+    outline: 1px solid var(--vscode-focusBorder);
+    outline-offset: -1px;
+}
+
+.range-label {
+    margin: 0 0 8px;
+}
+
+.session-find {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 12px;
+}
+
+.session-find input {
+    flex: 1;
+}
+
+button.secondary-button {
+    height: 24px;
+    padding: 0 10px;
+    border: none;
+    border-radius: 2px;
+    background: var(--vscode-button-secondaryBackground, var(--border));
+    color: var(--vscode-button-secondaryForeground, var(--text));
+    font: inherit;
+    font-size: 12px;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+button.secondary-button:hover {
+    background: var(--vscode-button-secondaryHoverBackground, var(--border));
+}
+
+button.secondary-button:focus-visible {
+    outline: 1px solid var(--vscode-focusBorder);
+    outline-offset: 2px;
+}
+
+.sessions {
+    display: flex;
+    flex-direction: column;
+}
+
+.session {
+    display: flex;
+    gap: 8px;
+    padding: 6px 4px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+}
+
+.session[hidden],
+.session-details[hidden],
+.no-match[hidden] {
+    display: none;
+}
+
+.session:hover,
+.session.focused {
+    background: var(--vscode-list-hoverBackground);
+}
+
+.session:focus-visible {
+    outline: 1px solid var(--vscode-focusBorder);
+    outline-offset: -1px;
+}
+
+.session .text {
+    flex: 1;
+    min-width: 0;
+}
+
+.session .title {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.session .meta {
+    font-size: 11px;
+    color: var(--secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.session .right {
+    text-align: right;
+    flex: none;
+}
+
+.session .credits {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.session-details {
+    margin: 4px 0 8px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+}
+
+.session-details dl {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 2px 10px;
+    margin: 6px 0;
+}
+
+.session-details dt {
+    color: var(--secondary);
+}
+
+.session-details dd {
+    margin: 0;
+}
+
+.session-details .shares {
+    margin: 6px 0;
+    padding-left: 16px;
 }

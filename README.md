@@ -47,6 +47,8 @@ GitLab Credits usage for the current billing period, forecast where the month wi
   Duo CLI. See [glab and the GitLab Duo CLI](#glab-and-the-gitlab-duo-cli-optional).
 - A **Statistics** tab next to the dashboard: your last 3, 6 or 12 months by month and by feature, with what GitLab did
   not bill, for one account or all of them. See [Statistics](#statistics).
+- A **Sessions** tab: your Agent Platform sessions over the days you pick, each with its credits, estimated, and the
+  projects that cost most. Look a session up by its ID or link, or show your last one. See [Sessions](#sessions).
 - **What's New**: after an update, a window shows what the version brings, with pictures (*Help → What's New in Duo
   Watchdog* in IntelliJ IDEA, **Duo Watchdog: What's New** in VS Code).
 - Upgrading from 0.3.0 moves the saved token to its account, with its group, limit and last alert.
@@ -114,6 +116,35 @@ and only for the months still changing: a month two days past its end is kept in
 (`duo-watchdog/history`) and never asked for again, so after the first time Statistics asks about as much as the
 Usage tab. A month GitLab has nothing for, before the subscription, is kept as empty. **Reload Statistics** asks again
 for the months still changing.
+
+<br clear="right">
+
+### Sessions
+
+<img align="right" src="vscode/media/whats-new/sessions.png" alt="The Sessions tab" width="300">
+
+The **Sessions** tab lists your GitLab Duo Agent Platform sessions (the Duo CLI, Agentic Chat, flows) over **Today**,
+**Yesterday**, the **last 7 or 30 days** or a custom range, with what each cost, **estimated**:
+
+- The number of **sessions**, the days' **credits**, the part estimated to be **≈ in sessions**, and **Other use**:
+  Code Suggestions, classic Chat, and what no session accounts for
+- Credits per **project**
+- Every session, newest first: title, project, flow, status, the agent's steps and ≈ credits. Click one for its
+  details: model, start and last update, how its estimate was made, and a link to it in GitLab.
+- Paste a **session ID** (the number the Duo CLI shows), its `gid://` or its link into the search field and press
+  Enter to show it, whichever days it falls on; other text narrows the list. **Last Session** shows the session you
+  last worked in.
+
+GitLab tells a group member their credits per day and per feature, not per session (that takes the group's Owner), so
+the estimate splits each feature's credits on a day among that day's sessions of that feature: **by the agent's
+steps** when the Duo CLI's logs on this machine count them for every one of those sessions, else equally. Sessions
+whose flow matches no feature share what the matched ones leave. The logs (`duo log list`: `gitlab-duo-cli` in the
+temporary folder; for a project in WSL, in the distribution's `/tmp`) are read for one kind of line only,
+`[DuoWorkflowNodeExecutor][<session>] [requestID: …] Action received`, and of it only the time, the session and the
+request: the logs also hold prompts and code, and none of that is read on or kept. The counts are kept in the IDE's
+system folder (`duo-watchdog/cli-logs.json`), since the temporary folder is emptied now and then. Sessions in other
+groups are left out, since another group's credits are not the account's. Days are UTC days, as GitLab counts them,
+and GitLab lists sessions for about 30 days.
 
 <br clear="right">
 
@@ -609,8 +640,9 @@ duo-watchdog/
 ├── gradlew, gradle/          Gradle wrapper (run everything from the root)
 ├── intellij/                 IntelliJ plugin, module :intellij (Java)
 │   ├── core/                 Module :intellij:core: plain Java, no IntelliJ dependencies
-│   │   ├── src/main/…/core/  GraphQL client, billing period & forecast, alert rules, account rules, texts
-│   │   ├── src/main/…/ui/    Pure Swing components: dashboard, meter, chart, feature bars, status chip
+│   │   ├── src/main/…/core/  GraphQL client, billing period & forecast, alert rules, account rules, history,
+│   │   │                     session estimates, Duo CLI log reader, texts
+│   │   ├── src/main/…/ui/    Pure Swing components: dashboard, statistics, sessions, meter, charts, status chip
 │   │   └── src/test/         JUnit 5 tests; also paints the UI headless to core/build/ui-previews/*.png
 │   ├── src/                  Thin IntelliJ layer: settings and accounts, add-token dialog, refresh service,
 │   │                         status bar widget, tool window, notifications, glab hand-off
@@ -631,7 +663,7 @@ Running `./gradlew test` also renders every dashboard state to PNG (in `intellij
 The VS Code extension builds with npm (Node.js 20+), from the root through Gradle or in `vscode/` directly:
 
 ```bash
-./gradlew :vscode:test               # 97 tests, no VS Code needed          (npm ci && npm test)
+./gradlew :vscode:test               # 119 tests, no VS Code needed         (npm ci && npm test)
 ./gradlew :vscode:packageExtension   # → vscode/duo-watchdog-0.4.0.vsix      (npm run package)
 ./gradlew :vscode:installExtension   # into VS Code; -PcodePath=codium for another CLI
 ```
@@ -644,7 +676,7 @@ still run.
 **Diagnostics to send.** *Tools → Duo Watchdog: Copy Diagnostics* (also in the tool window's ⋮ menu) copies a report:
 the IDE, OS and plugin version, where the tokens are kept, the open projects and their WSL distribution, where glab
 was looked for and found (or what WSL printed), each account with its group, scopes, expiry, glab state and last
-refresh, and the last 100 events. It holds no tokens: anything that looks like a GitLab token is cut to its prefix.
+refresh, where the Duo CLI's logs were found and how many sessions they count, and the last 100 events. It holds no tokens: anything that looks like a GitLab token is cut to its prefix.
 The same events go to the IDE's log (*Help → Show Log*, lines with `#duowatchdog`). In VS Code: **Duo Watchdog: Copy
 Diagnostics** and **Duo Watchdog: Show Log** (the *Duo Watchdog* output channel).
 

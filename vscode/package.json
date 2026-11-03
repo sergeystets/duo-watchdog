@@ -58,6 +58,11 @@
         "category": "Duo Watchdog"
       },
       {
+        "command": "duoWatchdog.sessions",
+        "title": "Sessions",
+        "category": "Duo Watchdog"
+      },
+      {
         "command": "duoWatchdog.openSettings",
         "title": "Open Settings",
         "category": "Duo Watchdog"

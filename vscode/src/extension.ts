@@ -3,6 +3,8 @@ import { AccountStore, TOKEN_PREFIX } from './accounts';
 import { Commands } from './commands';
 import { parsePercents } from './core/alert';
 import { DashboardView } from './dashboardView';
+import { DuoCliLogScanner } from './duoCliLogs';
+import { SessionsService } from './sessions';
 import { copyDiagnostics } from './diagnostics';
 import { GlabSync } from './glabSync';
 import { HistoryCache } from './history';
@@ -23,13 +25,17 @@ export function activate(context: vscode.ExtensionContext): void {
     const glab = new GlabSync(store, service);
     const commands = new Commands(store, service, nodeTransport, glab);
     const history = new HistoryCache(store, nodeTransport, context.globalStorageUri);
-    const dashboard = new DashboardView(context.extensionUri, service, commands, history, context.globalState);
+    const logs = new DuoCliLogScanner(context.globalStorageUri);
+    const sessions = new SessionsService(store, nodeTransport, history, logs);
+    const dashboard = new DashboardView(context.extensionUri, service, commands, history, context.globalState, sessions);
 
     context.subscriptions.push(
         service,
         statusBar,
         history,
         history.onDidChange(() => dashboard.update()),
+        sessions,
+        sessions.onDidChange(() => dashboard.update()),
         // glab follows the picked account; a refresh catches up with tokens added or glab installed since.
         service.onDidRefresh(() => void glab.sync()),
         vscode.window.registerWebviewViewProvider(DashboardView.ID, dashboard),
@@ -54,7 +60,8 @@ export function activate(context: vscode.ExtensionContext): void {
             return service.refresh();
         }),
         vscode.commands.registerCommand('duoWatchdog.whatsNew', () => showWhatsNew(context.extensionUri)),
-        vscode.commands.registerCommand('duoWatchdog.copyDiagnostics', () => copyDiagnostics(context, store, service)),
+        vscode.commands.registerCommand('duoWatchdog.copyDiagnostics', () => copyDiagnostics(context, store, service, logs)),
+        vscode.commands.registerCommand('duoWatchdog.sessions', () => dashboard.show('sessions')),
         vscode.commands.registerCommand('duoWatchdog.showLog', () => log.show()),
         vscode.commands.registerCommand('duoWatchdog.openDashboard',
             () => vscode.commands.executeCommand(DashboardView.ID + '.focus')),

@@ -3,6 +3,7 @@ import { addDays, firstOfMonth, IsoDate, localToday, parseDate, plusMonths } fro
 import { FlowHistory, History, mergeHistories, months, sumOf } from './history';
 import { Logger, NO_LOG } from './log';
 import { lastDayOf } from './monthly';
+import { Session, sessionId } from './sessions';
 import { CreditsReport, DailyUsage, FlowUsage } from './report';
 
 export interface Response {
@@ -70,6 +71,34 @@ export const NON_BILLABLE_QUERY = `query DuoMyNonBillable($namespacePath: ID!, $
   }
 }
 `;
+
+/**
+ * The user's own Agent Platform sessions, last updated first. Newer GitLabs (19.2+) also give the model and take a
+ * date filter; both are left out when GitLab does not know them.
+ */
+export function sessionsQuery(newer: boolean): string {
+    return 'query DuoMySessions($first: Int, $after: String' + (newer ? ', $updatedAfter: ISO8601DateTime' : '')
+        + ', $workflowId: AiDuoWorkflowsWorkflowID) {\n'
+        + '  duoWorkflowWorkflows(first: $first, after: $after, sort: UPDATED_DESC'
+        + (newer ? ', updatedAfter: $updatedAfter' : '') + ', workflowId: $workflowId) {\n'
+        + '    pageInfo { hasNextPage endCursor }\n'
+        + '    nodes {\n'
+        + '      id title goal workflowDefinition humanStatus createdAt updatedAt webUrl\n'
+        + '      project { fullPath }\n'
+        + '      namespace { fullPath }' + (newer ? '\n      modelMetadataName' : '') + '\n'
+        + '    }\n'
+        + '  }\n'
+        + '}\n';
+}
+
+/** Pages of SESSIONS_PAGE sessions asked for at most, newest first. */
+export const SESSIONS_PAGE = 100;
+export const MAX_SESSION_PAGES = 10;
+
+/** "2026-10-20T00:00:00Z": an instant as GitLab and Java write it. */
+export function instantText(ms: number): string {
+    return new Date(ms).toISOString().replace('.000Z', 'Z');
+}
 
 export const USER_QUERY = `query DuoWhoAmI {
   currentUser { username }
@@ -368,6 +397,81 @@ export class CreditsClient {
         };
     }
 
+    /**
+     * The user's sessions updated since `since` (ms), last updated first: as many pages as reach back that far, at
+     * most MAX_SESSION_PAGES.
+     */
+    async sessions(since: number): Promise<Session[]> {
+        const all: Session[] = [];
+        let after: string | null = null;
+        for (let page = 0; page < MAX_SESSION_PAGES; page++) {
+            const p: SessionsPage = await this.sessionsPage(SESSIONS_PAGE, after, since, null);
+            let older = false;
+            for (const s of p.sessions) {
+                if (s.updated < since) {
+                    older = true;
+                } else {
+                    all.push(s);
+                }
+            }
+            if (older || p.next == null) {
+                break;
+            }
+            after = p.next;
+        }
+        this.log.info('sessions since ' + instantText(since) + ': ' + all.length);
+        return all;
+    }
+
+    /** One session by its number, or null when the user has none such. */
+    async session(id: number): Promise<Session | null> {
+        return (await this.sessionsPage(1, null, null, id)).sessions[0] ?? null;
+    }
+
+    /** The session last updated, or null when the user has none. */
+    async lastSession(): Promise<Session | null> {
+        return (await this.sessionsPage(1, null, null, null)).sessions[0] ?? null;
+    }
+
+    /** Whether this GitLab lacks the model field or the date filter, as learnt from its first refusal. */
+    private olderSessionsApi = false;
+
+    private async sessionsPage(first: number, after: string | null, since: number | null, id: number | null): Promise<SessionsPage> {
+        for (;;) {
+            const newer = !this.olderSessionsApi;
+            const variables: Json = { first };
+            if (after != null) {
+                variables.after = after;
+            }
+            if (newer && since != null) {
+                variables.updatedAfter = instantText(since);
+            }
+            if (id != null) {
+                variables.workflowId = 'gid://gitlab/Ai::DuoWorkflows::Workflow/' + id;
+            }
+            const result = await this.graphql(sessionsQuery(newer), variables);
+            const connection = obj(result.data, 'duoWorkflowWorkflows');
+            if (connection == null && newer) {
+                this.log.info('sessions: ' + result.errors.join('; ') + '; asking again without the model and the date filter');
+                this.olderSessionsApi = true;
+                continue;
+            }
+            if (connection == null) {
+                throw new GitLabError(result.errors.length === 0 ? 'GitLab returned no sessions.'
+                    : 'GitLab returned no sessions: ' + result.errors.join('; '));
+            }
+            const sessions: Session[] = [];
+            for (const e of arr(connection, 'nodes')) {
+                const s = isObj(e) ? sessionOf(e) : null;
+                if (s != null) {
+                    sessions.push(s);
+                }
+            }
+            const info = obj(connection, 'pageInfo');
+            return { sessions, next: bool(info, 'hasNextPage') ? str(info, 'endCursor') : null };
+        }
+    }
+
     /** The token's name, scopes and expiry, from the REST API, which tells any token about itself. */
     async tokenInfo(): Promise<TokenInfo> {
         const uri = new URL('v4/personal_access_tokens/self', this.endpoint);
@@ -483,6 +587,36 @@ function json(response: Response): unknown {
     } catch {
         return null;
     }
+}
+
+interface SessionsPage {
+    sessions: Session[];
+    next: string | null;
+}
+
+function instant(o: Json | null, key: string): number | null {
+    const text = str(o, key);
+    const ms = text == null ? NaN : Date.parse(text);
+    return Number.isNaN(ms) ? null : ms;
+}
+
+function sessionOf(o: Json): Session | null {
+    const id = sessionId(str(o, 'id'));
+    const created = instant(o, 'createdAt');
+    const updated = instant(o, 'updatedAt');
+    if (id == null || created == null) {
+        return null;
+    }
+    let title = str(o, 'title');
+    if (title == null || title.trim() === '') {
+        const line = (str(o, 'goal') ?? '').trim().split(/\r?\n/)[0].trim();
+        title = line === '' ? 'Session ' + id : line.length > 80 ? line.slice(0, 79) + '…' : line;
+    }
+    return {
+        id, title: title.trim(), flow: str(o, 'workflowDefinition'), project: str(obj(o, 'project'), 'fullPath'),
+        group: str(obj(o, 'namespace'), 'fullPath'), model: str(o, 'modelMetadataName'), status: str(o, 'humanStatus'),
+        created, updated: updated ?? created, webUrl: str(o, 'webUrl'),
+    };
 }
 
 function report(username: string | null, usage: Json): CreditsReport {
