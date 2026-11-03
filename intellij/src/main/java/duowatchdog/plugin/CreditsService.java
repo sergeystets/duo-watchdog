@@ -441,8 +441,12 @@ public final class CreditsService implements Disposable {
                         + "keeps that login: delete its settings there to make it use glab's."
                         : " The Duo CLI signs in through glab (glab 1.85.2 and duo 8.68.0 or later).";
             }
-            Notification n = notification(false, "Token handed to glab", text,
-                    scopes == null ? NotificationType.INFORMATION : NotificationType.WARNING);
+            String duoScopes = account.duo ? Accounts.duoScopeNote(account.scopeList()) : null;
+            if (duoScopes != null) {
+                text += " " + duoScopes;
+            }
+            Notification n = notification(duoScopes != null, "Token handed to glab", text,
+                    scopes == null && duoScopes == null ? NotificationType.INFORMATION : NotificationType.WARNING);
             n.setSubtitle(account.label());
             n.notify(null);
         }

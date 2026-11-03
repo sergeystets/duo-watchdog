@@ -297,8 +297,9 @@ final class AddTokenDialog extends DialogWrapper {
                     + "Watchdog hands the token over on its next refresh.");
         }
         glabNote.setText(wrap(String.join(" ", notes)));
+        String duoScopes = ok && found.info() != null ? Accounts.duoScopeNote(found.info().scopes()) : null;
         duoNote.setText(wrap("The Duo CLI signs in through glab (glab 1.85.2 and duo 8.68.0 or later), so this "
-                + "turns glab on too."));
+                + "turns glab on too." + (duoScopes != null ? " " + duoScopes : "")));
         if (match != null && !match.id().equals(flagsFor)) {
             // An account keeps what was chosen for it, until changed here.
             flagsFor = match.id();

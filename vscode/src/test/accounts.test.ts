@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-    accountId, afterHandOff, attention, bareUsername, creditsLeft, expiryPopupKey, glabHandOffs, glabOwner, glabScopeNote,
+    accountId, afterHandOff, attention, bareUsername, creditsLeft, duoScopeNote, expiryPopupKey, glabHandOffs, glabOwner, glabScopeNote,
     idOf, isExpired,
     matchesFilter, migratedAccount, missingUsageScopes, needsMigration, normalized, rejectedPopupKey, sortStates,
     usageReadable, withCli, withToken,
@@ -227,4 +227,12 @@ test('after a hand-off glab has that token only, and a refused one is remembered
     assert.deepEqual(turnedDown.map(x => [x.glabHanded, x.glabRefused]), [[null, 10], [20, null], [null, null], [null, null]],
         'glab still has b');
     assert.deepEqual(afterHandOff(LIST, idOf(d), true).map(x => x.glabHanded), [null, 20, null, 40], 'another GitLab: b stays');
+});
+
+test('the Duo CLI needs api and ai_features', () => {
+    assert.equal(duoScopeNote(['api', 'write_repository', 'ai_features']), null);
+    assert.equal(duoScopeNote(null), null, 'unknown scopes: nothing to say');
+    assert.equal(duoScopeNote(['read_api', 'ai_features']),
+        'The Duo CLI needs the api and ai_features scopes; this token lacks api, so its GitLab Duo access shows as unavailable.');
+    assert.ok(duoScopeNote(['api'])?.includes('lacks ai_features'));
 });

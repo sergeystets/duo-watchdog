@@ -488,6 +488,10 @@ public final class CreditsConfigurable implements Configurable {
         }
         glabNote.setText(wrap(String.join(" ", notes)));
         String duoText = "The Duo CLI signs in through glab (glab 1.85.2 and duo 8.68.0 or later), so this turns glab on too.";
+        String duoScopes = Accounts.duoScopeNote(a.scopeList());
+        if (a.duo && duoScopes != null) {
+            duoText += " " + duoScopes + " Create one with the link above, then Replace token….";
+        }
         if (a.duo && CliHandOff.duoHasOwnLogin()) {
             duoText += " It keeps settings of its own in ~/.gitlab/storage.json; if it signed in there, it keeps "
                     + "that login: delete its settings there to make it use glab's.";

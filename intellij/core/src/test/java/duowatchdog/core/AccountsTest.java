@@ -127,6 +127,16 @@ class AccountsTest {
     }
 
     @Test
+    void theDuoCliNeedsApiAndAiFeatures() {
+        assertNull(Accounts.duoScopeNote(List.of("api", "write_repository", "ai_features")));
+        assertNull(Accounts.duoScopeNote(null), "unknown scopes: nothing to say");
+        assertEquals("The Duo CLI needs the api and ai_features scopes; this token lacks api, so its GitLab Duo "
+                + "access shows as unavailable.", Accounts.duoScopeNote(List.of("read_api", "ai_features")),
+                "Duo Watchdog's own scopes are not enough");
+        assertTrue(Accounts.duoScopeNote(List.of("api")).contains("lacks ai_features"));
+    }
+
+    @Test
     void glabFollowsThePickedAccountAmongThoseAllowed() {
         List<String> allowed = List.of("sergii", "olena");
         assertEquals("olena", Accounts.glabOwner(allowed, "olena", a -> a.equals("sergii")), "picked wins");

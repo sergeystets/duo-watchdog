@@ -1,6 +1,6 @@
 import {
     Account, AccountState, accountGroup, accountHost, allowsGlab, attention, daysLeft, glabHas, glabHolder, glabOwner,
-    glabRefusedIt, glabScopeNote, idOf, inDays, missingUsageScopes, sortStates, usageReadable,
+    glabRefusedIt, duoScopeNote, glabScopeNote, idOf, inDays, missingUsageScopes, sortStates, usageReadable,
 } from './accounts';
 import { Alert } from './alert';
 import { DashboardModel, dashboardModel } from './dashboard';
@@ -68,6 +68,9 @@ export function accountDetail(state: AccountState, today: IsoDate, glab: string 
         parts.push(glab);
     } else if (allowsGlab(account)) {
         parts.push(account.duo ? 'glab and the Duo CLI allowed' : 'glab allowed');
+    }
+    if (account.duo && duoScopeNote(account.scopes) != null) {
+        parts.push('the Duo CLI needs api and ai_features');
     }
     return parts.join(' · ');
 }
@@ -385,9 +388,11 @@ export function glabNote(scopes: string[] | null): string {
 }
 
 /** The note under "Also use it for the GitLab Duo CLI": it signs in through glab. */
-export function duoNote(glab: boolean): string {
-    return glab ? 'The Duo CLI signs in through glab, which follows the account you pick.'
-        : 'The Duo CLI signs in through glab, so Yes allows glab for this account too. ' + GLAB_FOLLOWS;
+export function duoNote(glab: boolean, scopes: readonly string[] | null = null): string {
+    const note = duoScopeNote(scopes);
+    return (glab ? 'The Duo CLI signs in through glab, which follows the account you pick.'
+        : 'The Duo CLI signs in through glab, so Yes allows glab for this account too. ' + GLAB_FOLLOWS)
+        + (note != null ? ' ' + note : '');
 }
 
 /** The notification after a token is added: what happened, and whether glab got it. */
@@ -415,7 +420,8 @@ export function cliOnText(account: Account, cli: 'glab' | 'duo', glabWasOn: bool
         ? 'glab may use the token of @' + account.username + ' on ' + h + '.'
         : 'the GitLab Duo CLI may use the token of @' + account.username + ' on ' + h + ', through glab.'
         + (glabWasOn ? '' : ' That allows glab too.');
-    return 'Duo Watchdog: ' + allowed + (caption != null ? ' ' + caption + '.' : '');
+    const duo = cli === 'duo' ? duoScopeNote(account.scopes) : null;
+    return 'Duo Watchdog: ' + allowed + (caption != null ? ' ' + caption + '.' : '') + (duo != null ? ' ' + duo : '');
 }
 
 /** After glab or the Duo CLI is turned off for an account: nothing is signed out. */

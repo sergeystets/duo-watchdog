@@ -133,7 +133,7 @@ export class Commands {
         }
         if (!duo) {
             duo = await askYesNo('Also use it for the GitLab Duo CLI on ' + host + '?', 'the Duo CLI signs in through glab',
-                duoNote(glab));
+                duoNote(glab, scopes));
         }
 
         await this.store.storeToken(id, token);
