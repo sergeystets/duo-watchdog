@@ -41,6 +41,8 @@
                     icon="/icons/duoWatchdog.svg"
                     factoryClass="duowatchdog.plugin.CreditsToolWindowFactory"/>
         <notificationGroup id="Duo Watchdog" displayType="BALLOON"/>
+        <!-- The last threshold, the limit, a block, a token about to expire or turned down: these stay until closed. -->
+        <notificationGroup id="Duo Watchdog Important" displayType="STICKY_BALLOON"/>
     </extensions>
 
     <actions>

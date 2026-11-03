@@ -1,18 +1,20 @@
 import * as vscode from 'vscode';
+import { DEFAULT_LIMIT, OldSettings } from './core/accounts';
 import { DEFAULT_PERCENTS, percentsOrDefault } from './core/alert';
 
 export const SECTION = 'duoWatchdog';
-/** The token's key in VS Code's secret storage (the OS keychain), never in settings.json. */
-export const TOKEN_KEY = 'duoWatchdog.token';
-/** The key of the last notice shown, so it is not repeated on every refresh. */
-export const LAST_ALERT_KEY = 'duoWatchdog.lastAlertKey';
+/**
+ * Where the one token was kept before accounts, in VS Code's secret storage (the OS keychain). It is moved to an
+ * account once GitLab says whose it is.
+ */
+export const OLD_TOKEN_KEY = 'duoWatchdog.token';
+/** The key of the last notice shown before accounts; it moves to the account too. */
+export const OLD_LAST_ALERT_KEY = 'duoWatchdog.lastAlertKey';
 
+/** The settings every account shares; the group path and the limit belong to each account. */
 export interface Settings {
+    /** The GitLab address a new token is for, unless another is typed. */
     gitlabUrl: string;
-    /** The top-level group that owns the Duo subscription, as typed: normalised with groupPath() before use. */
-    groupPath: string;
-    /** The credits the user means to stay within: their GitLab cap, or a lower budget of their own. */
-    limit: number;
     alertPercents: string;
     percents: number[];
     forecastAlert: boolean;
@@ -24,11 +26,20 @@ export function settings(): Settings {
     const alertPercents = c.get<string>('alertPercents', DEFAULT_PERCENTS);
     return {
         gitlabUrl: c.get<string>('gitlabUrl', 'https://gitlab.com'),
-        groupPath: c.get<string>('groupPath', ''),
-        limit: c.get<number>('limit', 100),
         alertPercents,
         percents: percentsOrDefault(alertPercents),
         forecastAlert: c.get<boolean>('forecastAlert', true),
         refreshMinutes: Math.max(1, c.get<number>('refreshMinutes', 15)),
+    };
+}
+
+/** The settings of the one account before accounts, read once to set up the first account. */
+export function oldSettings(context: vscode.ExtensionContext): OldSettings {
+    const c = vscode.workspace.getConfiguration(SECTION);
+    return {
+        gitlabUrl: c.get<string>('gitlabUrl', 'https://gitlab.com'),
+        groupPath: c.get<string>('groupPath', ''),
+        limit: c.get<number>('limit', DEFAULT_LIMIT),
+        lastAlertKey: context.globalState.get<string>(OLD_LAST_ALERT_KEY) ?? null,
     };
 }

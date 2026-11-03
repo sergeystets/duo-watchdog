@@ -44,17 +44,17 @@ test('the status text shows dollars used over the limit', () => {
     assert.equal(statusText(Snapshots.failed(Snapshots.loading(), 'x'), 100), 'Duo: error');
 });
 
-test('the tooltip explains the dollar and keeps the last error', () => {
+test("the tooltip's lines for an account keep the last error", () => {
     const s = Snapshots.failed(Snapshots.ok(report(42, false), AT), 'Cannot reach gitlab.com: <timeout>');
 
-    const tip = tooltipLines(s, 100, TODAY).join('\n');
-
-    assert.ok(tip.includes('Used 42 of 100 (42%), left 58'), tip);
-    assert.ok(tip.includes('Spent today: 1.3'), tip);
-    assert.ok(tip.includes('Forecast by Oct 31: 72.3'), tip);
-    assert.ok(tip.includes('Updated 2026-10-18 14:05'), tip);
-    assert.ok(tip.includes("$ = credits at GitLab's $1 list price"), tip);
-    assert.ok(tip.includes('Last refresh failed: Cannot reach gitlab.com: <timeout>'), tip);
+    assert.deepEqual(tooltipLines(s, 100, TODAY), [
+        'Used 42 of 100 (42%), left 58',
+        'Spent today: 1.3',
+        'Forecast by Oct 31: 72.3',
+        'Last refresh failed: Cannot reach gitlab.com: <timeout>',
+    ]);
+    assert.deepEqual(tooltipLines(Snapshots.loading(), 100, TODAY), ['Loading…']);
+    assert.ok(tooltipLines(Snapshots.ok(report(100, true), AT), 100, TODAY).includes("Blocked by GitLab's default per-user cap"));
 });
 
 test('the period and dates read as in the mockup', () => {

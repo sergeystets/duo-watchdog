@@ -219,6 +219,10 @@ class CreditsClientTest {
     void namesTheScopesATokenLacks() {
         CreditsClient.TokenInfo info = new CreditsClient.TokenInfo("x", List.of("read_api", "api"), null, null, null);
         assertEquals(List.of("ai_features"), info.missingScopes());
+        // api covers read_api: a token made for glab and Duo Watchdog both.
+        CreditsClient.TokenInfo glab = new CreditsClient.TokenInfo("x", List.of("api", "write_repository", "ai_features"),
+                null, null, null);
+        assertEquals(List.of(), glab.missingScopes());
     }
 
     @Test

@@ -87,9 +87,11 @@ public final class CreditsClient {
      */
     public record TokenInfo(String name, List<String> scopes, LocalDate expiresAt, Instant createdAt, Instant lastUsedAt) {
 
-        /** Of the scopes Duo Watchdog needs, those the token lacks. */
+        /** Of the scopes Duo Watchdog needs, those the token lacks; api covers read_api. */
         public List<String> missingScopes() {
-            return SCOPES.stream().filter(scope -> !scopes.contains(scope)).toList();
+            return SCOPES.stream()
+                    .filter(scope -> !scopes.contains(scope) && !("read_api".equals(scope) && scopes.contains("api")))
+                    .toList();
         }
     }
 

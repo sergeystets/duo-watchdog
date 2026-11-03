@@ -1,25 +1,66 @@
 import * as vscode from 'vscode';
-import { groupPath } from './core/address';
+import { AccountStore } from './accounts';
+import { groupPath, tokenPage } from './core/address';
+import {
+    Account, AccountState, expiryPopupKey, idOf, migratedAccount, needsMigration, Problem, rejectedPopupKey,
+    sortStates, usageReadable,
+} from './core/accounts';
+import { alertText, expiryText, rejectedText } from './core/accountsView';
 import { alertFor, AlertKind } from './core/alert';
-import { CreditsClient, Transport } from './core/client';
+import { CreditsClient, GitLabError, Transport } from './core/client';
 import { localToday } from './core/dates';
 import { Snapshot, Snapshots } from './core/report';
-import { LAST_ALERT_KEY, settings, TOKEN_KEY } from './settings';
+import { OLD_LAST_ALERT_KEY, OLD_TOKEN_KEY, oldSettings, settings } from './settings';
 
-/** Refreshes the user's credits on a schedule and on demand; one per window, since the numbers are the user's. */
+/** Every account with what the last refresh found, and the one the status bar and the dashboard show. */
+export interface Overview {
+    /** Most credits left first. */
+    states: AccountState[];
+    selected: AccountState | null;
+    /** While there is no account: set up, the old token being moved to an account, or why that failed. */
+    setup: Snapshot;
+}
+
+interface Result {
+    snapshot: Snapshot;
+    problem: Problem | null;
+}
+
+/** Refreshes every account's credits on a schedule and on demand; one per window, since the numbers are the user's. */
 export class CreditsService implements vscode.Disposable {
 
-    private readonly changed = new vscode.EventEmitter<Snapshot>();
+    private readonly changed = new vscode.EventEmitter<void>();
     readonly onDidChange = this.changed.event;
-    private current: Snapshot = Snapshots.loading();
+    private readonly results = new Map<string, Result>();
+    private setup: Snapshot = Snapshots.loading();
     private timer: ReturnType<typeof setInterval> | undefined;
+    private soon: ReturnType<typeof setTimeout> | undefined;
     private loading = false;
+    private again = false;
 
-    constructor(private readonly context: vscode.ExtensionContext, private readonly transport: Transport) {
+    constructor(private readonly context: vscode.ExtensionContext, private readonly store: AccountStore,
+                private readonly transport: Transport) {
     }
 
-    get snapshot(): Snapshot {
-        return this.current;
+    overview(): Overview {
+        const states = sortStates(this.store.list().map(account => {
+            const id = idOf(account);
+            const result = this.results.get(id) ?? { snapshot: Snapshots.loading(), problem: null };
+            return { id, account, ...result };
+        }));
+        const selectedId = this.store.selectedId();
+        return { states, selected: states.find(s => s.id === selectedId) ?? states[0] ?? null, setup: this.setup };
+    }
+
+    /** Shows another account in the status bar and the dashboard. */
+    async select(id: string): Promise<void> {
+        await this.store.select(id);
+        this.changed.fire();
+    }
+
+    /** Tells the views that an account changed without asking GitLab again, e.g. a glab tick. */
+    changedLocally(): void {
+        this.changed.fire();
     }
 
     /** Restarts the schedule with the current settings and refreshes now. */
@@ -31,57 +72,161 @@ export class CreditsService implements vscode.Disposable {
         void this.refresh();
     }
 
+    /** Refreshes in a moment: changes that come together (a token saved, then its account) make one refresh. */
+    refreshSoon(): void {
+        if (this.soon !== undefined) {
+            clearTimeout(this.soon);
+        }
+        this.soon = setTimeout(() => {
+            this.soon = undefined;
+            void this.refresh();
+        }, 500);
+    }
+
     async refresh(): Promise<void> {
         if (this.loading) {
+            this.again = true;
             return;
         }
         this.loading = true;
         try {
-            this.publish(await this.load());
+            do {
+                this.again = false;
+                await this.load();
+            } while (this.again);
         } finally {
             this.loading = false;
         }
     }
 
-    private async load(): Promise<Snapshot> {
-        const s = settings();
-        const token = (await this.context.secrets.get(TOKEN_KEY))?.trim();
-        if (s.groupPath.trim() === '' || !token) {
-            return Snapshots.notConfigured();
+    private async load(): Promise<void> {
+        await this.migrate();
+        const accounts = this.store.list();
+        for (const id of [...this.results.keys()]) {
+            if (!accounts.some(a => idOf(a) === id)) {
+                this.results.delete(id);
+            }
         }
-        const group = groupPath(s.groupPath, s.gitlabUrl);
+        this.changed.fire();
+        await Promise.all(accounts.map(async account => {
+            const id = idOf(account);
+            const result = await this.loadAccount(id, account);
+            this.results.set(id, result);
+            this.changed.fire();
+            this.notifyOnce(id, result);
+        }));
+    }
+
+    private async loadAccount(id: string, account: Account): Promise<Result> {
+        const previous = this.results.get(id)?.snapshot ?? Snapshots.loading();
+        const token = await this.store.token(id);
+        if (!token) {
+            return { snapshot: Snapshots.notConfigured(), problem: 'noToken' };
+        }
+        if (usageReadable(account.scopes) === false) {
+            return { snapshot: Snapshots.notConfigured(), problem: 'notTracked' };
+        }
+        if (account.groupPath.trim() === '') {
+            return { snapshot: Snapshots.notConfigured(), problem: 'noGroup' };
+        }
+        const group = groupPath(account.groupPath, account.gitlabUrl);
         if (group === '') {
-            return Snapshots.failed(this.current, "Enter the group path from the group's address, e.g. my-company, "
-                + 'or run the command Duo Watchdog: Find My Group.');
+            return {
+                snapshot: Snapshots.failed(previous, "Enter the group path from the group's address, e.g. my-company, "
+                    + 'or run the command Duo Watchdog: Find My Group.'),
+                problem: null,
+            };
         }
         try {
-            const client = new CreditsClient(s.gitlabUrl, token, this.transport);
-            return Snapshots.ok(await client.fetch(group), new Date());
+            const client = new CreditsClient(account.gitlabUrl, token, this.transport);
+            return { snapshot: Snapshots.ok(await client.fetch(group), new Date()), problem: null };
         } catch (e) {
             // The message is the user's to read; it never carries the token.
-            return Snapshots.failed(this.current, e instanceof Error ? e.message : String(e));
+            const message = e instanceof Error ? e.message : String(e);
+            if (e instanceof GitLabError && e.status === 401) {
+                return { snapshot: Snapshots.failed(Snapshots.loading(), message), problem: 'rejected' };
+            }
+            if (e instanceof GitLabError && e.status === 403) {
+                return { snapshot: Snapshots.failed(Snapshots.loading(), message), problem: 'notTracked' };
+            }
+            return { snapshot: Snapshots.failed(previous, message), problem: null };
         }
     }
 
-    private publish(next: Snapshot): void {
-        this.current = next;
-        if (next.status === 'ok') {
-            this.notifyOnce(next);
-        }
-        this.changed.fire(next);
-    }
-
-    private notifyOnce(s: Snapshot): void {
-        const { limit, percents, forecastAlert } = settings();
-        const alert = s.report && alertFor(s.report, limit, percents, forecastAlert, localToday());
-        if (!alert || alert.key === this.context.globalState.get<string>(LAST_ALERT_KEY)) {
+    /**
+     * Before accounts there was one token: while there is no account yet, GitLab is asked whose it is and it becomes
+     * the first account, with the old group, limit and last alert. When GitLab cannot be reached, the old token stays
+     * and the next refresh tries again.
+     */
+    private async migrate(): Promise<void> {
+        const secrets = this.context.secrets;
+        const oldToken = (await secrets.get(OLD_TOKEN_KEY))?.trim();
+        if (!needsMigration(this.store.list().length, oldToken)) {
+            this.setup = Snapshots.notConfigured();
             return;
         }
-        void this.context.globalState.update(LAST_ALERT_KEY, alert.key);
+        const old = oldSettings(this.context);
+        try {
+            const client = new CreditsClient(old.gitlabUrl, oldToken!, this.transport);
+            const username = await client.username();
+            const info = await client.tokenInfo().catch(() => null);
+            const account = migratedAccount(old, username, info, Date.now());
+            const id = idOf(account);
+            await this.store.storeToken(id, oldToken!);
+            await this.store.put(account);
+            await this.store.select(id);
+            await secrets.delete(OLD_TOKEN_KEY);
+            await this.context.globalState.update(OLD_LAST_ALERT_KEY, undefined);
+            this.setup = Snapshots.notConfigured();
+        } catch (e) {
+            const message = e instanceof Error ? e.message : String(e);
+            this.setup = Snapshots.failed(Snapshots.loading(), 'The saved token is not moved to an account yet: ' + message);
+        }
+    }
+
+    /** The one-time popups: GitLab turning a token down, a token about to expire, and each period's alerts. */
+    private notifyOnce(id: string, result: Result): void {
+        const account = this.store.get(id);
+        if (account == null) {
+            return;
+        }
+        const today = localToday();
+        const rejected = rejectedPopupKey(account, result.problem === 'rejected');
+        if (rejected != null) {
+            void this.store.update(id, { rejectedPopupKey: rejected });
+            this.offerReplace(vscode.window.showErrorMessage(rejectedText(account, today), REPLACE), account);
+        }
+        const expiry = result.problem === 'rejected' || result.problem === 'noToken' ? null
+            : expiryPopupKey(account, today);
+        if (expiry != null) {
+            void this.store.update(id, { expiryPopupKey: expiry });
+            this.offerReplace(vscode.window.showWarningMessage(expiryText(account, today), REPLACE, CREATE), account);
+        }
+        const report = result.problem == null && result.snapshot.status === 'ok' ? result.snapshot.report : null;
+        if (report == null) {
+            return;
+        }
+        const { percents, forecastAlert } = settings();
+        const alert = alertFor(report, account.limit, percents, forecastAlert, today);
+        if (!alert || alert.key === account.lastAlertKey) {
+            return;
+        }
+        void this.store.update(id, { lastAlertKey: alert.key });
         const open = 'Open Duo Watchdog';
-        void show(alert.kind, alert.title + '. ' + alert.message, open).then(choice => {
+        void show(alert.kind, alertText(alert, account), open).then(async choice => {
             if (choice === open) {
+                await this.select(id);
                 void vscode.commands.executeCommand('duoWatchdog.openDashboard');
+            }
+        });
+    }
+
+    private offerReplace(choice: Thenable<string | undefined>, account: Account): void {
+        void choice.then(picked => {
+            if (picked === REPLACE) {
+                void vscode.commands.executeCommand('duoWatchdog.addToken', { gitlabUrl: account.gitlabUrl });
+            } else if (picked === CREATE) {
+                void vscode.env.openExternal(vscode.Uri.parse(tokenPage(account.gitlabUrl, account.glab)));
             }
         });
     }
@@ -90,9 +235,15 @@ export class CreditsService implements vscode.Disposable {
         if (this.timer !== undefined) {
             clearInterval(this.timer);
         }
+        if (this.soon !== undefined) {
+            clearTimeout(this.soon);
+        }
         this.changed.dispose();
     }
 }
+
+const REPLACE = 'Replace Token';
+const CREATE = 'Create a New Token in GitLab';
 
 function show(kind: AlertKind, message: string, action: string): Thenable<string | undefined> {
     switch (kind) {

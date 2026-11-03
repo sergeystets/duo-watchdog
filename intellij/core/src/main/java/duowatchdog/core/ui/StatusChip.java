@@ -9,6 +9,7 @@ import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.geom.Ellipse2D;
 import java.awt.geom.RoundRectangle2D;
 import java.util.List;
 
@@ -28,6 +29,8 @@ public final class StatusChip extends JComponent {
     private Level level = Level.NORMAL;
     private double fraction;
     private boolean meter;
+    /** The dot that says another account needs a look: WARNING or ERROR, null for none. */
+    private Tone attention;
 
     public StatusChip(Theme theme, Icon normalIcon, Icon warningIcon, Icon blockedIcon) {
         this.theme = theme;
@@ -55,6 +58,12 @@ public final class StatusChip extends JComponent {
         this.fraction = fraction;
         this.meter = meter;
         revalidate();
+        repaint();
+    }
+
+    /** @param tone WARNING or ERROR for a dot in the chip's corner, null for none */
+    public void attention(Tone tone) {
+        this.attention = tone;
         repaint();
     }
 
@@ -139,5 +148,16 @@ public final class StatusChip extends JComponent {
         FontMetrics fm = g.getFontMetrics();
         g.setColor(theme.color(Tone.TEXT));
         g.drawString(text, x, (getHeight() - fm.getHeight()) / 2 + fm.getAscent());
+
+        if (attention != null) {
+            int d = theme.px(7);
+            int ring = theme.px(1);
+            int dx = Math.min(size.width, getWidth()) - d - ring;
+            int dy = y + ring;
+            g.setColor(theme.color(Tone.BACKGROUND));
+            g.fill(new Ellipse2D.Double(dx - ring, dy - ring, d + 2 * ring, d + 2 * ring));
+            g.setColor(theme.color(attention));
+            g.fill(new Ellipse2D.Double(dx, dy, d, d));
+        }
     }
 }

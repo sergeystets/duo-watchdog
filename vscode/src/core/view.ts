@@ -1,4 +1,4 @@
-import { dateTime, dayOfMonth, IsoDate, monthName } from './dates';
+import { dayOfMonth, IsoDate, monthName } from './dates';
 import { BillingPeriod } from './period';
 import { Snapshot, spentOn } from './report';
 
@@ -27,35 +27,35 @@ export function statusText(s: Snapshot, limit: number): string {
         + (s.status === 'error' ? ' ⚠' : '');
 }
 
-/** The tooltip's lines after its "Duo Watchdog" title, as plain text. */
+/**
+ * The tooltip's lines about one account's numbers, as plain text: used and left, spent today, the forecast, the
+ * block, and why the last refresh failed.
+ */
 export function tooltipLines(s: Snapshot, limit: number, today: IsoDate): string[] {
     const lines: string[] = [];
     const r = s.report;
-    if (s.status === 'notConfigured') {
-        lines.push('Set the GitLab URL and group in Settings, and the token with Duo Watchdog: Set GitLab Token.');
-    } else if (r == null && s.status !== 'error') {
+    if (r == null && s.status === 'loading') {
         lines.push('Loading…');
     }
     if (r != null) {
         const period = BillingPeriod.of(r.startDate, r.endDate, today);
-        lines.push('@' + (r.username ?? ''));
-        lines.push('Used ' + number(r.creditsUsed) + ' of ' + number(limit) + ' (' + percent(r.creditsUsed, limit)
-            + '), left ' + number(Math.max(limit - r.creditsUsed, 0)));
+        lines.push(usedLine(r.creditsUsed, limit));
         lines.push('Spent today: ' + number(spentOn(r, today)));
         lines.push('Forecast by ' + day(period.end) + ': ' + number(period.project(r.creditsUsed)));
         if (r.blocked) {
             lines.push('Blocked by ' + capName(r.blockedBy));
         }
-        if (s.fetchedAt != null) {
-            lines.push('Updated ' + dateTime(s.fetchedAt));
-        }
-        lines.push("$ = credits at GitLab's $1 list price");
     }
     if (s.error != null) {
         lines.push('Last refresh failed: ' + s.error);
     }
-    lines.push('Click for details.');
     return lines;
+}
+
+/** "Used 42 of 100 (42%), left 58". */
+export function usedLine(used: number, limit: number): string {
+    return 'Used ' + number(used) + ' of ' + number(limit) + ' (' + percent(used, limit) + '), left '
+        + number(Math.max(limit - used, 0));
 }
 
 /** "October 1 – 31 · day 18 of 31"; a period across two months names both. */

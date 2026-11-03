@@ -73,8 +73,8 @@ export interface FeatureModel {
     fraction: number | null;
 }
 
-export const NOT_CONFIGURED_TEXT = 'Not set up yet. Enter the GitLab URL, your group\'s path and a personal access '
-    + 'token with the read_api and ai_features scopes.';
+export const NOT_CONFIGURED_TEXT = 'Not set up yet. Add a personal access token with the read_api and ai_features '
+    + 'scopes: GitLab says whose it is.';
 
 /** Normal, amber from the lowest alert percent, red once GitLab blocks Duo. */
 export function level(report: CreditsReport | null, limit: number, percents: number[]): Level {
