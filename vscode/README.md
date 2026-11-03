@@ -96,24 +96,35 @@ GitLab keeps usage from the subscription's start, so the year can be shorter, an
 group member sees usage per day and per feature; per project, model or session takes the group's Owner.
 
 The statistics are read from GitLab when you first show them for an account, and kept for an hour. **Refresh** reads
-them again. If they don't load, the view says why; the Usage view is not affected.
+them again. If GitLab fails on the whole year (gitlab.com can answer HTTP 500), they are read a month at a time, back
+to where GitLab's data ends. If they don't load, the view says why; the Usage view is not affected.
 
 ## glab and the GitLab Duo CLI
 
-**Use for glab** runs `glab auth login --hostname <host> --stdin` and writes the account's token to glab's standard
-input, never on its command line. It does so when you turn it on, and again whenever that account's token is
-replaced. glab keeps one token per GitLab, so turning it on for one account turns it off for the other accounts on
-the same GitLab. Duo Watchdog looks for glab on the `PATH`, then in `/opt/homebrew/bin`, `/usr/local/bin` and
-`/home/linuxbrew/.linuxbrew/bin` (`glab.exe` on the `PATH` on Windows). If glab is not there or fails, a warning
-shows glab's own words, never the token. glab needs the `api` and `write_repository` scopes to write; with a
-`read_api` token Duo Watchdog says glab can only read with it.
+**Use for glab** allows Duo Watchdog to hand that account's token to glab for its GitLab: it runs
+`glab auth login --hostname <host> --stdin` and writes the token to glab's standard input, never on its command line.
+glab keeps one token per GitLab and **follows the account you pick**, among those allowed: several accounts of a
+GitLab may be allowed. For each GitLab, glab gets the token of the account you picked when it is allowed and on that
+GitLab; else it keeps the allowed account it has; else it gets the first allowed one in the list. The hand-off runs
+when you pick an account (in **Accounts** or on the dashboard), after you add or replace a token, after you allow glab
+or the Duo CLI, and after each refresh, and only when glab doesn't have that token yet. On success:
+`Duo Watchdog: glab now signs in to gitlab.com as @dana.k.`
 
-**Use for the GitLab Duo CLI** does the same hand-off, since the standalone `duo` CLI signs in through glab when
-glab is signed in (glab 1.85.2+, duo 8.68.0+). Turning it on turns on glab for that account too. If the Duo CLI has
-a login of its own in `~/.gitlab/storage.json`, it keeps using that one: Duo Watchdog says so, and you can delete its
-settings there to make it use glab's. Duo Watchdog never writes that file and never shows what is in it.
+Duo Watchdog looks for glab on the `PATH`, then in `/opt/homebrew/bin`, `/usr/local/bin` and
+`/home/linuxbrew/.linuxbrew/bin` (`glab.exe` on the `PATH` on Windows). Without glab it says nothing when you switch
+accounts; the **Accounts** list says `glab isn't found on this computer`. If glab turns a token down, a warning shows
+glab's own words, never the token, and that token is not tried again until it is replaced (or you allow glab again).
+Without the `api` scope glab can only read; without `write_repository` it can't `git push` over HTTPS (over SSH it can).
 
-Turning either off only stops the hand-offs: it signs nothing out.
+Each account's line in **Accounts** says what glab does with it: `glab signs in to gitlab.com with this token`, or
+`glab switches to this token when you pick @dana.k. It has @bob's now.`
+
+**Use for the GitLab Duo CLI** does the same, since the standalone `duo` CLI signs in through glab when glab is
+signed in (glab 1.85.2+, duo 8.68.0+). Allowing it allows glab for that account too. If the Duo CLI has a login of its
+own in `~/.gitlab/storage.json`, it keeps using that one: Duo Watchdog says so, and you can delete its settings there
+to make it use glab's. Duo Watchdog never writes that file and never shows what is in it.
+
+Turning either off only stops the hand-offs: nothing is ever signed out.
 
 ## Settings
 

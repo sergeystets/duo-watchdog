@@ -52,7 +52,7 @@ export class DashboardView implements vscode.WebviewViewProvider {
                 this.scope = message.scope;
                 this.update();
             } else if (message.type === 'select' && typeof message.id === 'string') {
-                void this.service.select(message.id);
+                void this.commands.pick(message.id);
             } else if (message.type === 'replaceToken') {
                 void this.commands.replaceSelected();
             } else if (message.type && ACTIONS[message.type]) {

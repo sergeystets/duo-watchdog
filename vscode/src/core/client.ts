@@ -1,6 +1,6 @@
 import { trimSlashes } from './address';
-import { IsoDate, parseDate } from './dates';
-import { FlowHistory, History } from './history';
+import { addDays, firstOfMonth, IsoDate, localToday, parseDate, plusMonths } from './dates';
+import { FlowHistory, History, mergeHistories } from './history';
 import { CreditsReport, DailyUsage, FlowUsage } from './report';
 
 export interface Response {
@@ -224,10 +224,60 @@ export class CreditsClient {
     /**
      * The user's usage from `from` to `to`, at most a year: per day, per feature per day, and what GitLab did not
      * bill. GitLab moves the start to the subscription's. The per-feature and not-billed figures are details: when
-     * they fail, the totals still stand.
+     * they fail, the totals still stand. When GitLab fails on the whole range (HTTP 5xx, as gitlab.com does on a
+     * year), it is asked a month at a time.
      */
     async history(namespace: string, from: IsoDate, to: IsoDate): Promise<History> {
-        const variables: Json = { namespacePath: namespace, startDate: from, endDate: to };
+        try {
+            return await this.historyOf(namespace, from, to);
+        } catch (e) {
+            if (!(e instanceof GitLabError) || e.status < 500) {
+                throw e;
+            }
+            return this.byMonth(namespace, from, to, e);
+        }
+    }
+
+    /**
+     * history() a month at a time, newest first: the current month as the Usage view asks for it, without dates,
+     * then each month before it, until GitLab fails twice in a row, which is where its data ends.
+     */
+    private async byMonth(namespace: string, from: IsoDate, to: IsoDate, whole: GitLabError): Promise<History> {
+        const months: History[] = [];
+        let failures = 0;
+        for (let month = firstOfMonth(to); month.slice(0, 7) >= from.slice(0, 7) && failures < 2;
+             month = plusMonths(month, -1)) {
+            try {
+                if (month.slice(0, 7) === to.slice(0, 7)) {
+                    months.push(await this.historyOf(namespace, null, null));
+                } else {
+                    months.push(await this.historyOf(namespace, month < from ? from : month,
+                        addDays(plusMonths(month, 1), -1)));
+                }
+                failures = 0;
+            } catch (e) {
+                if (!(e instanceof GitLabError) || (e.status > 0 && e.status < 500)) {
+                    // Turned down, not out of range: the same for every month.
+                    throw e;
+                }
+                failures++;
+            }
+        }
+        if (months.length === 0) {
+            throw whole;
+        }
+        return months.length === 1 ? months[0] : mergeHistories(months)!;
+    }
+
+    /** One range, or with null dates the current period, as the Usage view asks. */
+    private async historyOf(namespace: string, from: IsoDate | null, to: IsoDate | null): Promise<History> {
+        const variables: Json = { namespacePath: namespace };
+        if (from != null) {
+            variables.startDate = from;
+        }
+        if (to != null) {
+            variables.endDate = to;
+        }
         const result = await this.graphql(HISTORY_QUERY, variables);
         const user = obj(result.data, 'currentUser');
         if (user == null) {
@@ -291,8 +341,9 @@ export class CreditsClient {
                 throw e;
             }
         }
+        const today = localToday();
         return {
-            start: date_(usage, 'startDate') ?? from, end: date_(usage, 'endDate') ?? to,
+            start: date_(usage, 'startDate') ?? from ?? firstOfMonth(today), end: date_(usage, 'endDate') ?? to ?? today,
             daily: dailies(usage), flows: perFlow, nonBillable, flowsError,
         };
     }

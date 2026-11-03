@@ -343,7 +343,6 @@ public final class CreditsConfigurable implements Configurable {
                 if (!shown.glab) {
                     shown.duo = false;
                 }
-                oneHandOffPerHost(shown);
                 renderDetails();
             }
         });
@@ -353,7 +352,6 @@ public final class CreditsConfigurable implements Configurable {
                 if (shown.duo) {
                     shown.glab = true;
                 }
-                oneHandOffPerHost(shown);
                 renderDetails();
             }
         });
@@ -441,8 +439,19 @@ public final class CreditsConfigurable implements Configurable {
         duo.setSelected(a.duo);
         Account live = CreditsSettings.getInstance().account(a.id());
         List<String> notes = new ArrayList<>();
-        Account other = working.stream()
-                .filter(w -> w != a && w.glab && w.host().equalsIgnoreCase(host))
+        // glab follows the picked account, among those with glab or the Duo CLI ticked on this GitLab.
+        CreditsSettings settings = CreditsSettings.getInstance();
+        java.util.function.Predicate<Account> hasIt = w -> {
+            Account stored = settings.account(w.id());
+            return stored != null && stored.glabHasToken() && !pendingTokens.containsKey(w.id());
+        };
+        List<Account> allowed = working.stream()
+                .filter(w -> (w.glab || w.duo) && w.host().equalsIgnoreCase(host))
+                .sorted(Accounts.byCreditsLeft(this::left, w -> w.username, Account::host))
+                .toList();
+        Account picked = CreditsService.getInstance().selected();
+        Account owner = Accounts.glabOwner(allowed, picked != null ? find(picked.id()) : null, hasIt);
+        Account holder = working.stream().filter(w -> w != a && w.host().equalsIgnoreCase(host) && hasIt.test(w))
                 .findFirst().orElse(null);
         // Known without waiting: looking in WSL takes a moment, so the details are drawn again when it is done.
         Boolean known = CliHandOff.installed(() -> onEdt(this::renderDetails));
@@ -453,26 +462,25 @@ public final class CreditsConfigurable implements Configurable {
                 notes.add("glab is not installed where the IDE looks (" + CliHandOff.whereLooked() + "), so it "
                         + "doesn't have this token. " + CliHandOff.howToInstall() + ", and Duo Watchdog hands the token "
                         + "over on its next refresh.");
-            } else if (newlyOn || pending) {
-                notes.add("glab gets this token for " + host + " when you click OK or Apply, and again whenever it is "
-                        + "replaced.");
-            } else if (live.glabHasToken()) {
+            } else if (hasIt.test(a)) {
                 notes.add("glab signs in to " + host + " with this token.");
-            } else if (live.glabRefused()) {
+            } else if (live != null && live.glabRefused() && !pending) {
                 notes.add("glab turned this token down the last time; the notice said why. Replace the token, or "
                         + "untick this.");
+            } else if (owner == a) {
+                notes.add(newlyOn || pending ? "glab gets this token for " + host + " when you click OK or Apply."
+                        : "glab gets this token on Duo Watchdog's next refresh.");
             } else {
-                notes.add("glab gets this token on Duo Watchdog's next refresh.");
+                notes.add("glab switches to this token when you pick @" + a.username + " in the tool window"
+                        + (holder != null ? "; it has @" + holder.username + "'s now." : "."));
             }
             String scopes = Accounts.glabScopeNote(a.scopeList());
             if (scopes != null) {
                 notes.add(scopes);
             }
-        } else if (other != null) {
-            notes.add("glab keeps one token per GitLab and uses @" + other.username + "'s for " + host
-                    + ". Ticking this switches it to @" + a.username + ".");
         } else {
-            notes.add("Off: Duo Watchdog leaves glab's login alone.");
+            notes.add("Off: picking @" + a.username + " leaves glab's login alone. glab keeps one token per GitLab and "
+                    + "follows the account you pick, among those with this ticked.");
         }
         if (!installed && !a.glab) {
             notes.add("glab is not installed where the IDE looks: " + CliHandOff.whereLooked() + ".");
@@ -480,8 +488,8 @@ public final class CreditsConfigurable implements Configurable {
         glabNote.setText(wrap(String.join(" ", notes)));
         String duoText = "The Duo CLI signs in through glab (glab 1.85.2 and duo 8.68.0 or later), so this turns glab on too.";
         if (a.duo && CliHandOff.duoHasOwnLogin()) {
-            duoText += " It has a login of its own in ~/.gitlab/storage.json now and keeps using it: delete its "
-                    + "settings there to make it use glab's.";
+            duoText += " It keeps settings of its own in ~/.gitlab/storage.json; if it signed in there, it keeps "
+                    + "that login: delete its settings there to make it use glab's.";
         }
         duoNote.setText(wrap(duoText));
         if (panel != null) {
@@ -578,19 +586,6 @@ public final class CreditsConfigurable implements Configurable {
             }
         }
         return look;
-    }
-
-    /** glab keeps one token per GitLab: ticking glab or the Duo CLI for one account unticks the others on its host. */
-    private void oneHandOffPerHost(Account chosen) {
-        if (!chosen.glab && !chosen.duo) {
-            return;
-        }
-        for (Account other : working) {
-            if (other != chosen && other.host().equalsIgnoreCase(chosen.host())) {
-                other.glab = false;
-                other.duo = false;
-            }
-        }
     }
 
     private String groupHintText() {
@@ -805,7 +800,6 @@ public final class CreditsConfigurable implements Configurable {
         }
         pendingTokens.put(account.id(), result.token());
         removed.remove(account.id());
-        oneHandOffPerHost(account);
         if (search.getText().isBlank() && !passes(account, filter)) {
             filterButtons.get(Filter.ALL).setSelected(true);
             filter = Filter.ALL;
@@ -1031,11 +1025,9 @@ public final class CreditsConfigurable implements Configurable {
         CreditsSettings settings = CreditsSettings.getInstance();
         CreditsSettings.Settings s = settings.getState();
         List<Account> next = new ArrayList<>();
-        List<Account> handOff = new ArrayList<>();
         for (Account w : working) {
             Account live = settings.account(w.id());
             boolean newToken = pendingTokens.containsKey(w.id());
-            boolean turnedOn = (w.glab || w.duo) && (live == null || !live.glab && !live.duo || w.duo && !live.duo);
             Account kept = live != null ? live : w.copy();
             kept.gitlabUrl = w.gitlabUrl;
             kept.namespace = GitLabAddress.groupPath(w.namespace, w.gitlabUrl);
@@ -1050,9 +1042,6 @@ public final class CreditsConfigurable implements Configurable {
                 kept.lastExpiryKey = "";
             }
             next.add(kept);
-            if ((w.glab || w.duo) && (newToken || turnedOn)) {
-                handOff.add(kept);
-            }
         }
         s.accounts.clear();
         s.accounts.addAll(next);
@@ -1074,12 +1063,7 @@ public final class CreditsConfigurable implements Configurable {
                 settings.setToken(id, null);
             }
             tokens.forEach(settings::setToken);
-            Map<String, String> cli = new HashMap<>();
-            for (Account account : handOff) {
-                String token = tokens.get(account.id());
-                cli.put(account.id(), token != null ? token : settings.token(account.id()));
-            }
-            CreditsService.handOff(handOff, cli, false);
+            CreditsService.getInstance().syncGlab(tokens.keySet());
             CreditsService.getInstance().reschedule();
         });
 

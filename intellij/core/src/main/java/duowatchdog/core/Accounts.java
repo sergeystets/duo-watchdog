@@ -86,6 +86,24 @@ public final class Accounts {
     }
 
     /**
+     * Which account glab should have for one GitLab, among those allowed to hand their token to it: the one picked in
+     * the tool window, else the one glab has now, else the first. Null when none is allowed.
+     *
+     * @param allowed the accounts on that GitLab with glab or the Duo CLI on, in the list's order
+     * @param picked  the account picked in the tool window, or null
+     * @param hasGlab whether glab has an account's current token
+     */
+    public static <T> T glabOwner(List<T> allowed, T picked, java.util.function.Predicate<T> hasGlab) {
+        if (allowed.isEmpty()) {
+            return null;
+        }
+        if (picked != null && allowed.contains(picked)) {
+            return picked;
+        }
+        return allowed.stream().filter(hasGlab).findFirst().orElse(allowed.get(0));
+    }
+
+    /**
      * What a token's scopes leave glab unable to do, or null when nothing (or the scopes are unknown). Without api
      * glab can only read; without write_repository it does all it does through the API, but cannot push over HTTPS,
      * which matters only when Git runs over HTTPS rather than SSH.

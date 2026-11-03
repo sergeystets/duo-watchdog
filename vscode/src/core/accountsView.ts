@@ -1,6 +1,6 @@
 import {
-    Account, AccountState, accountGroup, accountHost, attention, daysLeft, glabScopeNote, inDays, missingUsageScopes, sortStates,
-    usageReadable,
+    Account, AccountState, accountGroup, accountHost, allowsGlab, attention, daysLeft, glabHas, glabHolder, glabOwner,
+    glabRefusedIt, glabScopeNote, idOf, inDays, missingUsageScopes, sortStates, usageReadable,
 } from './accounts';
 import { Alert } from './alert';
 import { DashboardModel, dashboardModel } from './dashboard';
@@ -35,8 +35,11 @@ export function longDate(date: IsoDate): string {
     return day(date) + ', ' + Number(date.slice(0, 4));
 }
 
-/** "151.4 left · ••••••• · expires Feb 1, 2027 · glab uses it": the line under an account in the Accounts list. */
-export function accountDetail(state: AccountState, today: IsoDate): string {
+/**
+ * "151.4 left · ••••••• · expires Feb 1, 2027 · glab signs in to gitlab.com with this token": the line under an
+ * account in the Accounts list; glab is glabCaption() for it.
+ */
+export function accountDetail(state: AccountState, today: IsoDate, glab: string | null = null): string {
     const { account, problem } = state;
     if (problem === 'noToken') {
         return 'no token';
@@ -61,12 +64,48 @@ export function accountDetail(state: AccountState, today: IsoDate): string {
     } else if (account.expiresAt != null) {
         parts.push('expires ' + shortDate(account.expiresAt, today));
     }
-    if (account.duo) {
-        parts.push('glab and the Duo CLI use it');
-    } else if (account.glab) {
-        parts.push('glab uses it');
+    if (glab != null) {
+        parts.push(glab);
+    } else if (allowsGlab(account)) {
+        parts.push(account.duo ? 'glab and the Duo CLI allowed' : 'glab allowed');
     }
     return parts.join(' · ');
+}
+
+/**
+ * What glab does with an account's token, for an account glab is allowed for, or null: "glab signs in to
+ * gitlab.com with this token", "glab switches to this token when you pick @dana.k. It has @bob's now", glab turned
+ * it down, or glab is not on this computer (installed null: not known yet).
+ */
+export function glabCaption(account: Account, accounts: readonly Account[], picked: string | null,
+                            installed: boolean | null): string | null {
+    if (!allowsGlab(account)) {
+        return null;
+    }
+    const h = accountHost(account.gitlabUrl);
+    if (glabHas(account)) {
+        return (account.duo ? 'glab and the Duo CLI sign' : 'glab signs') + ' in to ' + h + ' with this token';
+    }
+    if (installed === false) {
+        return "glab isn't found on this computer";
+    }
+    if (glabRefusedIt(account)) {
+        return 'glab turned this token down';
+    }
+    const owner = glabOwner(accounts, picked, h);
+    if (owner != null && idOf(owner) === idOf(account)) {
+        return 'glab gets this token next';
+    }
+    const holder = glabHolder(accounts, h);
+    return 'glab switches to this token when you pick @' + account.username
+        + (holder != null && idOf(holder) !== idOf(account) ? ". It has @" + holder.username + "'s now" : '');
+}
+
+/** After a hand-off: "Duo Watchdog: glab now signs in to gitlab.com as @dana.k.", and what its scopes stop. */
+export function glabNowText(account: Account): string {
+    const note = glabScopeNote(account.scopes);
+    return 'Duo Watchdog: glab now signs in to ' + accountHost(account.gitlabUrl) + ' as @' + account.username + '.'
+        + (note != null ? ' ' + note : '');
 }
 
 /** The status bar's text for the account it shows, or for the setup while there is none. */
@@ -211,7 +250,8 @@ export function notice(state: AccountState, today: IsoDate): Notice | null {
                 : 'GitLab does not show the Duo usage of ' + who + ' to its token (HTTP 403). It needs the read_api and ai_features scopes.';
             return {
                 title: 'Usage is not tracked for this account', tone: 'warning', action: 'replaceToken',
-                actionLabel: 'Replace Token…', text: why + (account.glab ? ' glab still uses it.' : ''),
+                actionLabel: 'Replace Token…',
+                text: why + (glabHas(account) ? ' glab still signs in with it.' : allowsGlab(account) ? ' glab may still use it.' : ''),
             };
         }
         case 'noGroup':
@@ -336,29 +376,18 @@ export function addPlan(existing: Account | undefined, gitlabUrl: string, userna
     };
 }
 
-/** The note under "Also use it for glab": who glab uses now, and whether it can write with this token. */
-export function glabNote(owner: Account | undefined, username: string, gitlabUrl: string,
-                         scopes: string[] | null): string {
-    const h = accountHost(gitlabUrl);
-    const parts = [owner == null
-        ? 'glab keeps one token per GitLab. Duo Watchdog has not given glab a token for ' + h + ' yet.'
-        : "glab keeps one token per GitLab. It uses @" + owner.username + "'s for " + h + ' now; Yes switches it to @'
-        + username + '.'];
+export const GLAB_FOLLOWS = 'glab keeps one token per GitLab and follows the account you pick, among those allowed here.';
+
+/** The note under "Also use it for glab": glab follows the picked account, and what the token's scopes stop. */
+export function glabNote(scopes: string[] | null): string {
     const note = glabScopeNote(scopes);
-    if (note != null) {
-        parts.push(note);
-    }
-    return parts.join(' ');
+    return GLAB_FOLLOWS + (note != null ? ' ' + note : '');
 }
 
 /** The note under "Also use it for the GitLab Duo CLI": it signs in through glab. */
-export function duoNote(glab: boolean, owner: Account | undefined, username: string, gitlabUrl: string): string {
-    const h = accountHost(gitlabUrl);
-    if (glab) {
-        return 'The Duo CLI signs in through glab, which gets this token for ' + h + '.';
-    }
-    return 'The Duo CLI signs in through glab, so Yes also signs glab in to ' + h + ' with this token'
-        + (owner == null ? '.' : ", instead of @" + owner.username + "'s.") + ' @' + username + ' then uses it for both.';
+export function duoNote(glab: boolean): string {
+    return glab ? 'The Duo CLI signs in through glab, which follows the account you pick.'
+        : 'The Duo CLI signs in through glab, so Yes allows glab for this account too. ' + GLAB_FOLLOWS;
 }
 
 /** The notification after a token is added: what happened, and whether glab got it. */
@@ -376,24 +405,25 @@ export function addedText(kind: AddPlan['kind'], account: Account, cli: boolean,
     return added + readOnly;
 }
 
-/** After glab or the Duo CLI is turned on for an account. */
-export function cliOnText(account: Account, cli: 'glab' | 'duo', previous: Account | undefined,
-                          scopeNote: string | null): string {
+/**
+ * After glab or the Duo CLI is allowed for an account whose token glab did not just take: what glab does with it
+ * (glabCaption), and that the Duo CLI turned glab on.
+ */
+export function cliOnText(account: Account, cli: 'glab' | 'duo', glabWasOn: boolean, caption: string | null): string {
     const h = accountHost(account.gitlabUrl);
-    const instead = previous == null ? '' : ", instead of @" + previous.username + "'s";
-    const text = cli === 'glab'
-        ? 'Duo Watchdog: glab uses the token of @' + account.username + ' for ' + h + ' now' + instead + '.'
-        : 'Duo Watchdog: the GitLab Duo CLI uses the token of @' + account.username + ' for ' + h + ' now, through glab'
-        + instead + '.' + (account.glab ? '' : ' This turned on glab for this account too.');
-    return text + (scopeNote != null ? ' ' + scopeNote : '');
+    const allowed = cli === 'glab'
+        ? 'glab may use the token of @' + account.username + ' on ' + h + '.'
+        : 'the GitLab Duo CLI may use the token of @' + account.username + ' on ' + h + ', through glab.'
+        + (glabWasOn ? '' : ' That allows glab too.');
+    return 'Duo Watchdog: ' + allowed + (caption != null ? ' ' + caption + '.' : '');
 }
 
 /** After glab or the Duo CLI is turned off for an account: nothing is signed out. */
 export function cliOffText(account: Account, cli: 'glab' | 'duo'): string {
     const h = accountHost(account.gitlabUrl);
     if (cli === 'glab') {
-        return 'Duo Watchdog: the token of @' + account.username + ' is no longer handed to glab'
-            + (account.duo ? ' or the Duo CLI' : '') + '. glab stays signed in to ' + h + '.';
+        return 'Duo Watchdog: glab no longer gets the token of @' + account.username
+            + (account.duo ? ', nor the Duo CLI' : '') + '. Nothing is signed out: glab stays signed in to ' + h + '.';
     }
     return 'Duo Watchdog: the token of @' + account.username + ' is no longer marked for the GitLab Duo CLI. '
         + 'Nothing is signed out: the Duo CLI keeps using glab\'s login for ' + h + '.';

@@ -264,6 +264,53 @@ test('reads a year of history by month and feature', async () => {
     assert.equal(h.flowsError, null);
 });
 
+test('history goes month by month when GitLab fails on the year', async () => {
+    const http = new FakeTransport()
+        .reply(500, '')
+        .reply(200, `{"data":{"currentUser":{"creditsUsage":{"startDate":"2026-10-01","endDate":"2026-10-31",
+          "dailyUsage":[{"date":"2026-10-02","creditsUsed":5}],"usedFlowTypes":[]}}}}`)
+        .reply(200, '{"data":{"currentUser":{"creditsUsage":{}}}}')
+        .reply(200, `{"data":{"currentUser":{"creditsUsage":{"startDate":"2026-09-01","endDate":"2026-09-30",
+          "dailyUsage":[{"date":"2026-09-10","creditsUsed":7}],"usedFlowTypes":[]}}}}`)
+        .reply(200, '{"data":{"currentUser":{"creditsUsage":{}}}}');
+    // August and July then fail too (the fake answers 500 when it runs out), and the search stops there.
+
+    const h = await new CreditsClient('https://gitlab.com', 't', http).history('acme', '2025-11-01', '2026-10-18');
+
+    assert.equal(total(h), 12);
+    assert.equal(h.start, '2026-09-01', 'the oldest month GitLab answered');
+    assert.equal(months(h).length, 2);
+    assert.ok(!('startDate' in http.requests[1].variables) && !('endDate' in http.requests[1].variables),
+        'the current month as the Usage view asks it, without dates');
+    assert.equal(http.requests[3].variables.startDate, '2026-09-01');
+    assert.equal(http.requests[3].variables.endDate, '2026-09-30');
+    assert.equal(http.requests[5].variables.startDate, '2026-08-01');
+    assert.equal(http.requests.length, 7, 'the year, two months with their not-billed, then August and July');
+});
+
+test('month by month stops at a refusal, and keeps the first error when no month answers', async () => {
+    const refused = new FakeTransport().reply(500, '').reply(403, '{}');
+    assert.equal((await rejection(new CreditsClient('https://gitlab.com', 't', refused).history('acme', '2025-11-01', '2026-10-18'))).status, 403);
+    assert.equal(refused.requests.length, 2, 'a refusal is the same for every month');
+
+    const down = new FakeTransport().reply(503, '');
+    const e = await rejection(new CreditsClient('https://gitlab.com', 't', down).history('acme', '2025-11-01', '2026-10-18'));
+    assert.equal(e.message, 'GitLab returned HTTP 503 from gitlab.com.');
+    assert.equal(down.requests.length, 3, 'the year, then two months');
+
+    const unreachable = new FakeTransport().reply(401, '{}');
+    assert.equal((await rejection(new CreditsClient('https://gitlab.com', 't', unreachable).history('acme', '2025-11-01', '2026-10-18'))).status, 401,
+        'only a server failure on the year goes month by month');
+
+    // The first month of the range starts on its first asked day.
+    const late = new FakeTransport().reply(500, '').reply(500, '')
+        .reply(200, `{"data":{"currentUser":{"creditsUsage":{"dailyUsage":[{"date":"2026-09-20","creditsUsed":1}],"usedFlowTypes":[]}}}}`);
+    const h = await new CreditsClient('https://gitlab.com', 't', late).history('acme', '2026-09-15', '2026-10-18');
+    assert.equal(late.requests[2].variables.startDate, '2026-09-15');
+    assert.equal(h.start, '2026-09-15', 'GitLab gave no start: the asked one');
+    assert.equal(total(h), 1);
+});
+
 test('history stands without the features or the not billed', async () => {
     const http = new FakeTransport()
         .reply(200, `{"data":{"currentUser":{"creditsUsage":{"startDate":"2026-10-01","endDate":"2026-10-18",

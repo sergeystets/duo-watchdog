@@ -45,10 +45,11 @@ final class CliHandOff {
     /**
      * Where glab is.
      *
-     * @param exe    glab's own executable, or null for the one in WSL
-     * @param distro the WSL distribution, or null for WSL's default one
+     * @param exe     glab's own executable, or null for the one in WSL
+     * @param distro  the WSL distribution, or null for WSL's default one
+     * @param wslPath glab's path inside WSL, e.g. /home/linuxbrew/.linuxbrew/bin/glab
      */
-    record Target(@Nullable File exe, @Nullable String distro) {
+    record Target(@Nullable File exe, @Nullable String distro, @Nullable String wslPath) {
 
         boolean wsl() {
             return exe == null;
@@ -123,21 +124,23 @@ final class CliHandOff {
         if (!SystemInfo.isWindows) {
             File onPath = PathEnvironmentVariableUtil.findInPath("glab");
             if (onPath != null) {
-                return new Target(onPath, null);
+                return new Target(onPath, null, null);
             }
             return USUAL_PLACES.stream().map(File::new).filter(File::canExecute).findFirst()
-                    .map(f -> new Target(f, null)).orElse(null);
+                    .map(f -> new Target(f, null, null)).orElse(null);
         }
         // On Windows the project decides: in WSL, its glab is the one that matters.
         String distro = projectDistro();
-        if (distro != null && inWsl(distro)) {
-            return new Target(null, distro);
+        String inProject = distro != null ? inWsl(distro) : null;
+        if (inProject != null) {
+            return new Target(null, distro, inProject);
         }
         File exe = PathEnvironmentVariableUtil.findInPath("glab.exe");
         if (exe != null) {
-            return new Target(exe, null);
+            return new Target(exe, null, null);
         }
-        return distro == null && wslExe() != null && inWsl(null) ? new Target(null, null) : null;
+        String inDefault = distro == null && wslExe() != null ? inWsl(null) : null;
+        return inDefault != null ? new Target(null, null, inDefault) : null;
     }
 
     /** The WSL distribution of the first open project that lives in WSL, or null. */
@@ -160,9 +163,9 @@ final class CliHandOff {
         return system.isFile() ? system : null;
     }
 
-    private static boolean inWsl(@Nullable String distro) {
-        Result result = run(Glab.findInWsl(distro), null, 15);
-        return result.ok() && !result.output().isBlank();
+    /** glab's path in the distribution, or null when it is not there. Starting WSL can take a while. */
+    private static @Nullable String inWsl(@Nullable String distro) {
+        return Glab.pathIn(run(Glab.findInWsl(distro), null, 30).output());
     }
 
     /** {@code glab auth login --hostname <host> --stdin}, the token written to its input, never on the command line. */
@@ -171,7 +174,8 @@ final class CliHandOff {
         if (target == null) {
             return new Result(false, "glab is not installed, or not where the IDE looks: " + whereLooked() + ".");
         }
-        List<String> command = target.wsl() ? Glab.loginInWsl(target.distro(), host) : Glab.login(target.exe().getPath(), host);
+        List<String> command = target.wsl() ? Glab.loginInWsl(target.distro(), target.wslPath(), host)
+                : Glab.login(target.exe().getPath(), host);
         Result result = run(command, token, 60);
         return new Result(result.ok(), result.output().replace(token, "•••"));
     }
@@ -194,8 +198,10 @@ final class CliHandOff {
     private static boolean readDuoLogin(@Nullable Target target) {
         try {
             String json;
-            if (target != null && target.wsl()) {
-                Result result = run(Glab.duoStorageInWsl(target.distro()), null, 15);
+            // The Duo CLI that matters runs where glab does, or where the project is.
+            String distro = target != null && target.wsl() ? target.distro() : SystemInfo.isWindows ? projectDistro() : null;
+            if (target != null && target.wsl() || distro != null) {
+                Result result = run(Glab.duoStorageInWsl(distro), null, 30);
                 json = result.ok() ? result.output() : "";
             } else {
                 Path storage = Path.of(System.getProperty("user.home"), ".gitlab", "storage.json");

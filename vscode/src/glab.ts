@@ -4,7 +4,8 @@ import * as os from 'os';
 import * as path from 'path';
 import { duoHasOwnLogin, GLAB_DIRS, glabArgs, glabCandidates, glabOutput } from './core/glab';
 
-export type HandOff = { ok: true } | { ok: false; message: string };
+/** glab took the token; or it is not installed (missing), or it did not take the token, with what it said. */
+export type HandOff = { ok: true } | { ok: false; missing: boolean; message: string };
 
 /** glab's path: the first one on the PATH, then in the usual Homebrew folders; null when there is none. */
 export async function findGlab(): Promise<string | null> {
@@ -28,6 +29,7 @@ export async function handOffToGlab(host: string, token: string): Promise<HandOf
     if (glab == null) {
         return {
             ok: false,
+            missing: true,
             message: 'glab is not installed: Duo Watchdog looked on the PATH'
                 + (process.platform === 'win32' ? '' : ' and in ' + GLAB_DIRS.join(', ')) + '.',
         };
@@ -44,7 +46,7 @@ export async function handOffToGlab(host: string, token: string): Promise<HandOf
         const child = spawn(glab, glabArgs(host), { stdio: ['pipe', 'pipe', 'pipe'], timeout: 60_000, windowsHide: true });
         child.stdout.on('data', (chunk: Buffer) => output += chunk.toString('utf8'));
         child.stderr.on('data', (chunk: Buffer) => output += chunk.toString('utf8'));
-        child.on('error', e => done({ ok: false, message: 'glab did not start: ' + glabOutput(e.message, token) }));
+        child.on('error', e => done({ ok: false, missing: false, message: 'glab did not start: ' + glabOutput(e.message, token) }));
         child.on('close', (code, signal) => {
             if (code === 0) {
                 done({ ok: true });
@@ -53,6 +55,7 @@ export async function handOffToGlab(host: string, token: string): Promise<HandOf
             const said = glabOutput(output, token);
             done({
                 ok: false,
+                missing: false,
                 message: 'glab could not sign in to ' + host
                     + (signal != null ? ' (stopped: ' + signal + ')' : code != null ? ' (exit code ' + code + ')' : '')
                     + (said === '' ? '.' : ': ' + said),

@@ -34,8 +34,11 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -100,6 +103,38 @@ public final class CreditsService implements Disposable {
         CreditsSettings.getInstance().getState().selected = id;
         ApplicationManager.getApplication().invokeLater(() ->
                 ApplicationManager.getApplication().getMessageBus().syncPublisher(CreditsListener.TOPIC).updated());
+        // glab follows the picked account, when that account may hand its token to glab.
+        ApplicationManager.getApplication().executeOnPooledThread(() -> syncGlab(Set.of()));
+    }
+
+    /**
+     * For each GitLab, hands glab the token of the account it should have ({@link Accounts#glabOwner}: the picked
+     * one, else the one it has, else the first allowed) when glab does not have it yet or it was just replaced.
+     * Says nothing while glab is not installed. Off the EDT.
+     *
+     * @param replaced ids of the accounts whose token was just saved
+     */
+    void syncGlab(Set<String> replaced) {
+        CreditsSettings settings = CreditsSettings.getInstance();
+        Account picked = selected();
+        Map<String, List<Account>> allowed = new LinkedHashMap<>();
+        for (Account a : sorted()) {
+            if (a.glab || a.duo) {
+                allowed.computeIfAbsent(a.host().toLowerCase(Locale.ROOT), host -> new ArrayList<>()).add(a);
+            }
+        }
+        List<Account> due = new ArrayList<>();
+        for (List<Account> onHost : allowed.values()) {
+            Account owner = Accounts.glabOwner(onHost, picked, Account::glabHasToken);
+            if (owner != null && (!owner.glabHasToken() || replaced.contains(owner.id())) && !owner.glabRefused()) {
+                due.add(owner);
+            }
+        }
+        if (!due.isEmpty()) {
+            Map<String, String> tokens = new java.util.HashMap<>();
+            due.forEach(a -> tokens.put(a.id(), settings.token(a.id())));
+            handOff(due, tokens, true);
+        }
     }
 
     /** Every account, most credits left first, the ones without numbers last. */
@@ -168,14 +203,7 @@ public final class CreditsService implements Disposable {
                     notifyOnce(account, next);
                 }
                 // glab still to get a token: installed since, or its hand-off was not done yet.
-                List<Account> forGlab = accounts.stream()
-                        .filter(a -> (a.glab || a.duo) && !a.glabHasToken() && !a.glabRefused())
-                        .toList();
-                if (!forGlab.isEmpty() && CliHandOff.glab() != null) {
-                    Map<String, String> tokens = new java.util.HashMap<>();
-                    forGlab.forEach(a -> tokens.put(a.id(), settings.token(a.id())));
-                    handOff(forGlab, tokens, true);
-                }
+                syncGlab(Set.of());
             } finally {
                 loading.set(false);
                 ApplicationManager.getApplication().invokeLater(() ->
@@ -385,6 +413,12 @@ public final class CreditsService implements Disposable {
             }
             account.glabHandedKey = key;
             account.glabFailedKey = "";
+            // glab keeps one token per GitLab: the others on this one no longer have it there.
+            for (Account other : CreditsSettings.getInstance().getState().accounts) {
+                if (other != account && other.host().equalsIgnoreCase(account.host())) {
+                    other.glabHandedKey = "";
+                }
+            }
             String scopes = Accounts.glabScopeNote(account.scopeList());
             CliHandOff.Target target = CliHandOff.glab();
             String text = (target != null ? target.name() : "glab") + " now signs in to " + account.host() + " as @"
@@ -392,7 +426,8 @@ public final class CreditsService implements Disposable {
                     + (scopes == null ? "" : " " + scopes);
             if (account.duo) {
                 text += CliHandOff.checkDuoHasOwnLogin()
-                        ? " The Duo CLI has its own login in ~/.gitlab/storage.json and keeps using it: delete its settings there to make it use glab's."
+                        ? " The Duo CLI keeps settings of its own in ~/.gitlab/storage.json; if it signed in there, it "
+                        + "keeps that login: delete its settings there to make it use glab's."
                         : " The Duo CLI signs in through glab (glab 1.85.2 and duo 8.68.0 or later).";
             }
             Notification n = notification(false, "Token handed to glab", text,

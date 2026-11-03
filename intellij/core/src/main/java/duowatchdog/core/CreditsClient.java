@@ -13,6 +13,7 @@ import java.net.URI;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.time.YearMonth;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -228,14 +229,62 @@ public final class CreditsClient {
 
     /**
      * The user's usage from {@code from} to {@code to}, at most a year: per day, per feature per day, and what
-     * GitLab did not bill. GitLab moves the start to the subscription's. The per-feature and not-billed figures are
-     * details: when they fail, the totals still stand.
+     * GitLab did not bill. The per-feature and not-billed figures are details: when they fail, the totals still
+     * stand. When GitLab fails on the whole range with a server error, as gitlab.com does with HTTP 500 for a range
+     * reaching before the subscription's term, it is asked a month at a time instead.
      */
     public History history(String namespace, LocalDate from, LocalDate to) throws GitLabException {
+        try {
+            return historyOf(namespace, from, to);
+        } catch (GitLabException e) {
+            if (e.status() < 500) {
+                throw e;
+            }
+            return byMonth(namespace, from, to, e);
+        }
+    }
+
+    /**
+     * {@link #history} a month at a time, newest first: the current month as the Usage view asks for it, without
+     * dates, then each month before it, until GitLab fails twice in a row, which is where its data ends.
+     */
+    private History byMonth(String namespace, LocalDate from, LocalDate to, GitLabException whole)
+            throws GitLabException {
+        List<History> months = new ArrayList<>();
+        int failures = 0;
+        for (YearMonth m = YearMonth.from(to); !m.isBefore(YearMonth.from(from)) && failures < 2; m = m.minusMonths(1)) {
+            try {
+                if (m.equals(YearMonth.from(to))) {
+                    months.add(historyOf(namespace, null, null));
+                } else {
+                    LocalDate start = m.atDay(1).isBefore(from) ? from : m.atDay(1);
+                    months.add(historyOf(namespace, start, m.atEndOfMonth()));
+                }
+                failures = 0;
+            } catch (GitLabException e) {
+                if (e.status() > 0 && e.status() < 500) {
+                    // Turned down, not out of range: the same for every month.
+                    throw e;
+                }
+                failures++;
+            }
+        }
+        if (months.isEmpty()) {
+            throw whole;
+        }
+        return months.size() == 1 ? months.get(0) : History.merge(months);
+    }
+
+    /** One range, or with null dates the current period, as the Usage view asks. */
+    private History historyOf(String namespace, LocalDate from, LocalDate to) throws GitLabException {
         JsonObject variables = new JsonObject();
         variables.addProperty("namespacePath", namespace);
-        variables.addProperty("startDate", from.toString());
-        variables.addProperty("endDate", to.toString());
+        if (from != null) {
+            variables.addProperty("startDate", from.toString());
+        }
+        if (to != null) {
+            variables.addProperty("endDate", to.toString());
+        }
         Result result = graphql(HISTORY_QUERY, variables);
         JsonObject user = obj(result.data(), "currentUser");
         if (user == null) {
@@ -299,8 +348,9 @@ public final class CreditsClient {
         } catch (GitLabException e) {
             // Before GitLab 19.6: nothing to say about it.
         }
-        return new History(start != null ? start : from, end != null ? end : to, dailies(usage), perFlow,
-                nonBillable, flowsError);
+        LocalDate today = LocalDate.now();
+        return new History(start != null ? start : from != null ? from : today.withDayOfMonth(1),
+                end != null ? end : to != null ? to : today, dailies(usage), perFlow, nonBillable, flowsError);
     }
 
     /** The token's name, scopes and expiry, from the REST API, which tells any token about itself. */

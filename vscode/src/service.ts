@@ -31,6 +31,9 @@ export class CreditsService implements vscode.Disposable {
 
     private readonly changed = new vscode.EventEmitter<void>();
     readonly onDidChange = this.changed.event;
+    private readonly refreshed = new vscode.EventEmitter<void>();
+    /** After every account was read: glab then follows the picked account. */
+    readonly onDidRefresh = this.refreshed.event;
     private readonly results = new Map<string, Result>();
     private setup: Snapshot = Snapshots.loading();
     private timer: ReturnType<typeof setInterval> | undefined;
@@ -115,6 +118,7 @@ export class CreditsService implements vscode.Disposable {
             this.changed.fire();
             this.notifyOnce(id, result);
         }));
+        this.refreshed.fire();
     }
 
     private async loadAccount(id: string, account: Account): Promise<Result> {
@@ -239,6 +243,7 @@ export class CreditsService implements vscode.Disposable {
             clearTimeout(this.soon);
         }
         this.changed.dispose();
+        this.refreshed.dispose();
     }
 }
 

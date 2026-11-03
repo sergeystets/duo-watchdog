@@ -6,7 +6,8 @@
   last twelve months: this month so far, last month, the monthly average and the year; a stacked bar a month by
   feature (the five costliest, the rest as Other); every month as a row with its top feature and what GitLab did not
   bill; and each feature's credits over the year. **This account | All accounts** adds up every account that reads
-  usage. Read when first shown, kept for an hour; **Refresh** reads it again.
+  usage. Read when first shown, kept for an hour; **Refresh** reads it again. When GitLab fails on the whole year
+  (gitlab.com can answer HTTP 500), it is read a month at a time, back to where GitLab's data ends.
 - **What's New:** after an update, a notification links to the new **What's New in Duo Watchdog** page; after a fresh
   install, it says how to start. **Duo Watchdog: What's New** shows the page any time.
 - **Accounts:** one token per account; an account is one GitLab user on one GitLab. GitLab says whose a token is
@@ -25,9 +26,12 @@
   every account.
 - **Alerts** are per account and name it. New one-time popups: a token that expires within 3 days, and a token GitLab
   turns down.
-- **glab and the GitLab Duo CLI:** an account can hand its token to glab for its GitLab (`glab auth login --stdin`,
-  the token on standard input), one account per GitLab. The Duo CLI signs in through glab. Both are off unless you
-  turn them on.
+- **glab and the GitLab Duo CLI:** an account can be allowed to hand its token to glab for its GitLab
+  (`glab auth login --stdin`, the token on standard input). glab keeps one token per GitLab and follows the account you
+  pick, among those allowed: picking an account, adding or replacing a token, allowing glab and each refresh hand glab
+  the picked account's token when it doesn't have it (`glab now signs in to gitlab.com as @dana.k.`). A token glab
+  turns down is not tried again until it changes; without glab, switching accounts says nothing. The Duo CLI signs
+  in through glab. Both are off unless you turn them on, and nothing is ever signed out.
 - **Create the Token in GitLab** ticks `api`, `write_repository` and `ai_features` for an account that glab uses, and
   `read_api` and `ai_features` otherwise.
 - The token saved by 0.3 becomes the first account, with the old group path, limit and last alert. The
