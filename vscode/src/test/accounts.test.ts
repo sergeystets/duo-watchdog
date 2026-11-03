@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-    accountId, attention, bareUsername, cliOwner, creditsLeft, expiryPopupKey, glabCanWrite, idOf, isExpired,
+    accountId, attention, bareUsername, cliOwner, creditsLeft, expiryPopupKey, glabScopeNote, idOf, isExpired,
     matchesFilter, migratedAccount, missingUsageScopes, needsMigration, normalized, rejectedPopupKey, sortStates,
     usageReadable, withCli, withToken,
 } from '../core/accounts';
@@ -51,9 +51,12 @@ test('usage is readable with ai_features, and read_api or api', () => {
 });
 
 test('glab writes with api and write_repository', () => {
-    assert.equal(glabCanWrite(['api', 'write_repository', 'ai_features']), true);
-    assert.equal(glabCanWrite(['read_api', 'ai_features']), false);
-    assert.equal(glabCanWrite(null), null);
+    assert.equal(glabScopeNote(['api', 'write_repository', 'ai_features']), null);
+    assert.equal(glabScopeNote(null), null, 'unknown scopes: nothing to say');
+    assert.equal(glabScopeNote(['api', 'ai_features']),
+        "The token lacks write_repository: glab works with the API, but can't git push over HTTPS. Over SSH it can.");
+    assert.equal(glabScopeNote(['read_api', 'ai_features']),
+        "The token lacks the api scope, so glab can only read with it, and can't git push over HTTPS.");
 });
 
 test('accounts sort by credits left, most first, unknown last', () => {

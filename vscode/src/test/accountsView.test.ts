@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { idOf } from '../core/accounts';
+import { glabScopeNote, idOf } from '../core/accounts';
 import {
     accountDetail, accountLabel, accountName, accountsDashboard, accountStatusText, addedText, addPlan, alertText,
     cliOffText, cliOnText, duoNote, expiryText, glabNote, othersNeedAttention, rejectedText, tooltipModel,
@@ -153,27 +153,28 @@ test('adding a token says what will happen first', () => {
 test('after adding, the notification says what happened', () => {
     assert.equal(addedText('replace', acme.account, false, null),
         'Duo Watchdog: replaced the token of @dana.k on gitlab.com. Its group and limit stay.');
-    assert.equal(addedText('replace', { ...acme.account, glab: true }, true, true),
+    assert.equal(addedText('replace', { ...acme.account, glab: true }, true, null),
         'Duo Watchdog: replaced the token of @dana.k on gitlab.com. Its group and limit stay; glab uses the new token too.');
     assert.equal(addedText('new', account({ username: 'dana.ops', glab: true, duo: true }), true, null),
         'Duo Watchdog: added @dana.ops on gitlab.com · acme. glab and the Duo CLI use its token too.');
-    assert.ok(addedText('new', account({ glab: true }), true, false).endsWith(
-        'glab can only read with this token: it needs the api and write_repository scopes.'));
+    assert.ok(addedText('new', account({ glab: true }), true, glabScopeNote(['api', 'ai_features'])).endsWith(
+        "can't git push over HTTPS. Over SSH it can."));
     assert.ok(addedText('untracked', untracked.account, false, null).includes('Its usage is not tracked'));
 });
 
 test('glab and the Duo CLI say who uses which token', () => {
     assert.equal(glabNote(acme.account, 'dana.ops', 'https://gitlab.com', ['read_api', 'ai_features']),
         "glab keeps one token per GitLab. It uses @dana.k's for gitlab.com now; Yes switches it to @dana.ops. "
-        + 'This token lacks the api and write_repository scopes, so glab could only read with it.');
+        + "The token lacks the api scope, so glab can only read with it, and can't git push over HTTPS.");
     assert.ok(glabNote(undefined, 'dana.ops', 'https://gitlab.com', null).includes('has not given glab a token for gitlab.com'));
     assert.ok(duoNote(false, acme.account, 'dana.ops', 'https://gitlab.com').includes("also signs glab in to gitlab.com with this token, instead of @dana.k's"));
 
-    assert.equal(cliOnText(acme.account, 'glab', undefined, true), 'Duo Watchdog: glab uses the token of @dana.k for gitlab.com now.');
+    assert.equal(cliOnText(acme.account, 'glab', undefined, null), 'Duo Watchdog: glab uses the token of @dana.k for gitlab.com now.');
     assert.equal(cliOnText(acme.account, 'duo', account({ username: 'bob' }), null),
         "Duo Watchdog: the GitLab Duo CLI uses the token of @dana.k for gitlab.com now, through glab, instead of @bob's. "
         + 'This turned on glab for this account too.');
-    assert.ok(cliOnText({ ...acme.account, glab: true }, 'glab', undefined, false).includes('glab can only read with this token'));
+    assert.ok(cliOnText({ ...acme.account, glab: true }, 'glab', undefined, glabScopeNote(['read_api', 'ai_features']))
+        .includes('glab can only read with it'));
     assert.equal(cliOffText({ ...acme.account, glab: true }, 'glab'),
         'Duo Watchdog: the token of @dana.k is no longer handed to glab. glab stays signed in to gitlab.com.');
     assert.ok(cliOffText({ ...acme.account, glab: true, duo: true }, 'duo').includes('Nothing is signed out'));

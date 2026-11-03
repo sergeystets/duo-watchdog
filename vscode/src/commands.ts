@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { AccountStore } from './accounts';
 import { groupPath, tokenPage, trimSlashes } from './core/address';
 import {
-    accountGroup, accountHost, accountId, AccountState, Cli, cliOwner, DEFAULT_LIMIT, Filter, glabCanWrite, hasCredits, idOf,
+    accountGroup, accountHost, accountId, AccountState, Cli, cliOwner, DEFAULT_LIMIT, Filter, glabScopeNote, hasCredits, idOf,
     isExpired, matchesFilter, withCli, withToken,
 } from './core/accounts';
 import {
@@ -149,7 +149,7 @@ export class Commands {
             }
         }
         const account = this.store.get(id)!;
-        const text = addedText(plan.kind, account, cli?.ok === true, glabCanWrite(scopes));
+        const text = addedText(plan.kind, account, cli?.ok === true, glabScopeNote(scopes));
         const open = 'Open Dashboard';
         const shown = plan.kind === 'untracked' ? vscode.window.showWarningMessage(text, open)
             : vscode.window.showInformationMessage(text, open);
@@ -205,7 +205,7 @@ export class Commands {
         }
         await this.store.saveAll(withCli(this.store.list(), id, cli, true));
         this.service.changedLocally();
-        void vscode.window.showInformationMessage(cliOnText(account, cli, previous, glabCanWrite(account.scopes)));
+        void vscode.window.showInformationMessage(cliOnText(account, cli, previous, glabScopeNote(account.scopes)));
         if (cli === 'duo' && await duoHasItsOwnLogin()) {
             void vscode.window.showWarningMessage(DUO_OWN_LOGIN);
         }

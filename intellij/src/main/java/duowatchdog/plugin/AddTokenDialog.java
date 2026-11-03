@@ -292,13 +292,14 @@ final class AddTokenDialog extends DialogWrapper {
                                 ? " to @" + found.username() : "") + "."),
                         () -> notes.add("glab keeps one token per GitLab; Duo Watchdog gives it this one."));
         if (ok && found.info() != null) {
-            List<String> missing = Accounts.missingForGlab(found.info().scopes());
-            if (!missing.isEmpty()) {
-                notes.add("This token lacks " + String.join(" and ", missing) + ", so glab could only read with it.");
+            String scopes = Accounts.glabScopeNote(found.info().scopes());
+            if (scopes != null) {
+                notes.add(scopes);
             }
         }
         if (CliHandOff.glab() == null) {
-            notes.add("glab is not installed where the IDE looks: on the PATH and in Homebrew.");
+            notes.add("glab is not installed where the IDE looks (on the PATH and in Homebrew): once it is, Duo "
+                    + "Watchdog hands the token over on its next refresh.");
         }
         glabNote.setText(wrap(String.join(" ", notes)));
         duoNote.setText(wrap("The Duo CLI signs in through glab (glab 1.85.2 and duo 8.68.0 or later), so this "
