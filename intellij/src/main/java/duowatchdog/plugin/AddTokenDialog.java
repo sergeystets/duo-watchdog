@@ -297,8 +297,10 @@ final class AddTokenDialog extends DialogWrapper {
                 notes.add(scopes);
             }
         }
-        if (CliHandOff.glab() == null) {
-            notes.add("glab is not installed where the IDE looks (on the PATH and in Homebrew): once it is, Duo "
+        Boolean installed = CliHandOff.installed(() -> ApplicationManager.getApplication().invokeLater(this::render,
+                ModalityState.any()));
+        if (Boolean.FALSE.equals(installed)) {
+            notes.add("glab is not installed where the IDE looks (" + CliHandOff.whereLooked() + "): once it is, Duo "
                     + "Watchdog hands the token over on its next refresh.");
         }
         glabNote.setText(wrap(String.join(" ", notes)));

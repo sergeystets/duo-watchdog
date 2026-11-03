@@ -376,8 +376,8 @@ public final class CreditsService implements Disposable {
                 }
                 Notification n = notification(true, installed ? "glab did not take the token" : "glab is not installed",
                         installed ? StringUtil.escapeXmlEntities(result.output().isEmpty() ? "glab gave no reason." : result.output())
-                                : "Duo Watchdog looked on the PATH and in Homebrew. Install glab, e.g. brew install glab, "
-                                + "and it gets the token on the next refresh.",
+                                : "Duo Watchdog looked " + CliHandOff.whereLooked() + ". " + CliHandOff.howToInstall()
+                                + ", and it gets the token on the next refresh.",
                         NotificationType.WARNING);
                 n.setSubtitle(account.label());
                 n.notify(null);
@@ -386,10 +386,12 @@ public final class CreditsService implements Disposable {
             account.glabHandedKey = key;
             account.glabFailedKey = "";
             String scopes = Accounts.glabScopeNote(account.scopeList());
-            String text = "glab now signs in to " + account.host() + " as @" + account.username + "."
+            CliHandOff.Target target = CliHandOff.glab();
+            String text = (target != null ? target.name() : "glab") + " now signs in to " + account.host() + " as @"
+                    + account.username + "."
                     + (scopes == null ? "" : " " + scopes);
             if (account.duo) {
-                text += CliHandOff.duoHasOwnLogin()
+                text += CliHandOff.checkDuoHasOwnLogin()
                         ? " The Duo CLI has its own login in ~/.gitlab/storage.json and keeps using it: delete its settings there to make it use glab's."
                         : " The Duo CLI signs in through glab (glab 1.85.2 and duo 8.68.0 or later).";
             }
