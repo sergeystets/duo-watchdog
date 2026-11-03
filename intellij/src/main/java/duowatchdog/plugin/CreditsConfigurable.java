@@ -444,13 +444,27 @@ public final class CreditsConfigurable implements Configurable {
         Account other = working.stream()
                 .filter(w -> w != a && w.glab && w.host().equalsIgnoreCase(host))
                 .findFirst().orElse(null);
+        boolean installed = CliHandOff.glab() != null;
         if (a.glab) {
             boolean newlyOn = live == null || !live.glab;
-            notes.add(newlyOn || pending ? "glab gets this token for " + host + " when you click OK or Apply, and again "
-                    + "whenever it is replaced." : "glab signs in to " + host + " with this token.");
-            List<String> missing = Accounts.missingForGlab(a.scopeList());
-            if (!missing.isEmpty()) {
-                notes.add("It lacks " + String.join(" and ", missing) + ", so glab can only read with it.");
+            if (!installed) {
+                notes.add("glab is not installed where the IDE looks (on the PATH and in Homebrew), so it doesn't have "
+                        + "this token. Install it, e.g. brew install glab, and Duo Watchdog hands the token over on its "
+                        + "next refresh.");
+            } else if (newlyOn || pending) {
+                notes.add("glab gets this token for " + host + " when you click OK or Apply, and again whenever it is "
+                        + "replaced.");
+            } else if (live.glabHasToken()) {
+                notes.add("glab signs in to " + host + " with this token.");
+            } else if (live.glabRefused()) {
+                notes.add("glab turned this token down the last time; the notice said why. Replace the token, or "
+                        + "untick this.");
+            } else {
+                notes.add("glab gets this token on Duo Watchdog's next refresh.");
+            }
+            String scopes = Accounts.glabScopeNote(a.scopeList());
+            if (scopes != null) {
+                notes.add(scopes);
             }
         } else if (other != null) {
             notes.add("glab keeps one token per GitLab and uses @" + other.username + "'s for " + host
@@ -458,7 +472,7 @@ public final class CreditsConfigurable implements Configurable {
         } else {
             notes.add("Off: Duo Watchdog leaves glab's login alone.");
         }
-        if (CliHandOff.glab() == null) {
+        if (!installed && !a.glab) {
             notes.add("glab is not installed where the IDE looks: on the PATH and in Homebrew.");
         }
         glabNote.setText(wrap(String.join(" ", notes)));
@@ -1063,7 +1077,7 @@ public final class CreditsConfigurable implements Configurable {
                 String token = tokens.get(account.id());
                 cli.put(account.id(), token != null ? token : settings.token(account.id()));
             }
-            CreditsService.handOff(handOff, cli);
+            CreditsService.handOff(handOff, cli, false);
             CreditsService.getInstance().reschedule();
         });
 

@@ -61,6 +61,10 @@ public final class CreditsSettings implements PersistentStateComponent<CreditsSe
         public String lastExpiryKey = "";
         /** The token GitLab turned down when the popup said so, so it comes once. */
         public String lastRejectedKey = "";
+        /** {@link #tokenSavedAt} of the token glab took; until it matches, glab is still to get it. */
+        public String glabHandedKey = "";
+        /** {@link #tokenSavedAt} of the token glab turned down, so it is not tried again on every refresh. */
+        public String glabFailedKey = "";
 
         public String id() {
             return Accounts.id(gitlabUrl, username);
@@ -99,6 +103,16 @@ public final class CreditsSettings implements PersistentStateComponent<CreditsSe
             scopes = String.join(",", info.scopes());
         }
 
+        /** Whether glab has this account's current token. */
+        public boolean glabHasToken() {
+            return String.valueOf(tokenSavedAt).equals(glabHandedKey);
+        }
+
+        /** Whether glab turned this account's current token down. */
+        public boolean glabRefused() {
+            return String.valueOf(tokenSavedAt).equals(glabFailedKey);
+        }
+
         public Account copy() {
             Account a = new Account();
             a.gitlabUrl = gitlabUrl;
@@ -113,6 +127,8 @@ public final class CreditsSettings implements PersistentStateComponent<CreditsSe
             a.lastAlertKey = lastAlertKey;
             a.lastExpiryKey = lastExpiryKey;
             a.lastRejectedKey = lastRejectedKey;
+            a.glabHandedKey = glabHandedKey;
+            a.glabFailedKey = glabFailedKey;
             return a;
         }
 

@@ -86,6 +86,23 @@ public final class Accounts {
     }
 
     /**
+     * What a token's scopes leave glab unable to do, or null when nothing (or the scopes are unknown). Without api
+     * glab can only read; without write_repository it does all it does through the API, but cannot push over HTTPS,
+     * which matters only when Git runs over HTTPS rather than SSH.
+     */
+    public static String glabScopeNote(List<String> scopes) {
+        List<String> missing = missingForGlab(scopes);
+        if (missing.isEmpty()) {
+            return null;
+        }
+        if (missing.contains("api")) {
+            return "The token lacks the api scope, so glab can only read with it"
+                    + (missing.contains("write_repository") ? ", and can't git push over HTTPS." : ".");
+        }
+        return "The token lacks write_repository: glab works with the API, but can't git push over HTTPS. Over SSH it can.";
+    }
+
+    /**
      * Whether an account needs a look: usage at the lowest alert percent, a block, a token without a saved copy,
      * turned down, expired or expiring within a week. An account whose usage cannot be read needs none: that is
      * how it was added.

@@ -130,9 +130,25 @@ export function missingUsageScopes(scopes: readonly string[] | null): string[] {
     return missing;
 }
 
-/** Whether glab can write with the token: it needs api and write_repository. Null when the scopes are unknown. */
-export function glabCanWrite(scopes: readonly string[] | null): boolean | null {
-    return scopes == null ? null : scopes.includes('api') && scopes.includes('write_repository');
+/**
+ * What a token's scopes leave glab unable to do, or null when nothing (or the scopes are unknown). Without api glab
+ * can only read; without write_repository it does all it does through the API, but cannot push over HTTPS, which
+ * matters only when Git runs over HTTPS rather than SSH. The same words as Accounts.glabScopeNote in the plugin.
+ */
+export function glabScopeNote(scopes: readonly string[] | null): string | null {
+    if (scopes == null) {
+        return null;
+    }
+    const api = scopes.includes('api');
+    const write = scopes.includes('write_repository');
+    if (api && write) {
+        return null;
+    }
+    if (!api) {
+        return 'The token lacks the api scope, so glab can only read with it'
+            + (write ? '.' : ", and can't git push over HTTPS.");
+    }
+    return "The token lacks write_repository: glab works with the API, but can't git push over HTTPS. Over SSH it can.";
 }
 
 /** max(limit - used, 0) when there is a report; null when the credits left are unknown. */

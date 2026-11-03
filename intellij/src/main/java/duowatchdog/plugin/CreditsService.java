@@ -167,6 +167,15 @@ public final class CreditsService implements Disposable {
                     snapshots.put(account.id(), next);
                     notifyOnce(account, next);
                 }
+                // glab still to get a token: installed since, or its hand-off was not done yet.
+                List<Account> forGlab = accounts.stream()
+                        .filter(a -> (a.glab || a.duo) && !a.glabHasToken() && !a.glabRefused())
+                        .toList();
+                if (!forGlab.isEmpty() && CliHandOff.glab() != null) {
+                    Map<String, String> tokens = new java.util.HashMap<>();
+                    forGlab.forEach(a -> tokens.put(a.id(), settings.token(a.id())));
+                    handOff(forGlab, tokens, true);
+                }
             } finally {
                 loading.set(false);
                 ApplicationManager.getApplication().invokeLater(() ->
@@ -346,32 +355,46 @@ public final class CreditsService implements Disposable {
      * the EDT.
      *
      * @param tokens the account ids with the token to hand off
+     * @param quiet  a refresh's try: says nothing while glab is not installed, and tries again on the next one
      */
-    static void handOff(List<Account> accounts, Map<String, String> tokens) {
+    static void handOff(List<Account> accounts, Map<String, String> tokens, boolean quiet) {
         for (Account account : accounts) {
             String token = tokens.get(account.id());
             if (token == null || token.isBlank()) {
                 continue;
             }
+            boolean installed = CliHandOff.glab() != null;
+            if (quiet && !installed) {
+                return;
+            }
+            String key = String.valueOf(account.tokenSavedAt);
             CliHandOff.Result result = CliHandOff.login(account.host(), token.trim());
             if (!result.ok()) {
-                Notification n = notification(true, CliHandOff.glab() == null ? "glab is not installed" : "glab did not take the token",
-                        StringUtil.escapeXmlEntities(result.output().isEmpty() ? "glab gave no reason." : result.output()),
+                if (installed) {
+                    // Not tried again until the token changes: glab said why, and saying it every refresh helps no one.
+                    account.glabFailedKey = key;
+                }
+                Notification n = notification(true, installed ? "glab did not take the token" : "glab is not installed",
+                        installed ? StringUtil.escapeXmlEntities(result.output().isEmpty() ? "glab gave no reason." : result.output())
+                                : "Duo Watchdog looked on the PATH and in Homebrew. Install glab, e.g. brew install glab, "
+                                + "and it gets the token on the next refresh.",
                         NotificationType.WARNING);
                 n.setSubtitle(account.label());
                 n.notify(null);
                 continue;
             }
-            List<String> missing = Accounts.missingForGlab(account.scopeList());
+            account.glabHandedKey = key;
+            account.glabFailedKey = "";
+            String scopes = Accounts.glabScopeNote(account.scopeList());
             String text = "glab now signs in to " + account.host() + " as @" + account.username + "."
-                    + (missing.isEmpty() ? "" : " It can only read with this token: it lacks " + String.join(" and ", missing) + ".");
+                    + (scopes == null ? "" : " " + scopes);
             if (account.duo) {
                 text += CliHandOff.duoHasOwnLogin()
                         ? " The Duo CLI has its own login in ~/.gitlab/storage.json and keeps using it: delete its settings there to make it use glab's."
                         : " The Duo CLI signs in through glab (glab 1.85.2 and duo 8.68.0 or later).";
             }
             Notification n = notification(false, "Token handed to glab", text,
-                    missing.isEmpty() ? NotificationType.INFORMATION : NotificationType.WARNING);
+                    scopes == null ? NotificationType.INFORMATION : NotificationType.WARNING);
             n.setSubtitle(account.label());
             n.notify(null);
         }

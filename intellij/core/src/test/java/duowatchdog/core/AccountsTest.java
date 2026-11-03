@@ -75,6 +75,13 @@ class AccountsTest {
 
         assertEquals(List.of("api", "write_repository"), Accounts.missingForGlab(List.of("read_api", "ai_features")));
         assertEquals(List.of(), Accounts.missingForGlab(List.of("api", "write_repository", "ai_features")));
+
+        assertNull(Accounts.glabScopeNote(List.of("api", "write_repository", "ai_features")));
+        assertNull(Accounts.glabScopeNote(null), "unknown scopes: nothing to say");
+        assertEquals("The token lacks write_repository: glab works with the API, but can't git push over HTTPS. "
+                + "Over SSH it can.", Accounts.glabScopeNote(List.of("api", "ai_features")));
+        assertEquals("The token lacks the api scope, so glab can only read with it, and can't git push over HTTPS.",
+                Accounts.glabScopeNote(List.of("read_api", "ai_features")));
     }
 
     @Test

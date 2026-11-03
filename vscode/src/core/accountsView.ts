@@ -1,5 +1,5 @@
 import {
-    Account, AccountState, accountGroup, accountHost, attention, daysLeft, glabCanWrite, inDays, missingUsageScopes, sortStates,
+    Account, AccountState, accountGroup, accountHost, attention, daysLeft, glabScopeNote, inDays, missingUsageScopes, sortStates,
     usageReadable,
 } from './accounts';
 import { Alert } from './alert';
@@ -344,8 +344,9 @@ export function glabNote(owner: Account | undefined, username: string, gitlabUrl
         ? 'glab keeps one token per GitLab. Duo Watchdog has not given glab a token for ' + h + ' yet.'
         : "glab keeps one token per GitLab. It uses @" + owner.username + "'s for " + h + ' now; Yes switches it to @'
         + username + '.'];
-    if (glabCanWrite(scopes) === false) {
-        parts.push('This token lacks the api and write_repository scopes, so glab could only read with it.');
+    const note = glabScopeNote(scopes);
+    if (note != null) {
+        parts.push(note);
     }
     return parts.join(' ');
 }
@@ -360,12 +361,10 @@ export function duoNote(glab: boolean, owner: Account | undefined, username: str
         + (owner == null ? '.' : ", instead of @" + owner.username + "'s.") + ' @' + username + ' then uses it for both.';
 }
 
-const READ_ONLY = ' glab can only read with this token: it needs the api and write_repository scopes.';
-
 /** The notification after a token is added: what happened, and whether glab got it. */
-export function addedText(kind: AddPlan['kind'], account: Account, cli: boolean, canWrite: boolean | null): string {
+export function addedText(kind: AddPlan['kind'], account: Account, cli: boolean, scopeNote: string | null): string {
     const tools = account.duo ? 'glab and the Duo CLI use' : 'glab uses';
-    const readOnly = cli && canWrite === false ? READ_ONLY : '';
+    const readOnly = cli && scopeNote != null ? ' ' + scopeNote : '';
     if (kind === 'replace') {
         return 'Duo Watchdog: replaced the token of @' + account.username + ' on ' + accountHost(account.gitlabUrl)
             + '. Its group and limit stay' + (cli ? '; ' + tools + ' the new token too.' : '.') + readOnly;
@@ -379,14 +378,14 @@ export function addedText(kind: AddPlan['kind'], account: Account, cli: boolean,
 
 /** After glab or the Duo CLI is turned on for an account. */
 export function cliOnText(account: Account, cli: 'glab' | 'duo', previous: Account | undefined,
-                          canWrite: boolean | null): string {
+                          scopeNote: string | null): string {
     const h = accountHost(account.gitlabUrl);
     const instead = previous == null ? '' : ", instead of @" + previous.username + "'s";
     const text = cli === 'glab'
         ? 'Duo Watchdog: glab uses the token of @' + account.username + ' for ' + h + ' now' + instead + '.'
         : 'Duo Watchdog: the GitLab Duo CLI uses the token of @' + account.username + ' for ' + h + ' now, through glab'
         + instead + '.' + (account.glab ? '' : ' This turned on glab for this account too.');
-    return text + (canWrite === false ? READ_ONLY : '');
+    return text + (scopeNote != null ? ' ' + scopeNote : '');
 }
 
 /** After glab or the Duo CLI is turned off for an account: nothing is signed out. */
