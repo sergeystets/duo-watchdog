@@ -45,6 +45,10 @@ GitLab Credits usage for the current billing period, forecast where the month wi
   alert threshold, the limit and a block stay on screen until closed.
 - **glab and the GitLab Duo CLI** (optional, off by default): an account can hand its token to glab, and so to the
   Duo CLI. See [glab and the GitLab Duo CLI](#glab-and-the-gitlab-duo-cli-optional).
+- A **Statistics** tab next to the dashboard: your last twelve months by month and by feature, with what GitLab did
+  not bill, for one account or all of them. See [Statistics](#statistics).
+- **What's New**: after an update, a window shows what the version brings, with pictures (*Help → What's New in Duo
+  Watchdog* in IntelliJ IDEA, **Duo Watchdog: What's New** in VS Code).
 - Upgrading from 0.3.0 moves the saved token to its account, with its group, limit and last alert.
 
 ## Contents
@@ -86,6 +90,27 @@ Clicking the meter opens the dashboard.
 - A **daily usage** chart covering the whole month, with the rest of the month shaded, a "today" line and tooltips on the bars
 - A **by feature** breakdown (Developer Flow, Code Review Flow, …)
 - **Shift+Esc** hides it and **Esc** goes back to the editor, as in the IDE's own tool windows
+
+<br clear="right">
+
+### Statistics
+
+<img align="right" src="vscode/media/whats-new/statistics.png" alt="The Statistics tab" width="300">
+
+The tool window's **Statistics** tab shows the last twelve months of the chosen account, or of **All Accounts** added
+up (features merged by name):
+
+- **This month**, **Last month**, the monthly **Average** and the year's total
+- A bar a month, split by the five costliest features of the year; the rest is folded into *Other*. Hover a bar for
+  the month's figures.
+- Every month as a row, newest first, with its costliest feature and what GitLab did not bill
+- The features over the year
+- **Not billed**: credits GitLab counted as promotional or beta. GitLab's own usage page includes them in its total,
+  so it can show more than Duo Watchdog's billed figures.
+
+It reads `creditsUsage` for a date range, which a group member may read about themselves: per day and per feature.
+Per project, per model and per session take the group's Owner role. GitLab keeps usage from the subscription's start;
+the view asks once when shown and keeps the answer for an hour (**Reload Statistics** asks again).
 
 <br clear="right">
 
@@ -590,7 +615,7 @@ Running `./gradlew test` also renders every dashboard state to PNG (in `intellij
 The VS Code extension builds with npm (Node.js 20+), from the root through Gradle or in `vscode/` directly:
 
 ```bash
-./gradlew :vscode:test               # 61 tests, no VS Code needed          (npm ci && npm test)
+./gradlew :vscode:test               # 76 tests, no VS Code needed          (npm ci && npm test)
 ./gradlew :vscode:packageExtension   # → vscode/duo-watchdog-0.4.0.vsix      (npm run package)
 ./gradlew :vscode:installExtension   # into VS Code; -PcodePath=codium for another CLI
 ```

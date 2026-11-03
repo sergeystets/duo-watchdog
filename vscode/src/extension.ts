@@ -3,21 +3,26 @@ import { AccountStore, TOKEN_PREFIX } from './accounts';
 import { Commands } from './commands';
 import { parsePercents } from './core/alert';
 import { DashboardView } from './dashboardView';
+import { HistoryCache } from './history';
 import { nodeTransport } from './httpTransport';
 import { CreditsService } from './service';
 import { OLD_TOKEN_KEY, SECTION, settings } from './settings';
 import { StatusBar } from './statusBar';
+import { announceRelease, showWhatsNew } from './whatsNew';
 
 export function activate(context: vscode.ExtensionContext): void {
     const store = new AccountStore(context);
     const service = new CreditsService(context, store, nodeTransport);
     const statusBar = new StatusBar();
     const commands = new Commands(store, service, nodeTransport);
-    const dashboard = new DashboardView(context.extensionUri, service, commands);
+    const history = new HistoryCache(store, nodeTransport);
+    const dashboard = new DashboardView(context.extensionUri, service, commands, history);
 
     context.subscriptions.push(
         service,
         statusBar,
+        history,
+        history.onDidChange(() => dashboard.update()),
         vscode.window.registerWebviewViewProvider(DashboardView.ID, dashboard),
         service.onDidChange(() => {
             statusBar.update(service.overview());
@@ -35,7 +40,11 @@ export function activate(context: vscode.ExtensionContext): void {
                 service.refreshSoon();
             }
         }),
-        vscode.commands.registerCommand('duoWatchdog.refresh', () => service.refresh()),
+        vscode.commands.registerCommand('duoWatchdog.refresh', () => {
+            dashboard.refreshStatistics();
+            return service.refresh();
+        }),
+        vscode.commands.registerCommand('duoWatchdog.whatsNew', () => showWhatsNew(context.extensionUri)),
         vscode.commands.registerCommand('duoWatchdog.openDashboard',
             () => vscode.commands.executeCommand(DashboardView.ID + '.focus')),
         vscode.commands.registerCommand('duoWatchdog.openSettings',
@@ -44,6 +53,8 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     statusBar.update(service.overview());
+    // Before the first refresh, which may move the token saved by 0.3 to an account.
+    announceRelease(context, store).catch(e => console.error('Duo Watchdog: the release notice failed', e));
     service.reschedule();
 }
 

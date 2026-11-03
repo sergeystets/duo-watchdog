@@ -1,5 +1,5 @@
-// Lays out the model the extension posts (src/core/dashboard.ts) and draws the meter and the daily chart to the
-// view's width, as the IntelliJ plugin's UsageMeter and DailyChart paint them.
+// Lays out the model the extension posts (src/core/dashboard.ts, src/core/statistics.ts) and draws the meter, the
+// daily chart and the monthly chart to the view's width, as the IntelliJ plugin's UsageMeter and DailyChart paint them.
 (function () {
     const vscode = acquireVsCodeApi();
     const SVG = 'http://www.w3.org/2000/svg';
@@ -7,8 +7,11 @@
     const byline = document.getElementById('byline');
     const accountRow = document.getElementById('account-row');
     const accountSelect = document.getElementById('account');
+    const tabs = document.getElementById('tabs');
     let model = null;
     let hovered = -1;
+    /** The month and the segment under the pointer in the monthly chart: { bar, segment } or null. */
+    let hoveredMonth = null;
 
     for (const button of document.querySelectorAll('[data-action]')) {
         button.addEventListener('click', () => vscode.postMessage({ type: button.dataset.action }));
@@ -17,20 +20,26 @@
     // Switching the account here switches the status bar too.
     accountSelect.addEventListener('change', () => vscode.postMessage({ type: 'select', id: accountSelect.value }));
 
+    for (const tab of tabs.querySelectorAll('[data-tab]')) {
+        tab.addEventListener('click', () => vscode.postMessage({ type: 'tab', tab: tab.dataset.tab }));
+    }
+
     window.addEventListener('message', event => {
         if (event.data && event.data.type === 'model') {
             model = event.data.model;
             hovered = -1;
+            hoveredMonth = null;
             render();
         }
     });
 
     let width = 0;
     new ResizeObserver(() => {
-        if (model && model.report && document.body.clientWidth !== width) {
+        if (model && document.body.clientWidth !== width) {
             width = document.body.clientWidth;
             drawMeter();
             drawChart();
+            drawMonths();
         }
     }).observe(document.body);
 
@@ -96,11 +105,28 @@
         page.append(box);
     }
 
+    /** Usage | Statistics, once there is an account. */
+    function renderTabs() {
+        tabs.hidden = (model.accounts || []).length === 0;
+        for (const tab of tabs.querySelectorAll('[data-tab]')) {
+            const on = tab.dataset.tab === (model.tab || 'usage');
+            tab.setAttribute('aria-selected', String(on));
+            tab.classList.toggle('on', on);
+        }
+    }
+
     function render() {
         byline.textContent = model.byline;
         byline.title = model.byline;
         renderAccounts();
+        renderTabs();
         page.replaceChildren();
+        if (model.tab === 'statistics' && !model.notConfigured) {
+            renderStatistics(model.statistics);
+            width = document.body.clientWidth;
+            drawMonths();
+            return;
+        }
         if (model.error && !model.notice) {
             page.append(el('p', 'error', model.error));
         }
@@ -164,24 +190,207 @@
 
         if (r.features.length > 0) {
             const section = el('section');
-            section.append(el('h2', null, 'By feature'));
-            const rows = el('div', 'features');
-            for (const f of r.features) {
-                const name = el('div', 'name', f.title);
-                name.title = f.title;
-                const track = el('div', 'track');
-                if (f.fraction != null && f.fraction > 0) {
-                    const fill = el('div', 'fill');
-                    fill.style.width = (f.fraction * 100) + '%';
-                    track.append(fill);
-                }
-                rows.append(name, track, el('div', 'value', f.value));
-            }
-            section.append(rows);
+            section.append(el('h2', null, 'By feature'), featureRows(r.features));
             if (r.featuresError) section.append(el('p', 'small secondary', r.featuresError));
             page.append(section);
         }
         page.append(el('p', 'note secondary', r.note));
+    }
+
+    /** A bar a feature, against the costliest. */
+    function featureRows(features) {
+        const rows = el('div', 'features');
+        for (const f of features) {
+            const name = el('div', 'name', f.title);
+            name.title = f.title;
+            const track = el('div', 'track');
+            if (f.fraction != null && f.fraction > 0) {
+                const fill = el('div', 'fill');
+                fill.style.width = (f.fraction * 100) + '%';
+                track.append(fill);
+            }
+            rows.append(name, track, el('div', 'value', f.value));
+        }
+        return rows;
+    }
+
+    /** This account | All accounts. */
+    function scopeSwitch(scope) {
+        const box = el('div', 'switch scope');
+        box.setAttribute('role', 'radiogroup');
+        box.setAttribute('aria-label', 'Accounts to show');
+        for (const [value, label] of [['account', 'This account'], ['all', 'All accounts']]) {
+            const b = el('button', value === scope ? 'on' : null, label);
+            b.setAttribute('role', 'radio');
+            b.setAttribute('aria-checked', String(value === scope));
+            b.addEventListener('click', () => vscode.postMessage({ type: 'scope', scope: value }));
+            box.append(b);
+        }
+        return box;
+    }
+
+    /** A year of usage: the summary, a stacked bar a month, the table, the features and the notes. */
+    function renderStatistics(st) {
+        if (!st) return;
+        if ((model.accounts || []).length > 1) {
+            page.append(scopeSwitch(st.scope));
+        }
+        if (st.useNotice && model.notice) {
+            renderNotice(model.notice);
+            return;
+        }
+        for (const error of st.errors) page.append(el('p', 'error', error));
+        if (st.empty) page.append(el('p', 'secondary', st.empty));
+        if (st.loading) page.append(el('p', 'secondary', 'Loading statistics…'));
+        const s = st.stats;
+        if (!s) return;
+        if (s.accounts) page.append(el('p', 'small secondary', s.accounts));
+        page.append(el('p', 'summary', s.summary));
+
+        const chart = el('section');
+        chart.append(el('h2', null, 'Credits per month'));
+        if (s.legend.length > 0) {
+            const legend = el('ul', 'legend');
+            legend.setAttribute('aria-label', 'Features');
+            for (const item of s.legend) {
+                const entry = el('li');
+                const swatch = el('span', 'swatch s-' + item.slot);
+                swatch.setAttribute('aria-hidden', 'true');
+                entry.append(swatch, document.createTextNode(item.label));
+                legend.append(entry);
+            }
+            chart.append(legend);
+        }
+        const host = el('div', 'months');
+        host.setAttribute('role', 'img');
+        host.setAttribute('aria-label', 'Credits per month; the table below has the figures');
+        chart.append(host);
+        page.append(chart);
+
+        const table = el('table', 'months-table');
+        const head = el('tr');
+        for (const [label, numeric] of [['Month', false], ['Credits', true], ['Top feature', false], ['Not billed', true]]) {
+            const th = el('th', numeric ? 'num' : null, label);
+            th.scope = 'col';
+            head.append(th);
+        }
+        const thead = el('thead');
+        thead.append(head);
+        const tbody = el('tbody');
+        for (const row of s.rows) {
+            const tr = el('tr');
+            tr.append(el('td', null, row.month), el('td', 'num', row.credits), el('td', 'feature', row.topFeature),
+                el('td', 'num', row.notBilled));
+            tbody.append(tr);
+        }
+        table.append(thead, tbody);
+        page.append(table);
+
+        if (s.features.length > 0 || s.featuresError) {
+            const section = el('section');
+            section.append(el('h2', null, 'By feature, last 12 months'));
+            if (s.features.length > 0) section.append(featureRows(s.features));
+            if (s.featuresError) section.append(el('p', 'small secondary', s.featuresError));
+            page.append(section);
+        }
+        if (s.notBilled) page.append(el('p', 'small', s.notBilled));
+        page.append(el('p', 'note secondary', s.note));
+    }
+
+    /** "M x y+h V y+r Q …": a bar segment with its top corners rounded. */
+    function roundedTop(x, y, w, h, r) {
+        const rr = Math.max(0, Math.min(r, w / 2, h));
+        return 'M' + x + ' ' + (y + h) + 'V' + (y + rr) + 'Q' + x + ' ' + y + ' ' + (x + rr) + ' ' + y
+            + 'H' + (x + w - rr) + 'Q' + (x + w) + ' ' + y + ' ' + (x + w) + ' ' + (y + rr) + 'V' + (y + h) + 'Z';
+    }
+
+    /** A stacked bar a month, oldest left: the top features in their colours, the rest as Other. */
+    function drawMonths() {
+        const host = page.querySelector('.months');
+        const s = model && model.tab === 'statistics' && model.statistics && model.statistics.stats;
+        if (!host || !s) return;
+        const w = host.clientWidth, h = 196;
+        let labelWidth = 0;
+        for (const t of s.ticks) labelWidth = Math.max(labelWidth, measure(t.label, 11));
+        const p = { left: labelWidth + 8, right: w - 4, top: 10, bottom: h - 34 };
+        const n = Math.max(s.bars.length, 1);
+        const slot = (p.right - p.left) / n;
+        const barWidth = Math.max(4, Math.min(28, slot * 0.62));
+        const y = v => p.bottom - v / s.axisMax * (p.bottom - p.top);
+        const svgEl = svg('svg', { width: w, height: h });
+
+        for (const t of s.ticks) {
+            const ty = y(t.value);
+            svgEl.append(svg('line', { x1: p.left, y1: ty, x2: p.right, y2: ty }, t.value === 0 ? 'axis' : 'grid'));
+            svgEl.append(text(p.left - 6, ty + 4, t.label, null, 'end'));
+        }
+
+        const monthWidth = measure('Mmm', 11);
+        const every = slot < monthWidth + 4 ? 2 : 1;
+        const tops = [];
+        s.bars.forEach((bar, i) => {
+            const x = p.left + i * slot + (slot - barWidth) / 2;
+            let base = p.bottom;
+            const spans = [];
+            bar.segments.forEach((seg, j) => {
+                const height = seg.value / s.axisMax * (p.bottom - p.top);
+                const top = base - height;
+                const drawn = height - (j > 0 ? 2 : 0);
+                spans.push([top, base]);
+                if (drawn > 0.5) {
+                    const last = j === bar.segments.length - 1;
+                    const dim = hoveredMonth != null && (hoveredMonth.segment < 0 ? hoveredMonth.bar !== i
+                        : !(hoveredMonth.bar === i && hoveredMonth.segment === j));
+                    const cls = 'seg s-' + seg.slot + (dim ? ' dim' : '');
+                    svgEl.append(last
+                        ? svg('path', { d: roundedTop(x, top, barWidth, drawn, 4) }, cls)
+                        : svg('rect', { x, y: top, width: barWidth, height: drawn }, cls));
+                }
+                base = top;
+            });
+            tops.push({ top: base, spans });
+            if (i % every === 0 || bar.year) {
+                svgEl.append(text(p.left + (i + 0.5) * slot, p.bottom + 15, bar.label, null, 'middle'));
+            }
+            if (bar.year) {
+                svgEl.append(text(p.left + (i + 0.5) * slot, p.bottom + 28, bar.year, 'year', 'middle'));
+            }
+        });
+
+        svgEl.addEventListener('mousemove', event => {
+            const bounds = svgEl.getBoundingClientRect();
+            const mx = event.clientX - bounds.left, my = event.clientY - bounds.top;
+            const i = mx < p.left || mx >= p.right ? -1 : Math.floor((mx - p.left) / slot);
+            if (i < 0 || i >= s.bars.length || my > p.bottom || my < p.top - 4) {
+                return hoverMonth(null);
+            }
+            const segment = tops[i].spans.findIndex(([top, base]) => my >= top && my <= base);
+            hoverMonth({ bar: i, segment });
+        });
+        svgEl.addEventListener('mouseleave', () => hoverMonth(null));
+        host.replaceChildren(svgEl);
+
+        if (hoveredMonth) {
+            const bar = s.bars[hoveredMonth.bar];
+            const seg = bar.segments[hoveredMonth.segment];
+            const tip = el('div', 'months-tip');
+            tip.append(el('div', null, bar.title + (seg ? ' · ' + seg.label + ': ' + seg.text : '')),
+                el('div', 'secondary', 'Month total: ' + bar.totalText));
+            host.append(tip);
+            const centre = p.left + (hoveredMonth.bar + 0.5) * slot;
+            const left = Math.max(0, Math.min(w - tip.offsetWidth, centre - tip.offsetWidth / 2));
+            tip.style.left = left + 'px';
+            tip.style.top = Math.max(0, tops[hoveredMonth.bar].top - tip.offsetHeight - 8) + 'px';
+        }
+    }
+
+    function hoverMonth(next) {
+        const same = next === hoveredMonth
+            || (next && hoveredMonth && next.bar === hoveredMonth.bar && next.segment === hoveredMonth.segment);
+        if (!same) {
+            hoveredMonth = next;
+            drawMonths();
+        }
     }
 
     /** The left edge of a label of textWidth centred on x, kept inside the width. */

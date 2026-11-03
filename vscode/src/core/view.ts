@@ -10,6 +10,15 @@ export function number(value: number): string {
     return Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(1);
 }
 
+/** As number(), with thousands grouped: 2,100, 1,234.5. */
+export function grouped(value: number): string {
+    const text = number(value);
+    const [whole, fraction] = text.split('.');
+    const sign = whole.startsWith('-') ? '-' : '';
+    const digits = sign === '' ? whole : whole.slice(1);
+    return sign + digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + (fraction != null ? '.' + fraction : '');
+}
+
 /** "$21.5 / 300": a credit costs $1 at GitLab's list price. */
 export function statusText(s: Snapshot, limit: number): string {
     const r = s.report;

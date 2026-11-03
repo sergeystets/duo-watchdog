@@ -26,6 +26,10 @@
           <b>expires within 3 days</b>, and a token GitLab turns down.</li>
       <li><b>glab and the GitLab Duo CLI</b>: an account can hand its token to glab, and so to the Duo CLI. Both
           are off unless you tick them.</li>
+      <li>A <b>Statistics</b> tab next to the dashboard: the last twelve months by month and by feature, with what
+          GitLab did not bill, for one account or all of them.</li>
+      <li><b>What's New</b>: after an update a window shows what the version brings, with pictures; Help | What's
+          New in Duo Watchdog opens it again.</li>
       <li>The token saved by 0.3.0 moves to its account on the first refresh, with its group, limit and last
           alert.</li>
     </ul>
@@ -62,6 +66,7 @@
         <notificationGroup id="Duo Watchdog" displayType="BALLOON"/>
         <!-- The last threshold, the limit, a block, a token about to expire or turned down: these stay until closed. -->
         <notificationGroup id="Duo Watchdog Important" displayType="STICKY_BALLOON"/>
+        <postStartupActivity implementation="duowatchdog.plugin.WhatsNew$Activity"/>
     </extensions>
 
     <actions>
@@ -71,6 +76,12 @@
                 description="Read your GitLab Credits usage now"
                 icon="AllIcons.Actions.Refresh">
             <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+        <action id="duowatchdog.WhatsNew"
+                class="duowatchdog.plugin.WhatsNew$ShowAction"
+                text="What's New in Duo Watchdog"
+                description="What the latest Duo Watchdog brings, with pictures">
+            <add-to-group group-id="HelpMenu" anchor="last"/>
         </action>
     </actions>
 </idea-plugin>

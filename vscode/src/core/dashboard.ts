@@ -198,7 +198,7 @@ function dailyModel(period: BillingPeriod, today: IsoDate, report: CreditsReport
 }
 
 /** One row a feature, the costliest first. */
-function features(flows: FlowUsage[]): FeatureModel[] {
+export function features(flows: FlowUsage[]): FeatureModel[] {
     const sorted = [...flows].sort((a, b) => (b.credits ?? -1) - (a.credits ?? -1));
     const top = Math.max(0, ...sorted.map(f => f.credits ?? 0));
     return sorted.map(f => ({

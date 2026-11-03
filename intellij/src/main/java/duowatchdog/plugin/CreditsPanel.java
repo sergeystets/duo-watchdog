@@ -142,7 +142,7 @@ final class CreditsPanel extends SimpleToolWindowPanel implements Disposable {
      * "@dana.k · acme ▾": which account the dashboard and the status bar show. Its list puts the most credits left
      * first, and typing filters it.
      */
-    private static final class AccountSwitcher extends ComboBoxAction implements DumbAware {
+    static final class AccountSwitcher extends ComboBoxAction implements DumbAware {
 
         private final Project project;
 

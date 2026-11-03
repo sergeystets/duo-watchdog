@@ -2,6 +2,13 @@
 
 ## 0.4.0
 
+- **Statistics:** a **Usage | Statistics** switch at the top of the dashboard. Statistics shows the selected account's
+  last twelve months: this month so far, last month, the monthly average and the year; a stacked bar a month by
+  feature (the five costliest, the rest as Other); every month as a row with its top feature and what GitLab did not
+  bill; and each feature's credits over the year. **This account | All accounts** adds up every account that reads
+  usage. Read when first shown, kept for an hour; **Refresh** reads it again.
+- **What's New:** after an update, a notification links to the new **What's New in Duo Watchdog** page; after a fresh
+  install, it says how to start. **Duo Watchdog: What's New** shows the page any time.
 - **Accounts:** one token per account; an account is one GitLab user on one GitLab. GitLab says whose a token is
   when you add it: a token for an account already listed replaces its token, and its group and limit stay. Each
   account has its own group path and limit; alert percents, the forecast alert and the refresh interval are shared.

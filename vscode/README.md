@@ -25,12 +25,16 @@ GitLab query, forecast and alerts.
   - credits by feature
   - for an account without numbers, what is wrong and a button to fix it: no token, a token GitLab turns down,
     usage not tracked, no group yet
+  - **Usage | Statistics** at the top: Usage is this billing period, Statistics the last twelve months
+    (see [Statistics](#statistics))
 - **Alerts**, per account: a notification when the forecast passes the account's limit, at each threshold, at the
   limit, and when GitLab blocks it, naming the account (`@dana.k on gitlab.com · acme`). Each one shows at most once
   per billing period and account. Also once: a token that expires within 3 days (with **Replace Token** and
   **Create a New Token in GitLab**), and a token GitLab turns down (with **Replace Token**).
 - **glab and the GitLab Duo CLI:** an account can hand its token to [glab](https://gitlab.com/gitlab-org/cli) for its
   GitLab. Both are off unless you turn them on.
+- **What's New:** after an update, a notification links to what changed; **Duo Watchdog: What's New** shows it any
+  time.
 
 ## Setup
 
@@ -72,6 +76,28 @@ $(check) @dana.k        gitlab.com · acme
 
 **Find My Group** and **Create the Token in GitLab** work on the account the status bar shows.
 
+## Statistics
+
+The **Statistics** switch at the top of the dashboard shows the last twelve months of the selected account:
+
+- a summary: `This month so far 148.6 · Last month 201 · Monthly average 175 · 12 months 2,100` (the average is over
+  the complete months; in the first month, that month so far)
+- a stacked bar a month, oldest left: the year's five costliest features in colours of their own, the rest as
+  **Other** in gray. Hover a segment for its month, feature and credits, and the month's total.
+- a table, newest month first: **Month**, **Credits**, **Top feature**, **Not billed**
+- **By feature, last 12 months**: each feature's credits over the year
+- **Not billed**: the credits GitLab did not bill (promotional, beta), when there are any. GitLab's own usage page
+  counts these in its total. GitLab says this from version 19.6.
+
+**This account | All accounts** switches between the selected account and every account with a token that reads
+usage, added up, features of the same name as one.
+
+GitLab keeps usage from the subscription's start, so the year can be shorter, and its figures can lag a few hours. A
+group member sees usage per day and per feature; per project, model or session takes the group's Owner.
+
+The statistics are read from GitLab when you first show them for an account, and kept for an hour. **Refresh** reads
+them again. If they don't load, the view says why; the Usage view is not affected.
+
 ## glab and the GitLab Duo CLI
 
 **Use for glab** runs `glab auth login --hostname <host> --stdin` and writes the account's token to glab's standard
@@ -99,6 +125,9 @@ Open *Settings → Extensions → Duo Watchdog*:
 | `duoWatchdog.alertPercents` | `80, 95` | Percentages of each account's limit that trigger an alert |
 | `duoWatchdog.forecastAlert` | `true` | Alert when the month-end forecast passes the limit |
 | `duoWatchdog.refreshMinutes` | `15` | How often to fetch new data for every account |
+
+Commands (*Ctrl/Cmd+Shift+P*, type "Duo Watchdog"): **Accounts**, **Add or Replace a Token**, **Find My Group**,
+**Create the Token in GitLab**, **Refresh**, **Open Dashboard**, **Open Settings**, **What's New**.
 
 `duoWatchdog.groupPath` and `duoWatchdog.limit` are deprecated: each account has its own group and limit now.
 

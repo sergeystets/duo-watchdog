@@ -20,6 +20,7 @@ import duowatchdog.core.CreditsClient.TokenInfo;
 import duowatchdog.core.CreditsView;
 import duowatchdog.core.GitLabAddress;
 import duowatchdog.core.GitLabException;
+import duowatchdog.core.History;
 import duowatchdog.core.HttpTransport;
 import duowatchdog.core.Snapshot;
 import duowatchdog.plugin.CreditsSettings.Account;
@@ -54,6 +55,12 @@ public final class CreditsService implements Disposable {
 
     private final AtomicBoolean loading = new AtomicBoolean();
     private final Map<String, Snapshot> snapshots = new ConcurrentHashMap<>();
+    /** Each account's last year, read when Statistics shows it; kept for {@link #HISTORY_MINUTES}. */
+    private final Map<String, CachedHistory> histories = new ConcurrentHashMap<>();
+    private static final long HISTORY_MINUTES = 60;
+
+    private record CachedHistory(Instant at, String token, History history) {
+    }
     /** Why the token saved before 0.4.0 could not be moved to its account yet, while there is no account. */
     private volatile String migrationError;
     private ScheduledFuture<?> schedule;
@@ -100,6 +107,32 @@ public final class CreditsService implements Disposable {
         List<Account> all = new ArrayList<>(CreditsSettings.getInstance().getState().accounts);
         all.sort(Accounts.byCreditsLeft(a -> Accounts.left(snapshot(a.id()), a.limit), a -> a.username, Account::host));
         return all;
+    }
+
+    /**
+     * The account's last {@link History#MONTHS} months, from the cache when it is under an hour old and the token is
+     * the same. Asks GitLab, which may block: call off the EDT.
+     */
+    History history(Account account, boolean force) throws GitLabException {
+        String token = CreditsSettings.getInstance().token(account.id());
+        if (token == null || token.isBlank()) {
+            throw new GitLabException("No token saved for @" + account.username + " on " + account.host() + ".");
+        }
+        String group = GitLabAddress.groupPath(account.namespace, account.gitlabUrl);
+        if (group.isEmpty()) {
+            throw new GitLabException("No group path yet for @" + account.username + " on " + account.host()
+                    + ": set it in Settings | Tools | Duo Watchdog.");
+        }
+        CachedHistory cached = histories.get(account.id());
+        if (!force && cached != null && cached.token().equals(token)
+                && cached.at().isAfter(Instant.now().minus(Duration.ofMinutes(HISTORY_MINUTES)))) {
+            return cached.history();
+        }
+        LocalDate today = LocalDate.now();
+        History history = new CreditsClient(account.gitlabUrl, token.trim(), transport())
+                .history(group, History.from(today), today);
+        histories.put(account.id(), new CachedHistory(Instant.now(), token, history));
+        return history;
     }
 
     /** Starts the periodic refresh; later calls do nothing. */

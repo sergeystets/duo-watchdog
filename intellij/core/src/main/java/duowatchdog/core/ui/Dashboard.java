@@ -333,7 +333,7 @@ public final class Dashboard extends JPanel implements Scrollable {
      * The tiles in a row where each gets {@link #WIDE} pixels, else two by two. Which it is depends on the width it
      * is given, so a change of it lays the page out again.
      */
-    private static final class Tiles extends JPanel {
+    static final class Tiles extends JPanel {
 
         private static final int WIDE = 100;
 
@@ -387,7 +387,7 @@ public final class Dashboard extends JPanel implements Scrollable {
     }
 
     /** A bordered tile: a caption over a value, the value optionally followed by a smaller unit. */
-    private static final class Tile extends JComponent {
+    static final class Tile extends JComponent {
 
         private final Theme theme;
         private final String caption;

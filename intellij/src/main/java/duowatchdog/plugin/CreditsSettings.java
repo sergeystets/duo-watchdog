@@ -139,6 +139,8 @@ public final class CreditsSettings implements PersistentStateComponent<CreditsSe
         public String alertPercents = Alert.DEFAULT_PERCENTS;
         public boolean alertOnForecast = true;
         public int refreshMinutes = 15;
+        /** The plugin version the What's New page was last offered for. */
+        public String lastSeenVersion = "";
     }
 
     private Settings settings = new Settings();

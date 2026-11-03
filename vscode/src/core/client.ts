@@ -1,5 +1,6 @@
 import { trimSlashes } from './address';
 import { IsoDate, parseDate } from './dates';
+import { FlowHistory, History } from './history';
 import { CreditsReport, DailyUsage, FlowUsage } from './report';
 
 export interface Response {
@@ -41,6 +42,28 @@ export const SELF_QUERY = `query DuoMyCredits($namespacePath: ID!) {
       blockedStatus { blocked capType }
       dailyUsage { date creditsUsed }
       usedFlowTypes { id title }
+    }
+  }
+}
+`;
+
+export const HISTORY_QUERY = `query DuoMyHistory($namespacePath: ID!, $startDate: ISO8601Date, $endDate: ISO8601Date) {
+  currentUser {
+    creditsUsage(namespacePath: $namespacePath, startDate: $startDate, endDate: $endDate) {
+      startDate
+      endDate
+      dailyUsage { date creditsUsed }
+      usedFlowTypes { id title }
+    }
+  }
+}
+`;
+
+/** Asked on its own: GitLab before 19.6 has no such field, and the rest still stands without it. */
+export const NON_BILLABLE_QUERY = `query DuoMyNonBillable($namespacePath: ID!, $startDate: ISO8601Date, $endDate: ISO8601Date) {
+  currentUser {
+    creditsUsage(namespacePath: $namespacePath, startDate: $startDate, endDate: $endDate) {
+      nonBillableUsage { dailyUsage { date creditsUsed } }
     }
   }
 }
@@ -198,6 +221,82 @@ export class CreditsClient {
         return username;
     }
 
+    /**
+     * The user's usage from `from` to `to`, at most a year: per day, per feature per day, and what GitLab did not
+     * bill. GitLab moves the start to the subscription's. The per-feature and not-billed figures are details: when
+     * they fail, the totals still stand.
+     */
+    async history(namespace: string, from: IsoDate, to: IsoDate): Promise<History> {
+        const variables: Json = { namespacePath: namespace, startDate: from, endDate: to };
+        const result = await this.graphql(HISTORY_QUERY, variables);
+        const user = obj(result.data, 'currentUser');
+        if (user == null) {
+            throw new GitLabError(result.errors.length === 0 ? NOT_A_USER : result.errors.join('; '));
+        }
+        const usage = obj(user, 'creditsUsage');
+        if (usage == null) {
+            const why = result.errors.length === 0 ? 'no data returned' : result.errors.join('; ');
+            throw new GitLabError('GitLab returned no history for "' + namespace + '": ' + why + '.');
+        }
+        const used = flows(usage);
+
+        const perFlow: FlowHistory[] = [];
+        let flowsError: string | null = null;
+        const priced = Math.min(used.length, MAX_PRICED_FLOWS);
+        if (priced > 0) {
+            let header = 'query DuoMyHistoryByFlow($namespacePath: ID!, $startDate: ISO8601Date, $endDate: ISO8601Date';
+            let fields = '';
+            const flowVariables: Json = { ...variables };
+            for (let i = 0; i < priced; i++) {
+                header += ', $f' + i + ': [String!]';
+                fields += '    f' + i + ': creditsUsage(namespacePath: $namespacePath, startDate: $startDate, '
+                    + 'endDate: $endDate, flowTypes: $f' + i + ') { dailyUsage { date creditsUsed } }\n';
+                flowVariables['f' + i] = [used[i].id];
+            }
+            try {
+                const byFlow = await this.graphql(header + ') {\n  currentUser {\n' + fields + '  }\n}\n', flowVariables);
+                const figures = obj(byFlow.data, 'currentUser');
+                for (let i = 0; i < priced; i++) {
+                    const flow = obj(figures, 'f' + i);
+                    if (flow == null) {
+                        flowsError = byFlow.errors.length === 0 ? 'GitLab returned no figures' : byFlow.errors.join('; ');
+                        continue;
+                    }
+                    perFlow.push({ id: used[i].id, title: used[i].title, daily: dailies(flow) });
+                }
+            } catch (e) {
+                if (!(e instanceof GitLabError)) {
+                    throw e;
+                }
+                flowsError = e.message;
+            }
+        }
+
+        const nonBillable: DailyUsage[] = [];
+        try {
+            const extra = obj(obj((await this.graphql(NON_BILLABLE_QUERY, variables)).data, 'currentUser'), 'creditsUsage');
+            const entries = extra == null ? undefined : extra['nonBillableUsage'];
+            if (Array.isArray(entries)) {
+                for (const e of entries) {
+                    if (isObj(e)) {
+                        nonBillable.push(...dailies(e));
+                    }
+                }
+            } else if (isObj(entries)) {
+                nonBillable.push(...dailies(entries));
+            }
+        } catch (e) {
+            // Before GitLab 19.6: nothing to say about it.
+            if (!(e instanceof GitLabError)) {
+                throw e;
+            }
+        }
+        return {
+            start: date_(usage, 'startDate') ?? from, end: date_(usage, 'endDate') ?? to,
+            daily: dailies(usage), flows: perFlow, nonBillable, flowsError,
+        };
+    }
+
     /** The token's name, scopes and expiry, from the REST API, which tells any token about itself. */
     async tokenInfo(): Promise<TokenInfo> {
         const uri = new URL('v4/personal_access_tokens/self', this.endpoint);
@@ -310,6 +409,14 @@ function json(response: Response): unknown {
 
 function report(username: string | null, usage: Json): CreditsReport {
     const blocked = obj(usage, 'blockedStatus');
+    return {
+        username, startDate: date_(usage, 'startDate'), endDate: date_(usage, 'endDate'),
+        creditsUsed: num(usage, 'creditsUsed') ?? 0, blocked: bool(blocked, 'blocked'),
+        blockedBy: str(blocked, 'capType'), daily: dailies(usage), flows: flows(usage), flowsError: null,
+    };
+}
+
+function dailies(usage: Json): DailyUsage[] {
     const daily: DailyUsage[] = [];
     for (const e of arr(usage, 'dailyUsage')) {
         if (isObj(e)) {
@@ -319,11 +426,7 @@ function report(username: string | null, usage: Json): CreditsReport {
             }
         }
     }
-    return {
-        username, startDate: date_(usage, 'startDate'), endDate: date_(usage, 'endDate'),
-        creditsUsed: num(usage, 'creditsUsed') ?? 0, blocked: bool(blocked, 'blocked'),
-        blockedBy: str(blocked, 'capType'), daily, flows: flows(usage), flowsError: null,
-    };
+    return daily;
 }
 
 function flows(usage: Json): FlowUsage[] {
