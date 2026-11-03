@@ -1,4 +1,5 @@
-import { CreditsReport } from '../core/report';
+import { Account, AccountState, idOf, Problem } from '../core/accounts';
+import { CreditsReport, Snapshots } from '../core/report';
 
 export const TODAY = '2026-10-18';
 export const AT = new Date(2026, 9, 18, 14, 5);
@@ -15,4 +16,30 @@ export function report(used: number, blocked: boolean): CreditsReport {
         flows: [{ id: 'chat', title: 'Duo Chat', credits: 12 }, { id: 'review', title: 'Code <Review>', credits: 30 }],
         flowsError: null,
     };
+}
+
+/** An account as Add or Replace a Token saves it; the fields given replace the defaults. */
+export function account(change: Partial<Account> = {}): Account {
+    return {
+        gitlabUrl: 'https://gitlab.com',
+        username: 'dana.k',
+        groupPath: 'acme',
+        limit: 300,
+        tokenSavedAt: 1_759_318_692_000,
+        expiresAt: '2027-02-01',
+        scopes: ['read_api', 'ai_features'],
+        glab: false,
+        duo: false,
+        lastAlertKey: null,
+        expiryPopupKey: null,
+        rejectedPopupKey: null,
+        ...change,
+    };
+}
+
+/** An account with what a refresh found: credits used, or a problem and no numbers. */
+export function state(a: Account, used: number | null, problem: Problem | null = null, blocked = false): AccountState {
+    const snapshot = used == null ? (problem == null ? Snapshots.loading() : Snapshots.notConfigured())
+        : Snapshots.ok({ ...report(used, blocked), username: a.username }, AT);
+    return { id: idOf(a), account: a, snapshot, problem };
 }

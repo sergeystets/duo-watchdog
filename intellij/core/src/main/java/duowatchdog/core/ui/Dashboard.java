@@ -57,12 +57,16 @@ public final class Dashboard extends JPanel implements Scrollable {
         removeAll();
         row = 0;
         CreditsReport report = snapshot.report();
-        if (snapshot.error() != null) {
+        Snapshot.Status status = snapshot.status();
+        // These say why there are no numbers, and Settings is where to fix it.
+        boolean unset = status == Snapshot.Status.NOT_CONFIGURED || status == Snapshot.Status.NO_TOKEN
+                || status == Snapshot.Status.NOT_TRACKED || status == Snapshot.Status.REJECTED;
+        if (snapshot.error() != null && !unset) {
             place(text("Last refresh failed: " + snapshot.error(), 12, Tone.ERROR), 0);
         }
-        if (snapshot.status() == Snapshot.Status.NOT_CONFIGURED) {
-            place(text("Not set up yet. Enter the GitLab URL, your group's path and a personal access token with the "
-                    + "read_api and ai_features scopes.", 13, Tone.TEXT), row == 0 ? 0 : 12);
+        if (unset) {
+            place(text(CreditsView.reason(snapshot), 13, status == Snapshot.Status.REJECTED ? Tone.ERROR : Tone.TEXT),
+                    row == 0 ? 0 : 12);
             place(link("Open Settings", openSettings), 8);
         } else if (report == null && snapshot.error() == null) {
             place(label("Loading…", 13, Font.PLAIN, Tone.SECONDARY), 0);

@@ -59,6 +59,15 @@ public record Alert(String key, Kind kind, String title, String message) {
         return Optional.empty();
     }
 
+    /** The block, the limit, or the highest threshold: the notices that stay on screen until closed. */
+    public boolean urgent(List<Integer> percents) {
+        return switch (kind) {
+            case BLOCKED, LIMIT -> true;
+            case THRESHOLD -> !percents.isEmpty() && key.endsWith("|" + percents.get(percents.size() - 1));
+            case FORECAST -> false;
+        };
+    }
+
     /** "80, 95" to [80, 95]: whole percents from 1 to 100, sorted, repeats dropped; blank means no thresholds. */
     public static List<Integer> parsePercents(String text) {
         TreeSet<Integer> percents = new TreeSet<>();

@@ -5,21 +5,30 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.wm.CustomStatusBarWidget;
 import com.intellij.openapi.wm.StatusBar;
 import com.intellij.util.ui.UIUtil;
+import duowatchdog.core.Accounts;
 import duowatchdog.core.CreditsReport;
 import duowatchdog.core.CreditsView;
+import duowatchdog.core.CreditsView.TooltipAccount;
 import duowatchdog.core.Snapshot;
 import duowatchdog.core.ui.StatusChip;
+import duowatchdog.core.ui.Tone;
+import duowatchdog.plugin.CreditsSettings.Account;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import javax.swing.JComponent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
- * "$21.5 / 300" with the doberman and a mini meter in the status bar, amber from the lowest alert percent and red
- * once GitLab blocks Duo; the tooltip summarises, a click opens the tool window.
+ * "$21.5 / 300" with the doberman and a mini meter in the status bar, for the account the tool window shows: amber
+ * from the lowest alert percent and red once GitLab blocks Duo. A dot in its corner says another account needs a
+ * look; the tooltip lists every account, and a click opens the tool window.
  */
 final class CreditsWidget implements CustomStatusBarWidget {
 
@@ -50,20 +59,57 @@ final class CreditsWidget implements CustomStatusBarWidget {
 
     @Override
     public void install(@NotNull StatusBar statusBar) {
-        ApplicationManager.getApplication().getMessageBus().connect(this)
-                .subscribe(CreditsListener.TOPIC, snapshot -> update());
+        ApplicationManager.getApplication().getMessageBus().connect(this).subscribe(CreditsListener.TOPIC, this::update);
         CreditsService.getInstance().start();
         update();
     }
 
     private void update() {
-        Snapshot snapshot = CreditsService.getInstance().snapshot();
-        CreditsSettings settings = CreditsSettings.getInstance();
-        double limit = settings.getState().limit;
+        CreditsService service = CreditsService.getInstance();
+        List<Integer> percents = CreditsSettings.getInstance().percents();
+        Account shown = service.selected();
+        Snapshot snapshot = service.selectedSnapshot();
+        double limit = shown != null ? shown.limit : 0;
         CreditsReport report = snapshot.report();
-        chip.show(CreditsView.statusText(snapshot, limit), StatusChip.level(report, limit, settings.percents()),
+        chip.show(CreditsView.statusText(snapshot, limit), StatusChip.level(report, limit, percents),
                 report != null && limit > 0 ? report.creditsUsed() / limit : 0, report != null);
-        chip.setToolTipText(CreditsView.tooltipHtml(snapshot, limit, LocalDate.now(), ZoneId.systemDefault()));
+
+        LocalDate today = LocalDate.now();
+        Accounts.Attention others = Accounts.Attention.NONE;
+        List<TooltipAccount> lines = new ArrayList<>();
+        for (Account account : service.sorted()) {
+            Snapshot s = service.snapshot(account.id());
+            boolean isShown = shown != null && account.id().equals(shown.id());
+            Accounts.Attention attention = Accounts.attention(s, account.limit, percents, account.expiry(), today);
+            if (!isShown && attention.ordinal() > others.ordinal()) {
+                others = attention;
+            }
+            lines.add(new TooltipAccount(account.label(), s, account.limit, isShown, expiryNote(account, today)));
+        }
+        chip.attention(switch (others) {
+            case NONE -> null;
+            case WARNING -> Tone.WARNING;
+            case ERROR -> Tone.ERROR;
+        });
+        chip.setToolTipText(lines.isEmpty()
+                ? CreditsView.tooltipHtml(snapshot, limit, today, ZoneId.systemDefault())
+                : CreditsView.tooltipHtml(lines, today, ZoneId.systemDefault()));
+    }
+
+    /** "Token expires in 3 days, on Oct 27" within a week of its expiry, "Token expired on …" after it. */
+    static @Nullable String expiryNote(Account account, LocalDate today) {
+        LocalDate expiry = account.expiry();
+        if (expiry == null) {
+            return null;
+        }
+        if (!expiry.isAfter(today)) {
+            return "Token expired on " + CreditsView.day(expiry);
+        }
+        if (Accounts.expiresWithin(expiry, today, Accounts.EXPIRY_WARNING_DAYS)) {
+            long days = ChronoUnit.DAYS.between(today, expiry);
+            return "Token expires " + (days == 1 ? "tomorrow" : "in " + days + " days") + ", on " + CreditsView.day(expiry);
+        }
+        return null;
     }
 
     @Override

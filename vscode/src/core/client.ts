@@ -2,16 +2,31 @@ import { trimSlashes } from './address';
 import { IsoDate, parseDate } from './dates';
 import { CreditsReport, DailyUsage, FlowUsage } from './report';
 
-/** One POST to the GraphQL endpoint. The extension backs it with Node's https; tests with canned JSON. */
+export interface Response {
+    status: number;
+    body: string;
+}
+
+/**
+ * Requests to GitLab: a POST to the GraphQL endpoint, or a GET of a REST one for the token's own details. The
+ * extension backs it with Node's https; tests with canned JSON.
+ */
 export interface Transport {
-    post(endpoint: URL, token: string, jsonBody: string): Promise<{ status: number; body: string }>;
+    post(endpoint: URL, token: string, jsonBody: string): Promise<Response>;
+
+    /** A transport that only posts, as the tests' fakes, cannot GET. */
+    get?(uri: URL, token: string): Promise<Response>;
 }
 
 /** A failure worth showing to the user as it is: the message never carries the token. */
 export class GitLabError extends Error {
-    constructor(message: string) {
+    /** GitLab's HTTP status, e.g. 401 when it turned the token down; 0 when the request did not get that far. */
+    readonly status: number;
+
+    constructor(message: string, status = 0) {
         super(message);
         this.name = 'GitLabError';
+        this.status = status;
     }
 }
 
@@ -28,6 +43,11 @@ export const SELF_QUERY = `query DuoMyCredits($namespacePath: ID!) {
       usedFlowTypes { id title }
     }
   }
+}
+`;
+
+export const USER_QUERY = `query DuoWhoAmI {
+  currentUser { username }
 }
 `;
 
@@ -58,6 +78,14 @@ export function groupLabel(match: GroupMatch): string {
 export interface Groups {
     checked: string[];
     withCredits: GroupMatch[];
+}
+
+/** The token's own details, as GET /personal_access_tokens/self gives them. */
+export interface TokenInfo {
+    name: string | null;
+    scopes: string[];
+    /** The day GitLab stops taking it; null when it never expires. */
+    expiresAt: IsoDate | null;
 }
 
 type Json = Record<string, unknown>;
@@ -160,6 +188,30 @@ export class CreditsClient {
         return { checked, withCredits: matches };
     }
 
+    /** Whose the token is: the proof that GitLab takes it for GraphQL. */
+    async username(): Promise<string> {
+        const result = await this.graphql(USER_QUERY, {});
+        const username = str(obj(result.data, 'currentUser'), 'username');
+        if (username == null) {
+            throw new GitLabError(result.errors.length === 0 ? NOT_A_USER : result.errors.join('; '));
+        }
+        return username;
+    }
+
+    /** The token's name, scopes and expiry, from the REST API, which tells any token about itself. */
+    async tokenInfo(): Promise<TokenInfo> {
+        const uri = new URL('v4/personal_access_tokens/self', this.endpoint);
+        const transport = this.transport;
+        const parsed = json(await this.request(() => transport.get
+            ? transport.get(uri, this.token)
+            : Promise.reject(new Error('this transport sends only GraphQL requests'))));
+        if (!isObj(parsed)) {
+            throw new GitLabError(NOT_JSON);
+        }
+        const scopes = arr(parsed, 'scopes').filter((e): e is string => typeof e === 'string');
+        return { name: str(parsed, 'name'), scopes, expiresAt: date_(parsed, 'expires_at') };
+    }
+
     /**
      * Prices each feature the user spent on with one aliased query, creditsUsage filtered by flow type. The
      * breakdown is a detail: when it fails, the total still stands, the features stay listed unpriced, and the
@@ -207,33 +259,9 @@ export class CreditsClient {
 
     private async graphql(query: string, variables: Json): Promise<{ data: Json | null; errors: string[] }> {
         const body = JSON.stringify({ query, variables });
-        const host = this.endpoint.hostname;
-        let response: { status: number; body: string };
-        try {
-            response = await this.transport.post(this.endpoint, this.token, body);
-        } catch (e) {
-            const message = e instanceof Error && e.message ? e.message : e instanceof Error ? e.name : String(e);
-            throw new GitLabError('Cannot reach ' + host + ': ' + message);
-        }
-
-        if (response.status === 401) {
-            throw new GitLabError('GitLab rejected the token (HTTP 401). Create a personal access token with the read_api and ai_features scopes.');
-        }
-        if (response.status === 403) {
-            throw new GitLabError('GitLab refused the request (HTTP 403). The token needs the read_api and ai_features scopes.');
-        }
-        if (response.status < 200 || response.status >= 300) {
-            throw new GitLabError('GitLab returned HTTP ' + response.status + ' from ' + host + '.');
-        }
-
-        let parsed: unknown;
-        try {
-            parsed = JSON.parse(response.body ?? '');
-        } catch {
-            parsed = null;
-        }
+        const parsed = json(await this.request(() => this.transport.post(this.endpoint, this.token, body)));
         if (!isObj(parsed)) {
-            throw new GitLabError('GitLab returned a response that is not JSON. Is the URL the GitLab root?');
+            throw new GitLabError(NOT_JSON);
         }
         const errors: string[] = [];
         for (const e of arr(parsed, 'errors')) {
@@ -243,6 +271,40 @@ export class CreditsClient {
             }
         }
         return { data: obj(parsed, 'data'), errors };
+    }
+
+    /** Sends one request and turns what goes wrong on the way into the user's words. */
+    private async request(send: () => Promise<Response>): Promise<Response> {
+        const host = this.endpoint.hostname;
+        let response: Response;
+        try {
+            response = await send();
+        } catch (e) {
+            const message = e instanceof Error && e.message ? e.message : e instanceof Error ? e.name : String(e);
+            throw new GitLabError('Cannot reach ' + host + ': ' + message);
+        }
+
+        if (response.status === 401) {
+            throw new GitLabError('GitLab rejected the token (HTTP 401): it is mistyped, expired or revoked. '
+                + 'Create a personal access token with the read_api and ai_features scopes.', 401);
+        }
+        if (response.status === 403) {
+            throw new GitLabError('GitLab refused the request (HTTP 403). The token needs the read_api and ai_features scopes.', 403);
+        }
+        if (response.status < 200 || response.status >= 300) {
+            throw new GitLabError('GitLab returned HTTP ' + response.status + ' from ' + host + '.', response.status);
+        }
+        return response;
+    }
+}
+
+const NOT_JSON = 'GitLab returned a response that is not JSON. Is the URL the GitLab root?';
+
+function json(response: Response): unknown {
+    try {
+        return JSON.parse(response.body ?? '');
+    } catch {
+        return null;
     }
 }
 

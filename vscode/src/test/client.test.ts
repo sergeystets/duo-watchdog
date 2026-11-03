@@ -12,6 +12,8 @@ const SELF_DENIED = `{"errors":[{"message":"The resource that you are attempting
  "data":{"currentUser":{"username":"alice","creditsUsage":null}}}`;
 
 class FakeTransport implements Transport {
+    readonly gets: string[] = [];
+    getReply: { status: number; body: string } | undefined;
     readonly responses: { status: number; body: string }[] = [];
     readonly requests: { query: string; variables: Record<string, unknown> }[] = [];
     readonly tokens: string[] = [];
@@ -27,6 +29,11 @@ class FakeTransport implements Transport {
         this.tokens.push(token);
         this.requests.push(JSON.parse(jsonBody));
         return this.responses.shift() ?? { status: 500, body: '' };
+    }
+
+    async get(uri: URL) {
+        this.gets.push(uri.toString());
+        return this.getReply ?? { status: 500, body: '' };
     }
 }
 
@@ -180,4 +187,43 @@ test('the error never carries the token', async () => {
     const e = await rejection(new CreditsClient('https://gitlab.com', 'glpat-secret', http).fetch('acme'));
 
     assert.ok(!e.message.includes('glpat-secret'));
+});
+
+test("names the token's user", async () => {
+    const http = new FakeTransport().reply(200, '{"data":{"currentUser":{"username":"alice"}}}');
+    assert.equal(await new CreditsClient('https://gitlab.com', 't', http).username(), 'alice');
+    assert.ok(http.requests[0].query.includes('username'));
+
+    const anonymous = new FakeTransport().reply(200, '{"data":{"currentUser":null}}');
+    await rejection(new CreditsClient('https://gitlab.com', 't', anonymous).username());
+});
+
+test("reads the token's scopes and expiry from the REST API", async () => {
+    const http = new FakeTransport();
+    http.getReply = { status: 200, body: `{"id":7,"name":"Duo Watchdog","revoked":false,"created_at":"2026-10-01T11:38:12.345Z",
+        "scopes":["read_api","ai_features"],"user_id":3,"last_used_at":null,"active":true,"expires_at":"2026-12-31"}` };
+
+    const info = await new CreditsClient('https://gitlab.example.com/gitlab/', 't', http).tokenInfo();
+
+    assert.deepEqual(http.gets, ['https://gitlab.example.com/gitlab/api/v4/personal_access_tokens/self']);
+    assert.deepEqual(info, { name: 'Duo Watchdog', scopes: ['read_api', 'ai_features'], expiresAt: '2026-12-31' });
+});
+
+test('a turned-down token carries its HTTP status', async () => {
+    const http = new FakeTransport().reply(401, '{"message":"401 Unauthorized"}');
+    http.getReply = { status: 401, body: '{"message":"401 Unauthorized"}' };
+    const client = new CreditsClient('https://gitlab.com', 'glpat-old', http);
+
+    const e = await rejection(client.tokenInfo());
+    assert.equal(e.status, 401);
+    assert.ok(e.message.includes('expired'), e.message);
+    assert.equal((await rejection(client.username())).status, 401);
+    assert.equal((await rejection(new CreditsClient('https://gitlab.com', 't', new FakeTransport().reply(403, '{}')).fetch('acme'))).status, 403);
+    assert.equal((await rejection(new CreditsClient('https://gitlab.com', 't', { post: async () => { throw new Error('down'); } }).fetch('acme'))).status, 0);
+});
+
+test('a transport that only posts cannot read the token', async () => {
+    const postOnly: Transport = { post: async () => ({ status: 200, body: '{}' }) };
+    const e = await rejection(new CreditsClient('https://gitlab.com', 't', postOnly).tokenInfo());
+    assert.ok(e.message.startsWith('Cannot reach gitlab.com'), e.message);
 });

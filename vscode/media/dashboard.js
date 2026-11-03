@@ -5,12 +5,17 @@
     const SVG = 'http://www.w3.org/2000/svg';
     const page = document.getElementById('page');
     const byline = document.getElementById('byline');
+    const accountRow = document.getElementById('account-row');
+    const accountSelect = document.getElementById('account');
     let model = null;
     let hovered = -1;
 
     for (const button of document.querySelectorAll('[data-action]')) {
         button.addEventListener('click', () => vscode.postMessage({ type: button.dataset.action }));
     }
+
+    // Switching the account here switches the status bar too.
+    accountSelect.addEventListener('change', () => vscode.postMessage({ type: 'select', id: accountSelect.value }));
 
     window.addEventListener('message', event => {
         if (event.data && event.data.type === 'model') {
@@ -66,20 +71,47 @@
         return canvas.measureText(content).width;
     }
 
+    /** The account picker, most credits left first; hidden until there is an account. */
+    function renderAccounts() {
+        const accounts = model.accounts || [];
+        accountRow.hidden = accounts.length === 0;
+        accountSelect.replaceChildren(...accounts.map(a => {
+            const option = el('option', null, a.label);
+            option.value = a.id;
+            option.selected = a.selected;
+            return option;
+        }));
+    }
+
+    /** Why the account has no numbers, and the button that fixes it. */
+    function renderNotice(n) {
+        const box = el('div', 'notice ' + n.tone);
+        box.setAttribute('role', n.tone === 'error' ? 'alert' : 'status');
+        box.append(el('p', 'notice-title', n.title), el('p', null, n.text));
+        const actions = el('div', 'notice-actions');
+        const fix = el('button', 'primary', n.actionLabel);
+        fix.addEventListener('click', () => vscode.postMessage({ type: n.action }));
+        actions.append(fix, link('Accounts…', 'accounts'));
+        box.append(actions);
+        page.append(box);
+    }
+
     function render() {
         byline.textContent = model.byline;
         byline.title = model.byline;
+        renderAccounts();
         page.replaceChildren();
-        if (model.error) {
+        if (model.error && !model.notice) {
             page.append(el('p', 'error', model.error));
         }
-        if (model.notConfigured) {
+        if (model.notice) {
+            renderNotice(model.notice);
+        } else if (model.notConfigured) {
             page.append(el('p', null, model.notConfigured));
             const actions = el('div', 'actions');
             actions.append(
-                link('Set GitLab Token', 'setToken'),
+                link('Add or Replace a Token', 'addToken'),
                 link('Create the token in GitLab ↗', 'createToken'),
-                link('Find My Group', 'findGroup'),
                 link('Open Settings', 'settings'));
             page.append(actions);
         } else if (model.loading) {

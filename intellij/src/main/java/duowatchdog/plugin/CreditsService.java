@@ -1,5 +1,7 @@
 package duowatchdog.plugin;
 
+import com.intellij.ide.BrowserUtil;
+import com.intellij.notification.Notification;
 import com.intellij.notification.NotificationAction;
 import com.intellij.notification.NotificationGroupManager;
 import com.intellij.notification.NotificationType;
@@ -7,13 +9,21 @@ import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.components.Service;
 import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.openapi.options.ShowSettingsUtil;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.util.concurrency.AppExecutorUtil;
 import com.intellij.util.net.ssl.CertificateManager;
+import duowatchdog.core.Accounts;
 import duowatchdog.core.Alert;
 import duowatchdog.core.CreditsClient;
+import duowatchdog.core.CreditsClient.TokenInfo;
+import duowatchdog.core.CreditsView;
 import duowatchdog.core.GitLabAddress;
+import duowatchdog.core.GitLabException;
 import duowatchdog.core.HttpTransport;
 import duowatchdog.core.Snapshot;
+import duowatchdog.plugin.CreditsSettings.Account;
+import org.jetbrains.annotations.Nullable;
 
 import java.net.Authenticator;
 import java.net.ProxySelector;
@@ -21,21 +31,31 @@ import java.net.http.HttpClient;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/** Refreshes the user's credits on a schedule and on demand; one per IDE, since the numbers are the user's, not a project's. */
+/**
+ * Refreshes every account's credits on a schedule and on demand; one per IDE, since the numbers are the user's, not
+ * a project's. The tool window and the status bar show the selected account; the notices come for all of them.
+ */
 @Service(Service.Level.APP)
 public final class CreditsService implements Disposable {
 
-    /** Must match the {@code notificationGroup id} in plugin.xml. */
+    /** Must match the {@code notificationGroup id}s in plugin.xml: balloons that go, and ones that stay. */
     static final String NOTIFICATION_GROUP = "Duo Watchdog";
+    static final String STICKY_GROUP = "Duo Watchdog Important";
     private static final Logger LOG = Logger.getInstance(CreditsService.class);
 
     private final AtomicBoolean loading = new AtomicBoolean();
-    private volatile Snapshot snapshot = Snapshot.loading();
+    private final Map<String, Snapshot> snapshots = new ConcurrentHashMap<>();
+    /** Why the token saved before 0.4.0 could not be moved to its account yet, while there is no account. */
+    private volatile String migrationError;
     private ScheduledFuture<?> schedule;
     private HttpClient http;
 
@@ -43,8 +63,43 @@ public final class CreditsService implements Disposable {
         return ApplicationManager.getApplication().getService(CreditsService.class);
     }
 
-    public Snapshot snapshot() {
-        return snapshot;
+    /** What is known of the account; loading until its first refresh. */
+    public Snapshot snapshot(String id) {
+        return snapshots.getOrDefault(id, Snapshot.loading());
+    }
+
+    /** The account the tool window and the status bar show: the chosen one, else the first; null when none. */
+    public @Nullable Account selected() {
+        CreditsSettings settings = CreditsSettings.getInstance();
+        Account chosen = settings.account(settings.getState().selected);
+        if (chosen != null) {
+            return chosen;
+        }
+        List<Account> all = sorted();
+        return all.isEmpty() ? null : all.get(0);
+    }
+
+    /** The selected account's snapshot, or why there is none. */
+    public Snapshot selectedSnapshot() {
+        Account account = selected();
+        if (account != null) {
+            return snapshot(account.id());
+        }
+        String why = migrationError;
+        return why != null ? Snapshot.loading().failed(why) : Snapshot.notConfigured();
+    }
+
+    public void select(String id) {
+        CreditsSettings.getInstance().getState().selected = id;
+        ApplicationManager.getApplication().invokeLater(() ->
+                ApplicationManager.getApplication().getMessageBus().syncPublisher(CreditsListener.TOPIC).updated());
+    }
+
+    /** Every account, most credits left first, the ones without numbers last. */
+    public List<Account> sorted() {
+        List<Account> all = new ArrayList<>(CreditsSettings.getInstance().getState().accounts);
+        all.sort(Accounts.byCreditsLeft(a -> Accounts.left(snapshot(a.id()), a.limit), a -> a.username, Account::host));
+        return all;
     }
 
     /** Starts the periodic refresh; later calls do nothing. */
@@ -70,51 +125,179 @@ public final class CreditsService implements Disposable {
         }
         ApplicationManager.getApplication().executeOnPooledThread(() -> {
             try {
-                publish(load());
+                migrate();
+                CreditsSettings settings = CreditsSettings.getInstance();
+                List<Account> accounts = new ArrayList<>(settings.getState().accounts);
+                snapshots.keySet().retainAll(accounts.stream().map(Account::id).toList());
+                for (Account account : accounts) {
+                    Snapshot next = load(account, settings.token(account.id()));
+                    snapshots.put(account.id(), next);
+                    notifyOnce(account, next);
+                }
             } finally {
                 loading.set(false);
+                ApplicationManager.getApplication().invokeLater(() ->
+                        ApplicationManager.getApplication().getMessageBus().syncPublisher(CreditsListener.TOPIC).updated());
             }
         });
     }
 
-    private Snapshot load() {
-        CreditsSettings.Settings settings = CreditsSettings.getInstance().getState();
-        String token = CreditsSettings.getInstance().token();
-        if (settings.namespace == null || settings.namespace.isBlank() || token == null || token.isBlank()) {
-            return Snapshot.notConfigured();
+    /** Moves the one token of 0.3.0 and before to an account named by GitLab, with its group, limit and last alert. */
+    private void migrate() {
+        CreditsSettings settings = CreditsSettings.getInstance();
+        CreditsSettings.Settings state = settings.getState();
+        if (!state.accounts.isEmpty()) {
+            migrationError = null;
+            return;
+        }
+        String token = settings.legacyToken();
+        if (token == null || token.isBlank()) {
+            migrationError = null;
+            return;
         }
         try {
-            CreditsClient client = new CreditsClient(settings.gitlabUrl, token.trim(), transport());
-            return Snapshot.ok(client.fetch(GitLabAddress.groupPath(settings.namespace, settings.gitlabUrl)), Instant.now());
-        } catch (Exception e) {
+            CreditsClient client = new CreditsClient(state.gitlabUrl, token.trim(), transport());
+            Account account = new Account();
+            account.gitlabUrl = state.gitlabUrl;
+            account.username = client.username();
+            account.namespace = state.namespace;
+            account.limit = state.limit;
+            account.tokenSavedAt = state.tokenSavedAt;
+            account.lastAlertKey = state.lastAlertKey;
+            try {
+                account.remember(client.tokenInfo());
+            } catch (GitLabException e) {
+                // The details are a bonus; the next refresh asks again.
+            }
+            settings.setToken(account.id(), token.trim());
+            state.accounts.add(account);
+            state.selected = account.id();
+            settings.clearLegacyToken();
+            migrationError = null;
+        } catch (GitLabException e) {
+            // Kept until GitLab says whose it is, so it can go to the right account.
+            migrationError = "The saved token is not moved to its account yet: " + e.getMessage();
+        }
+    }
+
+    private Snapshot load(Account account, @Nullable String token) {
+        if (token == null || token.isBlank()) {
+            return Snapshot.noToken("No token saved for @" + account.username + " on " + account.host()
+                    + " in " + CreditsSettings.storeName() + ". Replace token… in Settings saves one.");
+        }
+        Snapshot previous = snapshot(account.id());
+        try {
+            CreditsClient client = new CreditsClient(account.gitlabUrl, token.trim(), transport());
+            try {
+                TokenInfo info = client.tokenInfo();
+                account.remember(info);
+            } catch (GitLabException e) {
+                if (e.status() == 401) {
+                    return rejected(account);
+                }
+                // An older GitLab or a proxy may not answer it; the credits still come.
+            }
+            if (!Accounts.readsUsage(account.scopeList())) {
+                return Snapshot.notTracked(notTracked(account));
+            }
+            String group = GitLabAddress.groupPath(account.namespace, account.gitlabUrl);
+            if (group.isEmpty()) {
+                return Snapshot.notConfigured("No group path yet for @" + account.username + " on " + account.host()
+                        + ": set it in Settings | Tools | Duo Watchdog, or use Find my group there.");
+            }
+            return Snapshot.ok(client.fetch(group), Instant.now());
+        } catch (GitLabException e) {
+            if (e.status() == 401) {
+                return rejected(account);
+            }
+            if (e.status() == 403) {
+                return Snapshot.notTracked(notTracked(account));
+            }
             // The message is the user's to read; it never carries the token.
-            LOG.info("Duo Watchdog refresh failed: " + e.getMessage());
-            return snapshot.failed(e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
+            LOG.info("Duo Watchdog refresh failed for " + account.id() + ": " + e.getMessage());
+            return previous.failed(e.getMessage());
+        } catch (RuntimeException e) {
+            LOG.info("Duo Watchdog refresh failed for " + account.id(), e);
+            return previous.failed(e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
         }
     }
 
-    private void publish(Snapshot next) {
-        snapshot = next;
-        if (next.status() == Snapshot.Status.OK) {
-            notifyOnce(next);
-        }
-        ApplicationManager.getApplication().invokeLater(() ->
-                ApplicationManager.getApplication().getMessageBus().syncPublisher(CreditsListener.TOPIC).updated(next));
+    private static Snapshot rejected(Account account) {
+        LocalDate expiry = account.expiry();
+        boolean expired = expiry != null && !expiry.isAfter(LocalDate.now());
+        return Snapshot.rejected("GitLab turns down the token of @" + account.username + " on " + account.host()
+                + (expired ? ": it expired on " + CreditsView.expiry(expiry, LocalDate.now()).replace("Expired on ", "") + "."
+                        : ": it has expired or was revoked.")
+                + " Replace it to see this account again.");
     }
 
-    private static void notifyOnce(Snapshot s) {
-        CreditsSettings.Settings settings = CreditsSettings.getInstance().getState();
-        List<Integer> percents = CreditsSettings.getInstance().percents();
-        Alert.of(s.report(), settings.limit, percents, settings.alertOnForecast, LocalDate.now())
-                .filter(alert -> !alert.key().equals(settings.lastAlertKey))
-                .ifPresent(alert -> {
-                    settings.lastAlertKey = alert.key();
-                    NotificationGroupManager.getInstance().getNotificationGroup(NOTIFICATION_GROUP)
-                            .createNotification(alert.title(), alert.message(), type(alert.kind()))
-                            .addAction(NotificationAction.create("Open Duo Watchdog",
-                                    (event, notification) -> CreditsToolWindowFactory.show(event.getProject())))
-                            .notify(null);
-                });
+    private static String notTracked(Account account) {
+        return "Usage not tracked: the token of @" + account.username + " on " + account.host()
+                + " lacks the ai_features scope, so GitLab does not show its Duo usage."
+                + (account.glab || account.duo ? " glab and the Duo CLI can still use it." : "");
+    }
+
+    /** The account's notices, each once: its alert of the period, a token about to expire, a token turned down. */
+    private void notifyOnce(Account account, Snapshot s) {
+        CreditsSettings settings = CreditsSettings.getInstance();
+        List<Integer> percents = settings.percents();
+        LocalDate today = LocalDate.now();
+        if (s.status() == Snapshot.Status.OK) {
+            Alert.of(s.report(), account.limit, percents, settings.getState().alertOnForecast, today)
+                    .filter(alert -> !alert.key().equals(account.lastAlertKey))
+                    .ifPresent(alert -> {
+                        account.lastAlertKey = alert.key();
+                        Notification n = notification(alert.urgent(percents), alert.title(), alert.message(), type(alert.kind()));
+                        n.setSubtitle(account.label());
+                        n.addAction(NotificationAction.create("Open Duo Watchdog", (event, notification) -> {
+                            select(account.id());
+                            CreditsToolWindowFactory.show(event.getProject());
+                        }));
+                        n.notify(null);
+                    });
+        }
+        if (s.status() == Snapshot.Status.REJECTED) {
+            String key = String.valueOf(account.tokenSavedAt);
+            if (!key.equals(account.lastRejectedKey)) {
+                account.lastRejectedKey = key;
+                Notification n = notification(true, "The token no longer works", StringUtil.escapeXmlEntities(s.error()), NotificationType.ERROR);
+                n.setSubtitle(account.label());
+                n.addAction(NotificationAction.createSimpleExpiring("Replace Token…", () -> openSettings(account.id(), true)));
+                n.addAction(NotificationAction.createSimple("Open Settings", () -> openSettings(account.id(), false)));
+                n.notify(null);
+            }
+            return;
+        }
+        LocalDate expiry = account.expiry();
+        if (Accounts.expiresWithin(expiry, today, Accounts.EXPIRY_POPUP_DAYS)) {
+            String key = account.id() + "|" + expiry;
+            if (!key.equals(account.lastExpiryKey)) {
+                account.lastExpiryKey = key;
+                long days = ChronoUnit.DAYS.between(today, expiry);
+                Notification n = notification(true, days == 1 ? "Token expires tomorrow" : "Token expires in " + days + " days",
+                        CreditsView.expiry(expiry, today).replaceFirst(", in \\d+ days$", "")
+                                + ". After that, this account's credits are no longer tracked"
+                                + (account.glab || account.duo ? ", and glab can't use it." : "."),
+                        NotificationType.WARNING);
+                n.setSubtitle(account.label());
+                n.addAction(NotificationAction.createSimpleExpiring("Replace Token…", () -> openSettings(account.id(), true)));
+                boolean forCli = account.glab || account.duo;
+                n.addAction(NotificationAction.createSimple("Create a New Token in GitLab",
+                        () -> BrowserUtil.browse(GitLabAddress.tokenPage(account.gitlabUrl, forCli))));
+                n.notify(null);
+            }
+        }
+    }
+
+    static Notification notification(boolean sticky, String title, String content, NotificationType type) {
+        return NotificationGroupManager.getInstance().getNotificationGroup(sticky ? STICKY_GROUP : NOTIFICATION_GROUP)
+                .createNotification(title, content, type);
+    }
+
+    /** Settings | Tools | Duo Watchdog with the account chosen, and its Replace Token dialog open when asked. */
+    static void openSettings(String accountId, boolean replace) {
+        ApplicationManager.getApplication().invokeLater(() -> ShowSettingsUtil.getInstance()
+                .showSettingsDialog(null, CreditsConfigurable.class, page -> page.open(accountId, replace)));
     }
 
     private static NotificationType type(Alert.Kind kind) {
@@ -125,7 +308,43 @@ public final class CreditsService implements Disposable {
         };
     }
 
-    /** GitLab through the IDE's proxy and certificates; Find my group in the settings goes the same way. */
+    /**
+     * Hands the accounts' tokens to glab, each account whose glab or Duo CLI box is on, and says how it went. Off
+     * the EDT.
+     *
+     * @param tokens the account ids with the token to hand off
+     */
+    static void handOff(List<Account> accounts, Map<String, String> tokens) {
+        for (Account account : accounts) {
+            String token = tokens.get(account.id());
+            if (token == null || token.isBlank()) {
+                continue;
+            }
+            CliHandOff.Result result = CliHandOff.login(account.host(), token.trim());
+            if (!result.ok()) {
+                Notification n = notification(true, CliHandOff.glab() == null ? "glab is not installed" : "glab did not take the token",
+                        StringUtil.escapeXmlEntities(result.output().isEmpty() ? "glab gave no reason." : result.output()),
+                        NotificationType.WARNING);
+                n.setSubtitle(account.label());
+                n.notify(null);
+                continue;
+            }
+            List<String> missing = Accounts.missingForGlab(account.scopeList());
+            String text = "glab now signs in to " + account.host() + " as @" + account.username + "."
+                    + (missing.isEmpty() ? "" : " It can only read with this token: it lacks " + String.join(" and ", missing) + ".");
+            if (account.duo) {
+                text += CliHandOff.duoHasOwnLogin()
+                        ? " The Duo CLI has its own login in ~/.gitlab/storage.json and keeps using it: delete its settings there to make it use glab's."
+                        : " The Duo CLI signs in through glab (glab 1.85.2 and duo 8.68.0 or later).";
+            }
+            Notification n = notification(false, "Token handed to glab", text,
+                    missing.isEmpty() ? NotificationType.INFORMATION : NotificationType.WARNING);
+            n.setSubtitle(account.label());
+            n.notify(null);
+        }
+    }
+
+    /** GitLab through the IDE's proxy and certificates; the settings page goes the same way. */
     HttpTransport transport() {
         return new HttpTransport(http());
     }
