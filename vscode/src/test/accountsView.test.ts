@@ -36,7 +36,7 @@ test('an account reads as in the mockup', () => {
     assert.equal(accountDetail(untracked, TODAY, 'glab signs in to git.northwind.io with this token'),
         'not tracked · ••••••• · glab signs in to git.northwind.io with this token');
     assert.equal(accountDetail(state(account({ expiresAt: null, glab: true, duo: true }), null, 'rejected'), TODAY),
-        '••••••• · turned down by GitLab · glab and the Duo CLI allowed');
+        '••••••• · turned down by GitLab · glab and the Duo CLI allowed · the Duo CLI needs api and ai_features');
     assert.equal(accountDetail(state(account({ expiresAt: '2026-12-01' }), null, 'noGroup'), TODAY),
         'no group · ••••••• · expires Dec 1');
 });
@@ -191,7 +191,8 @@ test('glab and the Duo CLI say that glab follows the picked account', () => {
     assert.equal(cliOnText(a, 'glab', false, glabCaption(a, list, idOf(b), true)),
         "Duo Watchdog: glab may use the token of @a on gitlab.com. glab switches to this token when you pick @a. It has @b's now.");
     assert.equal(cliOnText({ ...a, duo: true }, 'duo', false, null),
-        'Duo Watchdog: the GitLab Duo CLI may use the token of @a on gitlab.com, through glab. That allows glab too.');
+        'Duo Watchdog: the GitLab Duo CLI may use the token of @a on gitlab.com, through glab. That allows glab too. '
+        + 'The Duo CLI needs the api and ai_features scopes; this token lacks api, so its GitLab Duo access shows as unavailable.');
     assert.equal(cliOffText({ ...acme.account, glab: true }, 'glab'),
         'Duo Watchdog: glab no longer gets the token of @dana.k. Nothing is signed out: glab stays signed in to gitlab.com.');
     assert.ok(cliOffText({ ...acme.account, glab: true, duo: true }, 'duo').includes('Nothing is signed out'));

@@ -137,6 +137,19 @@ export function missingUsageScopes(scopes: readonly string[] | null): string[] {
 }
 
 /**
+ * What the Duo CLI cannot do with a token, or null when it can (or the scopes are unknown): without api and
+ * ai_features its GitLab Duo access shows as unavailable. The same words as Accounts.duoScopeNote in the plugin.
+ */
+export function duoScopeNote(scopes: readonly string[] | null): string | null {
+    if (scopes == null) {
+        return null;
+    }
+    const missing = ['api', 'ai_features'].filter(scope => !scopes.includes(scope));
+    return missing.length === 0 ? null : 'The Duo CLI needs the api and ai_features scopes; this token lacks '
+        + missing.join(' and ') + ', so its GitLab Duo access shows as unavailable.';
+}
+
+/**
  * What a token's scopes leave glab unable to do, or null when nothing (or the scopes are unknown). Without api glab
  * can only read; without write_repository it does all it does through the API, but cannot push over HTTPS, which
  * matters only when Git runs over HTTPS rather than SSH. The same words as Accounts.glabScopeNote in the plugin.

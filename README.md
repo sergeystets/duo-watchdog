@@ -152,7 +152,9 @@ distribution. VS Code needs nothing of the kind: with its WSL remote the extensi
 installed, the next refresh hands it the token.
 
 glab uses the token for its API calls with `api`; `write_repository` only matters for `git push` over HTTPS, not SSH.
-So a token for everything needs `api`, `write_repository` and `ai_features`. glab keeps the token in the system
+So a token for everything needs `api`, `write_repository` and `ai_features`. **The Duo CLI needs `api` and
+`ai_features`**: with Duo Watchdog's own `read_api` it reports its GitLab Duo access as unavailable, so the settings
+say so when the Duo CLI box is ticked and the token lacks one of them. glab keeps the token in the system
 keyring when there is one; WSL usually has none, so there it goes to `~/.config/glab-cli/config.yml` as plain text,
 as `glab auth status` says.
 
@@ -626,7 +628,7 @@ Running `./gradlew test` also renders every dashboard state to PNG (in `intellij
 The VS Code extension builds with npm (Node.js 20+), from the root through Gradle or in `vscode/` directly:
 
 ```bash
-./gradlew :vscode:test               # 87 tests, no VS Code needed          (npm ci && npm test)
+./gradlew :vscode:test               # 88 tests, no VS Code needed          (npm ci && npm test)
 ./gradlew :vscode:packageExtension   # → vscode/duo-watchdog-0.4.0.vsix      (npm run package)
 ./gradlew :vscode:installExtension   # into VS Code; -PcodePath=codium for another CLI
 ```

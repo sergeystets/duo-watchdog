@@ -19,6 +19,8 @@ public final class Accounts {
     public static final int EXPIRY_WARNING_DAYS = 7;
     /** What glab needs of a token, besides what Duo Watchdog does. */
     public static final List<String> GLAB_SCOPES = List.of("api", "write_repository");
+    /** What the GitLab Duo CLI needs of the token it gets through glab: read_api is not enough for it. */
+    public static final List<String> DUO_CLI_SCOPES = List.of("api", "ai_features");
 
     public enum Attention { NONE, WARNING, ERROR }
 
@@ -83,6 +85,19 @@ public final class Accounts {
     /** The scopes glab needs that the token lacks; none when its scopes are unknown. */
     public static List<String> missingForGlab(List<String> scopes) {
         return scopes == null ? List.of() : GLAB_SCOPES.stream().filter(scope -> !scopes.contains(scope)).toList();
+    }
+
+    /**
+     * What the Duo CLI cannot do with a token, or null when it can (or the scopes are unknown): without api and
+     * ai_features its GitLab Duo access shows as unavailable, even where the group has Duo.
+     */
+    public static String duoScopeNote(List<String> scopes) {
+        if (scopes == null) {
+            return null;
+        }
+        List<String> missing = DUO_CLI_SCOPES.stream().filter(scope -> !scopes.contains(scope)).toList();
+        return missing.isEmpty() ? null : "The Duo CLI needs the api and ai_features scopes; this token lacks "
+                + String.join(" and ", missing) + ", so its GitLab Duo access shows as unavailable.";
     }
 
     /**
