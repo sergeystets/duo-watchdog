@@ -332,3 +332,62 @@ test('a group GitLab gives no history for says so', async () => {
     const e = await rejection(new CreditsClient('https://gitlab.com', 't', http).history('acme', '2025-11-01', '2026-10-18'));
     assert.equal(e.message, 'GitLab returned no history for "acme": no access.');
 });
+
+test('reads the sessions page by page until older ones', async () => {
+    const http = new FakeTransport()
+        .reply(200, `{"data":{"duoWorkflowWorkflows":{"pageInfo":{"hasNextPage":true,"endCursor":"c1"},"nodes":[
+          {"id":"gid://gitlab/Ai::DuoWorkflows::Workflow/10208239","title":"Review the notes app",
+           "workflowDefinition":"chat","humanStatus":"Finished","createdAt":"2026-10-28T14:35:25Z",
+           "updatedAt":"2026-10-28T15:08:33Z","webUrl":"https://gitlab.com/s/10208239",
+           "project":{"fullPath":"acme/apps/notes"},"namespace":{"fullPath":"acme/apps"},
+           "modelMetadataName":"Claude Sonnet"}]}}}`)
+        .reply(200, `{"data":{"duoWorkflowWorkflows":{"pageInfo":{"hasNextPage":true,"endCursor":"c2"},"nodes":[
+          {"id":"gid://gitlab/Ai::DuoWorkflows::Workflow/7","title":null,"goal":"Fix the build\\nand more",
+           "workflowDefinition":"developer/v1","humanStatus":"Running","createdAt":"2026-10-27T09:00:00Z",
+           "updatedAt":"2026-10-27T10:00:00Z","project":null,"namespace":null},
+          {"id":"gid://gitlab/Ai::DuoWorkflows::Workflow/5","title":"Old","workflowDefinition":"chat",
+           "humanStatus":"Finished","createdAt":"2026-10-01T09:00:00Z","updatedAt":"2026-10-01T09:30:00Z"}]}}}`);
+
+    const sessions = await new CreditsClient('https://gitlab.com', 'glpat-x', http).sessions(Date.parse('2026-10-20T00:00:00Z'));
+
+    assert.equal(http.requests.length, 2, 'stops at the page that reaches before the range');
+    assert.equal(http.requests[0].variables.updatedAfter, '2026-10-20T00:00:00Z');
+    assert.equal(http.requests[1].variables.after, 'c1');
+    assert.deepEqual(sessions.map(s => s.id), [10208239, 7]);
+    const first = sessions[0];
+    assert.equal(first.title, 'Review the notes app');
+    assert.equal(first.project, 'acme/apps/notes');
+    assert.equal(first.model, 'Claude Sonnet');
+    assert.equal(first.created, Date.parse('2026-10-28T14:35:25Z'));
+    assert.equal(sessions[1].title, 'Fix the build', "the goal's first line, when it has no title");
+    assert.equal(sessions[1].project, null);
+});
+
+test('an older GitLab is asked for sessions without the model and the date filter', async () => {
+    const http = new FakeTransport()
+        .reply(200, `{"errors":[{"message":"Field 'modelMetadataName' doesn't exist on type 'DuoWorkflow'"}]}`)
+        .reply(200, `{"data":{"duoWorkflowWorkflows":{"pageInfo":{"hasNextPage":false},"nodes":[
+          {"id":"gid://gitlab/Ai::DuoWorkflows::Workflow/9","title":"New","createdAt":"2026-10-28T09:00:00Z",
+           "updatedAt":"2026-10-28T09:30:00Z"},
+          {"id":"gid://gitlab/Ai::DuoWorkflows::Workflow/8","title":"Old","createdAt":"2026-10-01T09:00:00Z",
+           "updatedAt":"2026-10-01T09:30:00Z"}]}}}`);
+
+    const sessions = await new CreditsClient('https://gitlab.example.com', 'glpat-x', http).sessions(Date.parse('2026-10-20T00:00:00Z'));
+
+    const retried = http.requests[1].query;
+    assert.ok(!retried.includes('modelMetadataName'));
+    assert.ok(!retried.includes('updatedAfter'));
+    assert.deepEqual(sessions.map(s => s.id), [9]);
+});
+
+test('finds a session by its number', async () => {
+    const http = new FakeTransport().reply(200, `{"data":{"duoWorkflowWorkflows":{"pageInfo":{"hasNextPage":false},"nodes":[
+          {"id":"gid://gitlab/Ai::DuoWorkflows::Workflow/42","title":"Found","createdAt":"2026-10-28T09:00:00Z",
+           "updatedAt":"2026-10-28T09:30:00Z"}]}}}`)
+        .reply(200, '{"data":{"duoWorkflowWorkflows":{"pageInfo":{"hasNextPage":false},"nodes":[]}}}');
+    const client = new CreditsClient('https://gitlab.com', 'glpat-x', http);
+
+    assert.equal((await client.session(42))!.title, 'Found');
+    assert.equal(http.requests[0].variables.workflowId, 'gid://gitlab/Ai::DuoWorkflows::Workflow/42');
+    assert.equal(await client.session(43), null);
+});

@@ -6,8 +6,13 @@ import { localToday } from './core/dates';
 import { RANGE_KEY } from './history';
 import { rangeOrDefault, StatisticsRange } from './core/monthly';
 import { Scope, statisticsView, trackedStates } from './core/statistics';
+import { accountGroup } from './core/accounts';
+import { around, contains, dayOf, Range, Session, sessionId, utcToday } from './core/sessions';
+import { DEFAULT_KIND, RANGE_KINDS, RangeKind, rangeOf, sessionsView } from './core/sessionsView';
 import { HistoryCache } from './history';
+import { log } from './log';
 import { CreditsService } from './service';
+import { SessionsService } from './sessions';
 import { settings } from './settings';
 
 /** The commands the page's buttons and links run. */
@@ -20,7 +25,8 @@ const ACTIONS: Record<string, string> = {
     createToken: 'duoWatchdog.createToken',
 };
 
-export type Tab = 'usage' | 'statistics';
+export type Tab = 'usage' | 'statistics' | 'sessions';
+const TABS: readonly Tab[] = ['usage', 'statistics', 'sessions'];
 
 /**
  * The Duo Watchdog view in its own activity bar container. The extension works out the numbers and texts
@@ -34,11 +40,71 @@ export class DashboardView implements vscode.WebviewViewProvider {
     private view: vscode.WebviewView | undefined;
     private tab: Tab = 'usage';
     private scope: Scope = 'account';
+    /** The Sessions view's range, the session shown in full, and what it last had to say. */
+    private sessionsKind: RangeKind = DEFAULT_KIND;
+    private sessionsCustom: Range | null = null;
+    private focused: number | null = null;
+    private sessionsMessage: string | null = null;
 
     /** @param state where the Statistics range is remembered */
     constructor(private readonly extensionUri: vscode.Uri, private readonly service: CreditsService,
                 private readonly commands: Commands, private readonly history: HistoryCache,
-                private readonly state: vscode.Memento) {
+                private readonly state: vscode.Memento, private readonly sessions: SessionsService) {
+    }
+
+    /** Opens the view on a tab: what Duo Watchdog: Sessions does. */
+    async show(tab: Tab): Promise<void> {
+        this.tab = tab;
+        await vscode.commands.executeCommand(DashboardView.ID + '.focus');
+        this.update();
+    }
+
+    private sessionsRange(): Range {
+        return rangeOf(this.sessionsKind, utcToday(), this.sessionsCustom);
+    }
+
+    /**
+     * Shows a session in full: within the range when it is there, else with the range switched to its days. Typed IDs,
+     * the Last session button and the rows come here.
+     */
+    private async focus(found: Session | null, id: number | null): Promise<void> {
+        const selected = this.service.overview().selected;
+        if (found == null) {
+            this.sessionsMessage = id == null ? 'No sessions yet' + (selected ? ' for @' + selected.account.username : '') + '.'
+                : 'No session #' + id + (selected ? ' for @' + selected.account.username : '') + '.';
+            this.update();
+            return;
+        }
+        this.sessionsMessage = null;
+        this.focused = found.id;
+        const range = this.sessionsRange();
+        if (!contains(range, dayOf(found.updated)) && !contains(range, dayOf(found.created))) {
+            this.sessionsKind = 'custom';
+            this.sessionsCustom = around(found);
+        }
+        this.update();
+    }
+
+    /** The session typed in the text box, by its number, gid or address: found in the range, or asked of GitLab. */
+    private async find(text: string, last: boolean): Promise<void> {
+        const account = this.service.overview().selected?.account;
+        if (account == null) {
+            return;
+        }
+        const id = last ? null : sessionId(text);
+        if (!last && id == null) {
+            return; // Not an ID: the page filters by title and project itself.
+        }
+        const entry = this.sessions.entry(account, this.sessionsRange());
+        const listed = entry?.summary?.rows.find(e => e.session.id === id)?.session ?? null;
+        try {
+            await this.focus(listed ?? (last ? await this.sessions.last(account) : await this.sessions.find(account, id!)), id);
+        } catch (e) {
+            const message = e instanceof Error ? e.message : String(e);
+            log.warn('sessions: ' + message);
+            this.sessionsMessage = message;
+            this.update();
+        }
     }
 
     private get range(): StatisticsRange {
@@ -50,12 +116,30 @@ export class DashboardView implements vscode.WebviewViewProvider {
         const media = vscode.Uri.joinPath(this.extensionUri, 'media');
         view.webview.options = { enableScripts: true, localResourceRoots: [media] };
         view.webview.html = this.html(view.webview, media);
-        view.webview.onDidReceiveMessage((message: { type?: string; id?: unknown; tab?: unknown; scope?: unknown; months?: unknown }) => {
+        view.webview.onDidReceiveMessage((message: Record<string, unknown>) => {
             if (message.type === 'ready') {
                 this.update();
-            } else if (message.type === 'tab' && (message.tab === 'usage' || message.tab === 'statistics')) {
-                this.tab = message.tab;
+            } else if (message.type === 'tab' && TABS.includes(message.tab as Tab)) {
+                this.tab = message.tab as Tab;
                 this.update();
+            } else if (message.type === 'sessionsRange' && RANGE_KINDS.includes(message.kind as RangeKind)) {
+                this.sessionsKind = message.kind as RangeKind;
+                if (this.sessionsKind === 'custom' && typeof message.from === 'string' && typeof message.to === 'string') {
+                    this.sessionsCustom = { from: message.from, to: message.to };
+                } else if (this.sessionsKind === 'custom' && this.sessionsCustom == null) {
+                    this.sessionsCustom = this.sessionsRange();
+                }
+                this.sessionsMessage = null;
+                this.update();
+            } else if (message.type === 'sessionsFind' && typeof message.text === 'string') {
+                void this.find(message.text, false);
+            } else if (message.type === 'lastSession') {
+                void this.find('', true);
+            } else if (message.type === 'sessionsFocus' && typeof message.id === 'number') {
+                this.focused = this.focused === message.id ? null : message.id;
+                this.update();
+            } else if (message.type === 'open' && typeof message.url === 'string' && /^https?:\/\//i.test(message.url)) {
+                void vscode.env.openExternal(vscode.Uri.parse(message.url));
             } else if (message.type === 'range' && rangeOrDefault(message.months) === message.months) {
                 void this.state.update(RANGE_KEY, message.months).then(() => this.update());
             } else if (message.type === 'scope' && (message.scope === 'account' || message.scope === 'all')) {
@@ -65,7 +149,7 @@ export class DashboardView implements vscode.WebviewViewProvider {
                 void this.commands.pick(message.id);
             } else if (message.type === 'replaceToken') {
                 void this.commands.replaceSelected();
-            } else if (message.type && ACTIONS[message.type]) {
+            } else if (typeof message.type === 'string' && ACTIONS[message.type]) {
                 void vscode.commands.executeCommand(ACTIONS[message.type]);
             }
         });
@@ -73,9 +157,10 @@ export class DashboardView implements vscode.WebviewViewProvider {
         view.onDidDispose(() => this.view = undefined);
     }
 
-    /** Refresh: the statistics are asked again too, at once when they are shown. */
+    /** Refresh: the statistics and the sessions are asked again too, at once when they are shown. */
     refreshStatistics(): void {
         this.history.invalidate();
+        this.sessions.invalidate();
         this.update();
     }
 
@@ -97,7 +182,17 @@ export class DashboardView implements vscode.WebviewViewProvider {
             statistics = statisticsView(this.scope, overview.selected, overview.states,
                 account => this.history.entry(account, range), today, range);
         }
-        const model = { ...usage, tab: this.tab, statistics };
+        let sessions = null;
+        if (this.tab === 'sessions' && overview.selected != null) {
+            const selected = overview.selected;
+            const range = this.sessionsRange();
+            if (selected.problem == null) {
+                this.sessions.ensure(selected.account, range);
+            }
+            sessions = sessionsView(this.sessionsKind, range, selected.problem != null,
+                this.sessions.entry(selected.account, range), accountGroup(selected.account), this.focused, this.sessionsMessage);
+        }
+        const model = { ...usage, tab: this.tab, statistics, sessions };
         void this.view.webview.postMessage({ type: 'model', model });
     }
 
@@ -140,6 +235,7 @@ export class DashboardView implements vscode.WebviewViewProvider {
 <div class="switch tabs" id="tabs" role="tablist" aria-label="View" hidden>
   <button role="tab" data-tab="usage" aria-selected="true">Usage</button>
   <button role="tab" data-tab="statistics" aria-selected="false">Statistics</button>
+  <button role="tab" data-tab="sessions" aria-selected="false">Sessions</button>
 </div>
 <main id="page"></main>
 <script nonce="${nonce}" src="${script}"></script>

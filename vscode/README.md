@@ -104,6 +104,36 @@ The rest is kept for an hour. **Reload** (or **Refresh**) asks again only for th
 changed group path starts afresh, and removing an account removes its kept months. If they don't load, the view says
 why; the Usage view is not affected.
 
+## Sessions
+
+The **Sessions** switch at the top of the dashboard (or **Duo Watchdog: Sessions**) lists the selected account's
+GitLab Duo Agent Platform sessions with an estimate of what each cost:
+
+- the days: **Today**, **Yesterday**, **Last 7 days** (the default), **Last 30 days** or **Custom** (two dates). Days are
+  UTC days, as GitLab counts usage; GitLab lists sessions for about 30 days.
+- a text box: a session's number (`10208239`, `#10208239`), its gid or its address finds that session, and switches
+  the days to the session's when it is outside them; other text filters by title or project. **Last session** finds
+  the one last updated.
+- tiles: **Sessions**, the days' **Credits**, the part **≈ in sessions** and **Other use** (Code Suggestions, classic
+  Chat and what no session accounts for), then the credits by project
+- one row a session, newest first: its title; project · flow · status; ≈ credits; and the agent's steps when the Duo
+  CLI's logs here count them. Click a row for its details: project, flow, model, status, when it started and was last
+  updated, its steps on this machine, how its credits were estimated day by day
+  (`Oct 28 · Agentic Chat 60.0 credits, split by agent steps among 2 sessions → 45.0`), and **Open in GitLab**.
+
+Sessions outside the account's group are left out, with a note saying how many: GitLab bills their credits to another
+group.
+
+The credits are **estimates**. GitLab tells a group member credits per day and feature, not per session: each
+feature's credits on a day are split among that day's sessions of the feature, by the agent's steps when the Duo
+CLI's logs on this machine count every one of them, else equally. The credits come from the same months Statistics
+reads and keeps.
+
+The Duo CLI writes its logs to `<temporary folder>/gitlab-duo-cli` (and `/tmp/gitlab-duo-cli` on Linux and macOS;
+on Windows, for a workspace folder in WSL, `\\wsl.localhost\<distro>\tmp\gitlab-duo-cli`). The logs hold prompts
+and code: Duo Watchdog reads only the time, the session and the request of each step, and keeps only the number of
+steps per session and day, so the counts survive the temporary folder being cleaned.
+
 ## glab and the GitLab Duo CLI
 
 **Use for glab** allows Duo Watchdog to hand that account's token to glab for its GitLab: it runs
@@ -143,8 +173,8 @@ Open *Settings → Extensions → Duo Watchdog*:
 | `duoWatchdog.refreshMinutes` | `15` | How often to fetch new data for every account |
 
 Commands (*Ctrl/Cmd+Shift+P*, type "Duo Watchdog"): **Accounts**, **Add or Replace a Token**, **Find My Group**,
-**Create the Token in GitLab**, **Refresh**, **Open Dashboard**, **Open Settings**, **What's New**, **Copy Diagnostics**,
-**Show Log**.
+**Create the Token in GitLab**, **Refresh**, **Open Dashboard**, **Sessions**, **Open Settings**, **What's New**,
+**Copy Diagnostics**, **Show Log**.
 
 `duoWatchdog.groupPath` and `duoWatchdog.limit` are deprecated: each account has its own group and limit now.
 
@@ -164,7 +194,8 @@ where glab was looked for, and, for each GitLab, which account glab follows and 
 with glab's exit code and words.
 
 **Duo Watchdog: Copy Diagnostics** puts a report on the clipboard to send to whoever helps you: the extension's and
-VS Code's versions, the platform and whether the extension runs remotely (e.g. in WSL), where glab is, each account's
+VS Code's versions, the platform and whether the extension runs remotely (e.g. in WSL), where glab is, where the Duo
+CLI's logs were looked for and how many sessions they count steps for, each account's
 group, limit, token dates, scopes and glab settings, its last refresh, and the last 100 log lines. It says whether each
 account has a token, never what it is.
 

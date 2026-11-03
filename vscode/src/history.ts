@@ -6,8 +6,9 @@ import { localToday } from './core/dates';
 import { sumOf } from './core/history';
 import {
     cacheFile, CachedMonth, isSettled, Limiter, MonthAnswer, monthFromJson, monthsOfRange, monthsOutcome, monthToJson,
-    planMonths, StatisticsRange,
+    planMonthsOf, StatisticsRange,
 } from './core/monthly';
+import { History } from './core/history';
 import { HistoryEntry, historyKey } from './core/statistics';
 import { log } from './log';
 
@@ -74,41 +75,8 @@ export class HistoryCache implements vscode.Disposable {
         const id = idOf(account);
         let entry: Cached;
         try {
-            const token = await this.store.token(id);
-            if (!token) {
-                throw new Error('No token for @' + account.username + '.');
-            }
-            const today = localToday();
-            const group = accountGroup(account);
-            const kept: CachedMonth[] = [];
-            for (const month of monthsOfRange(range, today).filter(m => isSettled(m, today))) {
-                const cached = await this.read(id, group, month);
-                if (cached != null) {
-                    kept.push(cached);
-                }
-            }
-            const plan = planMonths(range, today, month => kept.some(k => k.month === month));
-            log.info('statistics ' + id + ': last ' + range + ' months; kept on disk: ' + (plan.fromCache.join(', ') || 'none')
-                + '; asking: ' + (plan.fetch.join(', ') || 'none'));
-            const client = new CreditsClient(account.gitlabUrl, token, this.transport, log);
-            const answers = await Promise.all(plan.fetch.map(month => this.limiter.run(() => this.ask(client, id, group, month, today))));
-            const outcome = monthsOutcome(today, kept, answers);
-            for (const month of outcome.keep) {
-                await this.write(id, group, month);
-            }
-            if (outcome.refused != null) {
-                throw new Error(outcome.refused);
-            }
-            if (outcome.history == null) {
-                throw new Error(outcome.failed.join('; ') || 'GitLab returned nothing for these months.');
-            }
-            entry = {
-                history: outcome.history, error: null, loading: false, fetchedAt: Date.now(),
-                warning: outcome.failed.length === 0 ? null : 'Some months did not load: ' + outcome.failed.join('; '),
-            };
-            log.info('statistics ' + id + ': from ' + outcome.history.start + ' to ' + outcome.history.end + ', '
-                + Math.round(sumOf(outcome.history.daily) * 10) / 10 + ' credits; kept now: '
-                + (outcome.keep.map(k => k.month + (k.history == null ? ' (nothing)' : '')).join(', ') || 'none'));
+            const loaded = await this.loadMonths(account, monthsOfRange(range, localToday()), 'statistics');
+            entry = { history: loaded.history, error: null, warning: loaded.warning, loading: false, fetchedAt: Date.now() };
         } catch (e) {
             const message = e instanceof Error ? e.message : String(e);
             log.warn('statistics ' + id + ': ' + message);
@@ -120,6 +88,50 @@ export class HistoryCache implements vscode.Disposable {
         }
         this.entries.set(key, entry);
         this.changed.fire();
+    }
+
+    /**
+     * The account's usage in these months, as one history: settled months from the disk, the rest from GitLab, at most
+     * three at once. Also what Sessions estimates with. Throws when GitLab refuses, or no month could be read.
+     * @param purpose for the log: statistics, sessions
+     */
+    async loadMonths(account: Account, months: readonly string[], purpose: string): Promise<{ history: History; warning: string | null }> {
+        const id = idOf(account);
+        const token = await this.store.token(id);
+        if (!token) {
+            throw new Error('No token for @' + account.username + '.');
+        }
+        const today = localToday();
+        const group = accountGroup(account);
+        const kept: CachedMonth[] = [];
+        for (const month of months.filter(m => isSettled(m, today))) {
+            const cached = await this.read(id, group, month);
+            if (cached != null) {
+                kept.push(cached);
+            }
+        }
+        const plan = planMonthsOf(months, today, month => kept.some(k => k.month === month));
+        log.info(purpose + ' ' + id + ': ' + months.length + (months.length === 1 ? ' month' : ' months') + '; kept on disk: '
+            + (plan.fromCache.join(', ') || 'none') + '; asking: ' + (plan.fetch.join(', ') || 'none'));
+        const client = new CreditsClient(account.gitlabUrl, token, this.transport, log);
+        const answers = await Promise.all(plan.fetch.map(month => this.limiter.run(() => this.ask(client, id, group, month, today))));
+        const outcome = monthsOutcome(today, kept, answers);
+        for (const month of outcome.keep) {
+            await this.write(id, group, month);
+        }
+        if (outcome.refused != null) {
+            throw new Error(outcome.refused);
+        }
+        if (outcome.history == null) {
+            throw new Error(outcome.failed.join('; ') || 'GitLab returned nothing for these months.');
+        }
+        log.info(purpose + ' ' + id + ': from ' + outcome.history.start + ' to ' + outcome.history.end + ', '
+            + Math.round(sumOf(outcome.history.daily) * 10) / 10 + ' credits; kept now: '
+            + (outcome.keep.map(k => k.month + (k.history == null ? ' (nothing)' : '')).join(', ') || 'none'));
+        return {
+            history: outcome.history,
+            warning: outcome.failed.length === 0 ? null : 'Some months did not load: ' + outcome.failed.join('; '),
+        };
     }
 
     /** One month from GitLab: the current one as the Usage view asks it, a past one from its first to its last day. */

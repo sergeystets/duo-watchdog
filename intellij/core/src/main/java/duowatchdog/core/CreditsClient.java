@@ -81,6 +81,27 @@ public final class CreditsClient {
             }
             """;
 
+    /**
+     * The user's own Agent Platform sessions, last updated first. {@code %s} is where the fields of newer GitLabs go:
+     * the model (19.2+) and the date filter, left out when GitLab does not know them.
+     */
+    static final String SESSIONS_QUERY = """
+            query DuoMySessions($first: Int, $after: String%s) {
+              duoWorkflowWorkflows(first: $first, after: $after, sort: UPDATED_DESC%s) {
+                pageInfo { hasNextPage endCursor }
+                nodes {
+                  id title goal workflowDefinition humanStatus createdAt updatedAt webUrl
+                  project { fullPath }
+                  namespace { fullPath }%s
+                }
+              }
+            }
+            """;
+
+    /** Pages of {@link #SESSIONS_PAGE} sessions asked for at most, newest first. */
+    static final int SESSIONS_PAGE = 100;
+    static final int MAX_SESSION_PAGES = 10;
+
     /** The scopes the token needs, and nothing more. */
     public static final List<String> SCOPES = List.of("read_api", "ai_features");
 
@@ -377,6 +398,110 @@ public final class CreditsClient {
         LocalDate today = LocalDate.now();
         return new History(start != null ? start : from != null ? from : today.withDayOfMonth(1),
                 end != null ? end : to != null ? to : today, dailies(usage), perFlow, nonBillable, flowsError);
+    }
+
+    /**
+     * The user's sessions updated since {@code since}, last updated first: as many pages as reach back that far, at
+     * most {@link #MAX_SESSION_PAGES}.
+     */
+    public List<Sessions.Session> sessions(Instant since) throws GitLabException {
+        List<Sessions.Session> all = new ArrayList<>();
+        String after = null;
+        for (int page = 0; page < MAX_SESSION_PAGES; page++) {
+            Page p = sessionsPage(SESSIONS_PAGE, after, since, null);
+            boolean older = false;
+            for (Sessions.Session s : p.sessions()) {
+                if (s.updated().isBefore(since)) {
+                    older = true;
+                } else {
+                    all.add(s);
+                }
+            }
+            if (older || p.next() == null) {
+                break;
+            }
+            after = p.next();
+        }
+        log.accept("sessions since " + since + ": " + all.size());
+        return all;
+    }
+
+    /** One session by its number, or null when the user has none such. */
+    public Sessions.Session session(long id) throws GitLabException {
+        List<Sessions.Session> found = sessionsPage(1, null, null, id).sessions();
+        return found.isEmpty() ? null : found.get(0);
+    }
+
+    /** The session last updated, or null when the user has none. */
+    public Sessions.Session lastSession() throws GitLabException {
+        List<Sessions.Session> found = sessionsPage(1, null, null, null).sessions();
+        return found.isEmpty() ? null : found.get(0);
+    }
+
+    private record Page(List<Sessions.Session> sessions, String next) {
+    }
+
+    /** Whether this GitLab lacks the model field or the date filter, as learnt from its first refusal. */
+    private boolean olderSessionsApi;
+
+    private Page sessionsPage(int first, String after, Instant since, Long id) throws GitLabException {
+        while (true) {
+            boolean newer = !olderSessionsApi;
+            JsonObject variables = new JsonObject();
+            variables.addProperty("first", first);
+            if (after != null) {
+                variables.addProperty("after", after);
+            }
+            if (newer && since != null) {
+                variables.addProperty("updatedAfter", since.toString());
+            }
+            if (id != null) {
+                variables.addProperty("workflowId", "gid://gitlab/Ai::DuoWorkflows::Workflow/" + id);
+            }
+            String query = SESSIONS_QUERY.formatted(
+                    (newer ? ", $updatedAfter: ISO8601DateTime" : "") + ", $workflowId: AiDuoWorkflowsWorkflowID",
+                    (newer ? ", updatedAfter: $updatedAfter" : "") + ", workflowId: $workflowId",
+                    newer ? "\n      modelMetadataName" : "");
+            Result result = graphql(query, variables);
+            JsonObject connection = obj(result.data(), "duoWorkflowWorkflows");
+            if (connection == null && newer) {
+                log.accept("sessions: " + String.join("; ", result.errors())
+                        + "; asking again without the model and the date filter");
+                olderSessionsApi = true;
+                continue;
+            }
+            if (connection == null) {
+                throw new GitLabException(result.errors().isEmpty() ? "GitLab returned no sessions."
+                        : "GitLab returned no sessions: " + String.join("; ", result.errors()));
+            }
+            List<Sessions.Session> sessions = new ArrayList<>();
+            for (JsonElement e : arr(connection, "nodes")) {
+                Sessions.Session s = e.isJsonObject() ? session(e.getAsJsonObject()) : null;
+                if (s != null) {
+                    sessions.add(s);
+                }
+            }
+            JsonObject info = obj(connection, "pageInfo");
+            return new Page(sessions, bool(info, "hasNextPage") ? str(info, "endCursor") : null);
+        }
+    }
+
+    private static Sessions.Session session(JsonObject o) {
+        Long id = Sessions.id(str(o, "id"));
+        Instant created = instant(o, "createdAt");
+        Instant updated = instant(o, "updatedAt");
+        if (id == null || created == null) {
+            return null;
+        }
+        String title = str(o, "title");
+        if (title == null || title.isBlank()) {
+            String goal = str(o, "goal");
+            String line = goal == null ? "" : goal.strip().lines().findFirst().orElse("");
+            title = line.isEmpty() ? "Session " + id : line.length() > 80 ? line.substring(0, 79) + "…" : line;
+        }
+        return new Sessions.Session(id, title.strip(), str(o, "workflowDefinition"), str(obj(o, "project"), "fullPath"),
+                str(obj(o, "namespace"), "fullPath"), str(o, "modelMetadataName"), str(o, "humanStatus"), created,
+                updated != null ? updated : created, str(o, "webUrl"));
     }
 
     /** The token's name, scopes and expiry, from the REST API, which tells any token about itself. */

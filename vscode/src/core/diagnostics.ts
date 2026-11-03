@@ -31,6 +31,8 @@ export interface DiagnosticsInput {
     accounts: AccountFacts[];
     /** The last lines of the log, oldest first. */
     log: string[];
+    /** Where the Duo CLI's logs were looked for, and how many sessions they count steps for; undefined when not looked. */
+    duoCliLogs?: { folders: { path: string; found: boolean; logs: number }[]; sessions: number };
     /** Tokens the extension knows: masked wherever they appear, as is anything shaped like a GitLab token. */
     secrets?: Iterable<string>;
 }
@@ -60,6 +62,10 @@ export function diagnosticsReport(input: DiagnosticsInput): string {
         SECRET_STORAGE,
         'glab: ' + (input.glab.path ?? 'not found') + '; looked in: '
         + (input.glab.looked.length === 0 ? 'nowhere' : input.glab.looked.join(', ')),
+        'Duo CLI logs: ' + (input.duoCliLogs == null ? 'not looked for'
+            : input.duoCliLogs.folders.map(f => f.path + (f.found ? ' (' + f.logs + (f.logs === 1 ? ' log)' : ' logs)') : ' (not there)'))
+                .join(', ')),
+        'Sessions counted in the Duo CLI logs: ' + (input.duoCliLogs?.sessions ?? 'unknown'),
         'Selected account: ' + (input.selectedId ?? 'none'),
         '',
         'Accounts (' + input.accounts.length + '):',

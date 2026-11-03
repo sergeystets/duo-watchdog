@@ -12,6 +12,8 @@
     let hovered = -1;
     /** The month and the segment under the pointer in the monthly chart: { bar, segment } or null. */
     let hoveredMonth = null;
+    /** What is typed in the Sessions text box: kept across renders. */
+    let sessionsQuery = '';
 
     for (const button of document.querySelectorAll('[data-action]')) {
         button.addEventListener('click', () => vscode.postMessage({ type: button.dataset.action }));
@@ -120,7 +122,17 @@
         byline.title = model.byline;
         renderAccounts();
         renderTabs();
+        const searching = document.activeElement && document.activeElement.id === 'session-search';
         page.replaceChildren();
+        if (model.tab === 'sessions' && !model.notConfigured) {
+            renderSessions(model.sessions);
+            const search = document.getElementById('session-search');
+            if (searching && search) {
+                search.focus();
+                search.setSelectionRange(search.value.length, search.value.length);
+            }
+            return;
+        }
         if (model.tab === 'statistics' && !model.notConfigured) {
             renderStatistics(model.statistics);
             width = document.body.clientWidth;
@@ -317,6 +329,170 @@
         }
         if (s.notBilled) page.append(el('p', 'small', s.notBilled));
         page.append(el('p', 'note secondary', s.note));
+    }
+
+    /** A session number, gid or address: found on Enter, rather than filtered on. */
+    function looksLikeId(text) {
+        const t = text.trim();
+        return /^#?\d+$/.test(t) || /Workflow\/\d+/.test(t) || (t.includes('://') && /\/\d+\/?([?#].*)?$/.test(t));
+    }
+
+    /** Shows the rows whose title or project holds what is typed; all of them for an ID or nothing. */
+    function filterSessions() {
+        const q = sessionsQuery.trim().toLowerCase();
+        const byText = q !== '' && !looksLikeId(q);
+        let shown = 0;
+        for (const row of page.querySelectorAll('.session')) {
+            const visible = !byText || row.dataset.search.includes(q);
+            row.hidden = !visible;
+            const card = row.nextElementSibling;
+            if (card && card.classList.contains('session-details')) card.hidden = !visible;
+            if (visible) shown++;
+        }
+        const none = page.querySelector('.no-match');
+        if (none) none.hidden = shown > 0 || !byText;
+    }
+
+    /** One session in full: where and how it ran, its steps here, and how its credits were estimated, day by day. */
+    function sessionCard(d) {
+        const card = el('div', 'session-details');
+        card.append(el('p', 'notice-title', d.title));
+        const list = el('dl');
+        for (const line of d.lines) {
+            list.append(el('dt', null, line.label), el('dd', null, line.value));
+        }
+        card.append(list);
+        if (d.shares.length > 0) {
+            const shares = el('ul', 'shares');
+            for (const share of d.shares) shares.append(el('li', null, share));
+            card.append(shares);
+        } else {
+            card.append(el('p', 'small secondary', 'No credits counted for it in these days.'));
+        }
+        if (d.url) {
+            const open = el('button', 'link', 'Open in GitLab ↗');
+            open.addEventListener('click', () => vscode.postMessage({ type: 'open', url: d.url }));
+            card.append(open);
+        }
+        return card;
+    }
+
+    /** Agent Platform sessions in a range, with what each cost as far as it can be told. */
+    function renderSessions(sv) {
+        if (!sv) return;
+        const kinds = el('div', 'switch kinds');
+        kinds.setAttribute('role', 'radiogroup');
+        kinds.setAttribute('aria-label', 'Days to show');
+        for (const [kind, label] of [['today', 'Today'], ['yesterday', 'Yesterday'], ['7', 'Last 7 days'], ['30', 'Last 30 days'], ['custom', 'Custom']]) {
+            const b = el('button', kind === sv.kind ? 'on' : null, label);
+            b.setAttribute('role', 'radio');
+            b.setAttribute('aria-checked', String(kind === sv.kind));
+            b.addEventListener('click', () => vscode.postMessage({ type: 'sessionsRange', kind }));
+            kinds.append(b);
+        }
+        page.append(kinds);
+        if (sv.kind === 'custom') {
+            const row = el('div', 'custom-range');
+            const from = el('input');
+            const to = el('input');
+            for (const [input, value, label] of [[from, sv.from, 'From'], [to, sv.to, 'To']]) {
+                input.type = 'date';
+                input.value = value;
+                input.setAttribute('aria-label', label);
+                input.addEventListener('change', () => {
+                    if (/^\d{4}-\d{2}-\d{2}$/.test(from.value) && /^\d{4}-\d{2}-\d{2}$/.test(to.value)) {
+                        vscode.postMessage({ type: 'sessionsRange', kind: 'custom', from: from.value, to: to.value });
+                    }
+                });
+            }
+            row.append(el('label', null, 'From'), from, el('label', null, 'To'), to);
+            page.append(row);
+        }
+        page.append(el('p', 'small secondary range-label', sv.label + ' · UTC days, as GitLab counts them'));
+
+        const find = el('div', 'session-find');
+        const search = el('input');
+        search.id = 'session-search';
+        search.type = 'search';
+        search.placeholder = 'Session ID, gid or URL; other text filters by title or project';
+        search.setAttribute('aria-label', 'Find a session');
+        search.value = sessionsQuery;
+        search.addEventListener('input', () => {
+            sessionsQuery = search.value;
+            filterSessions();
+        });
+        search.addEventListener('keydown', event => {
+            if (event.key === 'Enter' && looksLikeId(search.value)) {
+                vscode.postMessage({ type: 'sessionsFind', text: search.value });
+            }
+        });
+        const last = el('button', 'secondary-button', 'Last session');
+        last.addEventListener('click', () => vscode.postMessage({ type: 'lastSession' }));
+        find.append(search, last);
+        page.append(find);
+
+        if (sv.useNotice && model.notice) {
+            renderNotice(model.notice);
+            return;
+        }
+        if (sv.message) page.append(el('p', 'secondary', sv.message));
+        for (const error of sv.errors) page.append(el('p', 'error', error));
+        if (sv.loading) page.append(el('p', 'secondary', 'Loading sessions…'));
+        const m = sv.model;
+        if (!m) return;
+
+        const tiles = el('div', 'tiles');
+        for (const tile of m.tiles) {
+            const box = el('div', 'tile');
+            box.title = tile.caption + ': ' + tile.value;
+            box.append(el('div', 'caption', tile.caption), el('div', 'value', tile.value));
+            tiles.append(box);
+        }
+        page.append(tiles);
+        if (m.leftOut) page.append(el('p', 'small secondary', m.leftOut));
+
+        if (m.byProject.length > 0) {
+            const section = el('section');
+            section.append(el('h2', null, 'By project'), featureRows(m.byProject));
+            page.append(section);
+        }
+
+        const section = el('section');
+        section.append(el('h2', null, 'Sessions'));
+        if (m.rows.length === 0) {
+            section.append(el('p', 'secondary', 'No sessions in these days.'));
+        }
+        const list = el('div', 'sessions');
+        for (const r of m.rows) {
+            const row = el('div', 'session' + (m.details && m.details.id === r.id ? ' focused' : ''));
+            row.dataset.search = r.search;
+            row.setAttribute('role', 'button');
+            row.tabIndex = 0;
+            row.setAttribute('aria-expanded', String(!!(m.details && m.details.id === r.id)));
+            const text = el('div', 'text');
+            text.append(el('div', 'title', r.title), el('div', 'meta', r.meta));
+            const right = el('div', 'right');
+            right.append(el('div', 'credits', r.credits));
+            if (r.steps) right.append(el('div', 'meta', r.steps));
+            row.append(text, right);
+            const toggle = () => vscode.postMessage({ type: 'sessionsFocus', id: r.id });
+            row.addEventListener('click', toggle);
+            row.addEventListener('keydown', event => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    toggle();
+                }
+            });
+            list.append(row);
+            if (m.details && m.details.id === r.id) list.append(sessionCard(m.details));
+        }
+        section.append(list);
+        const none = el('p', 'secondary no-match', 'No session matches.');
+        none.hidden = true;
+        section.append(none);
+        page.append(section);
+        page.append(el('p', 'note secondary', m.footer));
+        filterSessions();
     }
 
     /** "M x y+h V y+r Q …": a bar segment with its top corners rounded. */

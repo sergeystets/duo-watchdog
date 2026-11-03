@@ -47,11 +47,26 @@ export interface MonthPlan {
  * never asked again; everything else always is, so Reload asks again only what can still change.
  */
 export function planMonths(range: number, today: IsoDate, cached: (month: string) => boolean): MonthPlan {
+    return planMonthsOf(monthsOfRange(range, today), today, cached);
+}
+
+/** planMonths for any months: "2026-10" and so on, as listed. */
+export function planMonthsOf(months: readonly string[], today: IsoDate, cached: (month: string) => boolean): MonthPlan {
     const plan: MonthPlan = { fetch: [], fromCache: [] };
-    for (const month of monthsOfRange(range, today)) {
+    for (const month of months) {
         (isSettled(month, today) && cached(month) ? plan.fromCache : plan.fetch).push(month);
     }
     return plan;
+}
+
+/** The months from one day's to another's, newest first: "2026-11", "2026-10" for Oct 28 to Nov 3. */
+export function monthsBetween(from: IsoDate, to: IsoDate): string[] {
+    const months: string[] = [];
+    const first = from.slice(0, 7);
+    for (let m = (to < from ? from : to).slice(0, 7) + '-01'; m.slice(0, 7) >= first; m = plusMonths(m, -1)) {
+        months.push(m.slice(0, 7));
+    }
+    return months;
 }
 
 function safe(name: string): string {

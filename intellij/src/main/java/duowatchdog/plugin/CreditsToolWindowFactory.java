@@ -14,7 +14,10 @@ import com.intellij.ui.content.ContentManagerListener;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-/** The tool window's two tabs: Usage, the dashboard of the period, and Statistics, the last twelve months. */
+/**
+ * The tool window's tabs: Usage, the dashboard of the period; Statistics, the months before; Sessions, what each
+ * session cost.
+ */
 public final class CreditsToolWindowFactory implements ToolWindowFactory, DumbAware {
 
     /** Must match the {@code toolWindow id} in plugin.xml. */
@@ -33,11 +36,21 @@ public final class CreditsToolWindowFactory implements ToolWindowFactory, DumbAw
         history.setDisposer(statistics);
         history.setPreferredFocusableComponent(statistics.focusTarget());
         toolWindow.getContentManager().addContent(history);
+
+        SessionsPanel sessions = new SessionsPanel(project);
+        Content perSession = ContentFactory.getInstance().createContent(sessions, "Sessions", false);
+        perSession.setDisposer(sessions);
+        perSession.setPreferredFocusableComponent(sessions.focusTarget());
+        toolWindow.getContentManager().addContent(perSession);
+        // Statistics and Sessions ask GitLab only while they show.
         toolWindow.getContentManager().addContentManagerListener(new ContentManagerListener() {
             @Override
             public void selectionChanged(@NotNull ContentManagerEvent event) {
+                boolean shown = event.getOperation() == ContentManagerEvent.ContentOperation.add;
                 if (event.getContent() == history) {
-                    statistics.shown(event.getOperation() == ContentManagerEvent.ContentOperation.add);
+                    statistics.shown(shown);
+                } else if (event.getContent() == perSession) {
+                    sessions.shown(shown);
                 }
             }
         });

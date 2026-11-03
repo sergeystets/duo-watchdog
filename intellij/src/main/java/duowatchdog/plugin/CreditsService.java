@@ -21,6 +21,7 @@ import duowatchdog.core.GitLabAddress;
 import duowatchdog.core.GitLabException;
 import duowatchdog.core.History;
 import duowatchdog.core.HttpTransport;
+import duowatchdog.core.Sessions;
 import duowatchdog.core.Snapshot;
 import duowatchdog.plugin.CreditsSettings.Account;
 import org.jetbrains.annotations.Nullable;
@@ -200,6 +201,50 @@ public final class CreditsService implements Disposable {
         History history = months.size() == 1 ? months.get(0) : History.merge(months);
         histories.put(key, new CachedHistory(Instant.now(), token, history));
         return history;
+    }
+
+    /** Each account's sessions since a day, as the Sessions tab last showed them; kept {@link #SESSIONS_MINUTES}. */
+    private final Map<String, CachedSessions> sessions = new ConcurrentHashMap<>();
+    private static final long SESSIONS_MINUTES = 5;
+
+    private record CachedSessions(Instant at, String token, List<Sessions.Session> sessions) {
+    }
+
+    /** A client for the account's GitLab, with its token. */
+    private CreditsClient client(Account account) throws GitLabException {
+        String token = CreditsSettings.getInstance().token(account.id());
+        if (token == null || token.isBlank()) {
+            throw new GitLabException("No token saved for @" + account.username + " on " + account.host() + ".");
+        }
+        return new CreditsClient(account.gitlabUrl, token.trim(), transport())
+                .log(line -> DuoLog.info(account.id() + " " + line));
+    }
+
+    /**
+     * The account's sessions updated since the start of {@code from}, a UTC day, last updated first; kept a few
+     * minutes unless {@code force}. May block: call off the EDT.
+     */
+    List<Sessions.Session> sessions(Account account, boolean force, LocalDate from) throws GitLabException {
+        String token = CreditsSettings.getInstance().token(account.id());
+        String key = account.id() + "|" + from;
+        CachedSessions cached = sessions.get(key);
+        if (!force && cached != null && cached.token().equals(token)
+                && cached.at().isAfter(Instant.now().minus(Duration.ofMinutes(SESSIONS_MINUTES)))) {
+            return cached.sessions();
+        }
+        List<Sessions.Session> found = client(account).sessions(from.atStartOfDay(java.time.ZoneOffset.UTC).toInstant());
+        sessions.put(key, new CachedSessions(Instant.now(), token, found));
+        return found;
+    }
+
+    /** One of the account's sessions by its number, or null. May block. */
+    @Nullable Sessions.Session session(Account account, long id) throws GitLabException {
+        return client(account).session(id);
+    }
+
+    /** The account's session last updated, or null. May block. */
+    @Nullable Sessions.Session lastSession(Account account) throws GitLabException {
+        return client(account).lastSession();
     }
 
     /**

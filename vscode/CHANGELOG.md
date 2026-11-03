@@ -9,6 +9,15 @@
   accounts** adds up every account that reads usage. GitLab is asked a month at a time, at most three at once;
   settled months (two days after their end) are kept on disk and never asked again, so **Reload** asks only for the
   months that can still change.
+- **Sessions:** a **Sessions** switch on the dashboard, and **Duo Watchdog: Sessions**. The selected account's Duo
+  Agent Platform sessions for today, yesterday, the last 7 or 30 days or two dates of your own: how many, the credits
+  in them and outside them, the top project and the credits per project, and one row a session with its estimated
+  credits and, when the Duo CLI's logs on this machine count them, the agent's steps. A session's number, gid or
+  address finds it (the days switch to its days when needed); **Last session** finds the last one; a row opens its
+  details, with how its credits were estimated and **Open in GitLab**. The credits are estimates: each feature's
+  credits on a day are split among that day's sessions of it, by agent steps when every one of them has steps
+  counted, else equally. Sessions outside the account's group are left out and counted. Only step counts are read
+  from the Duo CLI's logs, and they are kept, so they outlast the temporary folder.
 - **What's New:** after an update, a notification links to the new **What's New in Duo Watchdog** page; after a fresh
   install, it says how to start. **Duo Watchdog: What's New** shows the page any time.
 - **Troubleshooting:** a *Duo Watchdog* log (**Duo Watchdog: Show Log**) with each refresh, the statistics requests,

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { AccountStore } from './accounts';
 import { diagnosticsReport, LOG_LINES_IN_REPORT } from './core/diagnostics';
+import { DuoCliLogScanner } from './duoCliLogs';
 import { glabLookup } from './glab';
 import { log } from './log';
 import { CreditsService } from './service';
@@ -10,7 +11,8 @@ import { CreditsService } from './service';
  * refresh, and the last log lines, to the clipboard. Whether an account has a token is said; the token never is.
  */
 export async function copyDiagnostics(context: vscode.ExtensionContext, store: AccountStore,
-                                      service: CreditsService): Promise<void> {
+                                      service: CreditsService, logs: DuoCliLogScanner): Promise<void> {
+    await logs.scan().catch(() => undefined);
     const overview = service.overview();
     const tokens: string[] = [];
     const accounts = await Promise.all(overview.states.map(async s => {
@@ -32,6 +34,7 @@ export async function copyDiagnostics(context: vscode.ExtensionContext, store: A
         remoteName: vscode.env.remoteName,
         remoteHost: vscode.env.remoteName != null && context.extension.extensionKind === vscode.ExtensionKind.Workspace,
         glab: await glabLookup(),
+        duoCliLogs: logs.lastScan(),
         selectedId: overview.selected?.id ?? null,
         accounts,
         log: log.lines(LOG_LINES_IN_REPORT),

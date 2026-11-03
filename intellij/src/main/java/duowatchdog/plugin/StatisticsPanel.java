@@ -157,7 +157,7 @@ final class StatisticsPanel extends SimpleToolWindowPanel implements Disposable 
         });
     }
 
-    private static boolean readable(Snapshot s) {
+    static boolean readable(Snapshot s) {
         return s.status() != Snapshot.Status.NO_TOKEN && s.status() != Snapshot.Status.NOT_TRACKED
                 && s.status() != Snapshot.Status.REJECTED && s.status() != Snapshot.Status.NOT_CONFIGURED;
     }
