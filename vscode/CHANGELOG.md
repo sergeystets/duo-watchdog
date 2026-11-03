@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0
 
 - **Accounts:** one token per account; an account is one GitLab user on one GitLab. GitLab says whose a token is
   when you add it: a token for an account already listed replaces its token, and its group and limit stay. Each
