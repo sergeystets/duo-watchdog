@@ -2,6 +2,7 @@ import { trimSlashes } from './address';
 import { addDays, firstOfMonth, IsoDate, localToday, parseDate, plusMonths } from './dates';
 import { FlowHistory, History, mergeHistories, months, sumOf } from './history';
 import { Logger, NO_LOG } from './log';
+import { lastDayOf } from './monthly';
 import { CreditsReport, DailyUsage, FlowUsage } from './report';
 
 export interface Response {
@@ -279,8 +280,18 @@ export class CreditsClient {
         return months.length === 1 ? months[0] : mergeHistories(months)!;
     }
 
+    /**
+     * One month's usage, as the Statistics view asks it: the current month without dates, as the Usage view does; a
+     * past month from its first to its last day.
+     */
+    historyOfMonth(namespace: string, month: string, today: IsoDate): Promise<History> {
+        return month === today.slice(0, 7) ? this.historyOf(namespace, null, null, today)
+            : this.historyOf(namespace, month + '-01', lastDayOf(month), today);
+    }
+
     /** One range, or with null dates the current period, as the Usage view asks. */
-    private async historyOf(namespace: string, from: IsoDate | null, to: IsoDate | null): Promise<History> {
+    private async historyOf(namespace: string, from: IsoDate | null, to: IsoDate | null,
+                            today: IsoDate = localToday()): Promise<History> {
         const variables: Json = { namespacePath: namespace };
         if (from != null) {
             variables.startDate = from;
@@ -351,7 +362,6 @@ export class CreditsClient {
                 throw e;
             }
         }
-        const today = localToday();
         return {
             start: date_(usage, 'startDate') ?? from ?? firstOfMonth(today), end: date_(usage, 'endDate') ?? to ?? today,
             daily: dailies(usage), flows: perFlow, nonBillable, flowsError,

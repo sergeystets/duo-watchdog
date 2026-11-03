@@ -26,7 +26,7 @@
           <b>expires within 3 days</b>, and a token GitLab turns down.</li>
       <li><b>glab and the GitLab Duo CLI</b>: an account can hand its token to glab, and so to the Duo CLI. Both
           are off unless you tick them.</li>
-      <li>A <b>Statistics</b> tab next to the dashboard: the last twelve months by month and by feature, with what
+      <li>A <b>Statistics</b> tab next to the dashboard: the last 3, 6 or 12 months by month and by feature, with what
           GitLab did not bill, for one account or all of them.</li>
       <li><b>What's New</b>: after an update a window shows what the version brings, with pictures; Help | What's
           New in Duo Watchdog opens it again.</li>

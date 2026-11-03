@@ -136,12 +136,12 @@ test('the Statistics view for one account', () => {
         'not tracked, no token, turned down: the same notice as Usage');
     assert.equal(statisticsView('account', acme, [acme], entry, TODAY).loading, true);
 
-    entries.set(historyKey(acme.account), { history: null, error: 'Cannot reach gitlab.com', loading: false });
+    entries.set(historyKey(acme.account), { history: null, error: 'Cannot reach gitlab.com', warning: null, loading: false });
     const failed = statisticsView('account', acme, [acme], entry, TODAY);
     assert.deepEqual(failed.errors, ['Statistics did not load: Cannot reach gitlab.com']);
     assert.equal(failed.loading, false);
 
-    entries.set(historyKey(acme.account), { history: year(), error: null, loading: false });
+    entries.set(historyKey(acme.account), { history: year(), error: null, warning: null, loading: false });
     const shown = statisticsView('account', acme, [acme], entry, TODAY);
     assert.equal(shown.stats!.bars.length, 12);
     assert.equal(shown.stats!.accounts, null);
@@ -153,9 +153,9 @@ test('the Statistics view for all accounts adds up the tracked ones', () => {
     const lab = state(account({ username: 'dana-lab' }), 20);
     const untracked = state(account({ username: 'bob', scopes: ['api'] }), null, 'notTracked');
     const entries = new Map<string, HistoryEntry>([
-        [historyKey(acme.account), { history: year(), error: null, loading: false }],
-        [historyKey(platform.account), { history: null, error: 'boom', loading: false }],
-        [historyKey(lab.account), { history: null, error: null, loading: true }],
+        [historyKey(acme.account), { history: year(), error: null, warning: null, loading: false }],
+        [historyKey(platform.account), { history: null, error: 'boom', warning: null, loading: false }],
+        [historyKey(lab.account), { history: null, error: null, warning: null, loading: true }],
     ]);
     const entry = (a: typeof acme.account) => entries.get(historyKey(a));
 
@@ -164,7 +164,7 @@ test('the Statistics view for all accounts adds up the tracked ones', () => {
     assert.equal(view.stats!.accounts, '1 account: @dana.k on gitlab.com · acme. Loading the others…');
     assert.equal(view.loading, false);
 
-    entries.set(historyKey(lab.account), { history: year({ daily: [day('2026-10-01', 1.4)], flows: [], nonBillable: [] }), error: null, loading: false });
+    entries.set(historyKey(lab.account), { history: year({ daily: [day('2026-10-01', 1.4)], flows: [], nonBillable: [] }), error: null, warning: null, loading: false });
     const both = statisticsView('all', acme, [untracked, platform, lab, acme], entry, TODAY);
     assert.equal(both.stats!.accounts, '2 accounts: @dana-lab on gitlab.com · acme, @dana.k on gitlab.com · acme.',
         'most credits left first, as everywhere');

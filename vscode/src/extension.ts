@@ -22,8 +22,8 @@ export function activate(context: vscode.ExtensionContext): void {
     const statusBar = new StatusBar();
     const glab = new GlabSync(store, service);
     const commands = new Commands(store, service, nodeTransport, glab);
-    const history = new HistoryCache(store, nodeTransport);
-    const dashboard = new DashboardView(context.extensionUri, service, commands, history);
+    const history = new HistoryCache(store, nodeTransport, context.globalStorageUri);
+    const dashboard = new DashboardView(context.extensionUri, service, commands, history, context.globalState);
 
     context.subscriptions.push(
         service,

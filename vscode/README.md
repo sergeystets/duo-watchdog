@@ -78,26 +78,31 @@ $(check) @dana.k        gitlab.com · acme
 
 ## Statistics
 
-The **Statistics** switch at the top of the dashboard shows the last twelve months of the selected account:
+The **Statistics** switch at the top of the dashboard shows the last **3**, **6** or **12 months** of the selected
+account (3 unless you pick another; the choice is remembered):
 
-- a summary: `This month so far 148.6 · Last month 201 · Monthly average 175 · 12 months 2,100` (the average is over
+- a summary: `This month so far 148.6 · Last month 201 · Monthly average 175 · 3 months 525` (the average is over
   the complete months; in the first month, that month so far)
-- a stacked bar a month, oldest left: the year's five costliest features in colours of their own, the rest as
+- a stacked bar a month, oldest left: the range's five costliest features in colours of their own, the rest as
   **Other** in gray. Hover a segment for its month, feature and credits, and the month's total.
 - a table, newest month first: **Month**, **Credits**, **Top feature**, **Not billed**
-- **By feature, last 12 months**: each feature's credits over the year
+- **By feature, last N months**: each feature's credits over the range
 - **Not billed**: the credits GitLab did not bill (promotional, beta), when there are any. GitLab's own usage page
   counts these in its total. GitLab says this from version 19.6.
 
 **This account | All accounts** switches between the selected account and every account with a token that reads
 usage, added up, features of the same name as one.
 
-GitLab keeps usage from the subscription's start, so the year can be shorter, and its figures can lag a few hours. A
-group member sees usage per day and per feature; per project, model or session takes the group's Owner.
+GitLab keeps usage from the subscription's start, so the range can be shorter, and its figures can lag a few hours.
+A group member sees usage per day and per feature; per project, model or session takes the group's Owner.
 
-The statistics are read from GitLab when you first show them for an account, and kept for an hour. **Refresh** reads
-them again. If GitLab fails on the whole year (gitlab.com can answer HTTP 500), they are read a month at a time, back
-to where GitLab's data ends. If they don't load, the view says why; the Usage view is not affected.
+The statistics are read from GitLab when you first show them for an account, a month at a time and at most three
+months at once: the current month as the Usage view asks it, each month before it from its first to its last day.
+A month is **settled** two days after its last day; settled months are kept on disk, in the extension's storage, and
+never asked again (a month before the subscription, which GitLab answers with a server error, is kept as "nothing").
+The rest is kept for an hour. **Reload** (or **Refresh**) asks again only for the months that can still change. A
+changed group path starts afresh, and removing an account removes its kept months. If they don't load, the view says
+why; the Usage view is not affected.
 
 ## glab and the GitLab Duo CLI
 

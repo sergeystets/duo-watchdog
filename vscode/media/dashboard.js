@@ -229,12 +229,32 @@
         return box;
     }
 
-    /** A year of usage: the summary, a stacked bar a month, the table, the features and the notes. */
+    /** 3 months | 6 months | 12 months, and Reload, which asks again only what can still change. */
+    function rangeRow(range) {
+        const row = el('div', 'range-row');
+        const box = el('div', 'switch range');
+        box.setAttribute('role', 'radiogroup');
+        box.setAttribute('aria-label', 'Months to show');
+        for (const months of [3, 6, 12]) {
+            const b = el('button', months === range ? 'on' : null, months + ' months');
+            b.setAttribute('role', 'radio');
+            b.setAttribute('aria-checked', String(months === range));
+            b.addEventListener('click', () => vscode.postMessage({ type: 'range', months }));
+            box.append(b);
+        }
+        const reload = link('Reload', 'refresh');
+        reload.title = 'Ask GitLab again for the months that can still change';
+        row.append(box, reload);
+        return row;
+    }
+
+    /** The last months of usage: the summary, a stacked bar a month, the table, the features and the notes. */
     function renderStatistics(st) {
         if (!st) return;
         if ((model.accounts || []).length > 1) {
             page.append(scopeSwitch(st.scope));
         }
+        page.append(rangeRow(st.range));
         if (st.useNotice && model.notice) {
             renderNotice(model.notice);
             return;
@@ -248,7 +268,9 @@
         page.append(el('p', 'summary', s.summary));
 
         const chart = el('section');
-        chart.append(el('h2', null, 'Credits per month'));
+        const heading = el('h2', null, 'Last ' + st.range + ' months');
+        heading.append(el('span', 'caption', 'credits per month'));
+        chart.append(heading);
         if (s.legend.length > 0) {
             const legend = el('ul', 'legend');
             legend.setAttribute('aria-label', 'Features');
@@ -288,7 +310,7 @@
 
         if (s.features.length > 0 || s.featuresError) {
             const section = el('section');
-            section.append(el('h2', null, 'By feature, last 12 months'));
+            section.append(el('h2', null, 'By feature, last ' + st.range + ' months'));
             if (s.features.length > 0) section.append(featureRows(s.features));
             if (s.featuresError) section.append(el('p', 'small secondary', s.featuresError));
             page.append(section);

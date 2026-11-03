@@ -555,7 +555,19 @@ svg text.callout-amount {
 }
 
 .switch.scope {
+    margin-bottom: 8px;
+}
+
+.range-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
     margin-bottom: 12px;
+}
+
+.range-row .switch {
+    flex: 1;
+    min-width: 0;
 }
 
 .summary {
