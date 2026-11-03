@@ -95,6 +95,13 @@ tasks.withType<JavaCompile>().configureEach {
     options.release = 21
 }
 
+// What's New: the page and its pictures live with the VS Code extension's media, and both show them.
+tasks.processResources {
+    from(rootProject.file("vscode/media/whats-new")) {
+        into("whatsnew")
+    }
+}
+
 dependencies {
     implementation(project(":intellij:core"))
     intellijPlatform {

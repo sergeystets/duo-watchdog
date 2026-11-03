@@ -216,6 +216,66 @@ class CreditsClientTest {
     }
 
     @Test
+    void readsAYearOfHistoryByMonthAndFeature() throws Exception {
+        FakeTransport http = new FakeTransport()
+                .reply(200, """
+                        {"data":{"currentUser":{"creditsUsage":{"startDate":"2026-03-15","endDate":"2026-10-18",
+                          "dailyUsage":[{"date":"2026-03-20","creditsUsed":4},{"date":"2026-09-02","creditsUsed":10},
+                                        {"date":"2026-10-01","creditsUsed":6}],
+                          "usedFlowTypes":[{"id":"chat","title":"Duo Chat"},{"id":"review","title":"Code Review"}]}}}}
+                        """)
+                .reply(200, """
+                        {"data":{"currentUser":{
+                          "f0":{"dailyUsage":[{"date":"2026-03-20","creditsUsed":4},{"date":"2026-10-01","creditsUsed":1}]},
+                          "f1":{"dailyUsage":[{"date":"2026-09-02","creditsUsed":10},{"date":"2026-10-01","creditsUsed":5}]}}}}
+                        """)
+                .reply(200, """
+                        {"data":{"currentUser":{"creditsUsage":{"nonBillableUsage":[
+                          {"dailyUsage":[{"date":"2026-10-01","creditsUsed":2.5}]}]}}}}
+                        """);
+
+        History h = new CreditsClient("https://gitlab.com", "t", http)
+                .history("acme", LocalDate.of(2025, 11, 1), LocalDate.of(2026, 10, 18));
+
+        JsonObject variables = http.requests.get(0).getAsJsonObject("variables");
+        assertEquals("2025-11-01", variables.get("startDate").getAsString());
+        assertEquals("2026-10-18", variables.get("endDate").getAsString());
+        assertEquals(LocalDate.of(2026, 3, 15), h.start(), "GitLab moves the start to the subscription's");
+        List<History.Month> months = h.months();
+        assertEquals(8, months.size(), "March to October");
+        assertEquals(4, months.get(0).credits(), 1e-9);
+        assertEquals(0, months.get(1).credits(), 1e-9, "April: nothing used");
+        assertEquals(6, months.get(7).credits(), 1e-9);
+        assertEquals(List.of("review", "chat"), List.copyOf(months.get(7).byFlow().keySet()), "most credits first");
+        assertEquals(5, months.get(7).byFlow().get("review"), 1e-9);
+        assertEquals(2.5, months.get(7).nonBillable(), 1e-9);
+        assertEquals(20, h.total(), 1e-9);
+        assertNull(h.flowsError());
+    }
+
+    @Test
+    void historyStandsWithoutTheFeaturesOrTheNotBilled() throws Exception {
+        FakeTransport http = new FakeTransport()
+                .reply(200, """
+                        {"data":{"currentUser":{"creditsUsage":{"startDate":"2026-10-01","endDate":"2026-10-18",
+                          "dailyUsage":[{"date":"2026-10-01","creditsUsed":6}],
+                          "usedFlowTypes":[{"id":"chat","title":"Duo Chat"}]}}}}
+                        """)
+                .reply(502, "")
+                .reply(200, """
+                        {"errors":[{"message":"Field 'nonBillableUsage' doesn't exist on type 'CreditsUsage'"}]}
+                        """);
+
+        History h = new CreditsClient("https://gitlab.com", "t", http)
+                .history("acme", LocalDate.of(2025, 11, 1), LocalDate.of(2026, 10, 18));
+
+        assertEquals(6, h.total(), 1e-9);
+        assertTrue(h.flows().isEmpty());
+        assertTrue(h.flowsError().contains("HTTP 502"), h.flowsError());
+        assertEquals(0, h.nonBillableTotal(), 1e-9);
+    }
+
+    @Test
     void namesTheScopesATokenLacks() {
         CreditsClient.TokenInfo info = new CreditsClient.TokenInfo("x", List.of("read_api", "api"), null, null, null);
         assertEquals(List.of("ai_features"), info.missingScopes());

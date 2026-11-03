@@ -3,6 +3,7 @@ package duowatchdog.core.ui;
 import duowatchdog.core.CreditsReport;
 import duowatchdog.core.CreditsReport.DailyUsage;
 import duowatchdog.core.CreditsReport.FlowUsage;
+import duowatchdog.core.History;
 import duowatchdog.core.Snapshot;
 import org.junit.jupiter.api.Test;
 
@@ -45,6 +46,45 @@ class RenderTest {
                         new DailyUsage(LocalDate.of(2026, 10, 18), 0.4)),
                 List.of(new FlowUsage("code_review", "Code Review Flow", 1.0),
                         new FlowUsage("developer", "Developer Flow", 20.5)), null);
+    }
+
+    /** A year of use: five features and a sixth, small one, which goes to Other; some not billed in October. */
+    static History history() {
+        String[][] flows = {{"review", "Code Review Flow"}, {"developer", "Developer Flow"}, {"chat", "Duo Chat"},
+                {"fix", "Fix Pipeline Flow"}, {"tests", "Unit Test Flow"}, {"docs", "Docs Flow"}};
+        double[][] perMonth = {
+                {20, 35, 10, 4, 2, 1}, {25, 30, 12, 5, 3, 0}, {18, 40, 9, 6, 2, 1}, {30, 45, 14, 3, 4, 2},
+                {28, 38, 11, 8, 5, 1}, {35, 52, 16, 7, 3, 2}, {40, 60, 15, 9, 6, 1}, {38, 55, 18, 6, 4, 3},
+                {45, 70, 20, 10, 7, 2}, {50, 64, 22, 12, 8, 2}, {61, 80, 25, 14, 9, 3}, {30, 42, 12, 6, 4, 1}};
+        java.time.LocalDate start = java.time.LocalDate.of(2025, 11, 1);
+        List<DailyUsage> daily = new java.util.ArrayList<>();
+        List<History.FlowHistory> byFlow = new java.util.ArrayList<>();
+        for (int f = 0; f < flows.length; f++) {
+            List<DailyUsage> days = new java.util.ArrayList<>();
+            for (int m = 0; m < perMonth.length; m++) {
+                days.add(new DailyUsage(start.plusMonths(m).plusDays(9), perMonth[m][f]));
+            }
+            byFlow.add(new History.FlowHistory(flows[f][0], flows[f][1], days));
+            daily.addAll(days);
+        }
+        return new History(start, TODAY, daily, byFlow,
+                List.of(new DailyUsage(java.time.LocalDate.of(2026, 10, 2), 6.5)), null);
+    }
+
+    @Test
+    void theStatisticsShowAYearByMonthAndFeature() throws IOException {
+        Statistics light = new Statistics(Theme.light(FONT));
+        light.show(history(), TODAY, "@jane.doe · acme");
+        BufferedImage image = save("statistics-light", light, 470);
+        assertTrue(image.getHeight() > 700, "tiles, chart, months, features, not billed and note: " + image.getHeight());
+
+        Statistics dark = new Statistics(Theme.dark(FONT));
+        dark.show(history(), TODAY, "All accounts");
+        save("statistics-dark", dark, 470);
+
+        Statistics wide = new Statistics(Theme.light(FONT));
+        wide.show(history(), TODAY, "@jane.doe · acme");
+        save("statistics-wide", wide, 720);
     }
 
     @Test

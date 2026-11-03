@@ -48,6 +48,30 @@ public final class CreditsClient {
             }
             """;
 
+    static final String HISTORY_QUERY = """
+            query DuoMyHistory($namespacePath: ID!, $startDate: ISO8601Date, $endDate: ISO8601Date) {
+              currentUser {
+                creditsUsage(namespacePath: $namespacePath, startDate: $startDate, endDate: $endDate) {
+                  startDate
+                  endDate
+                  dailyUsage { date creditsUsed }
+                  usedFlowTypes { id title }
+                }
+              }
+            }
+            """;
+
+    /** Asked on its own: GitLab before 19.6 has no such field, and the rest still stands without it. */
+    static final String NON_BILLABLE_QUERY = """
+            query DuoMyNonBillable($namespacePath: ID!, $startDate: ISO8601Date, $endDate: ISO8601Date) {
+              currentUser {
+                creditsUsage(namespacePath: $namespacePath, startDate: $startDate, endDate: $endDate) {
+                  nonBillableUsage { dailyUsage { date creditsUsed } }
+                }
+              }
+            }
+            """;
+
     static final String GROUPS_QUERY = """
             query DuoMyGroups {
               currentUser {
@@ -202,6 +226,83 @@ public final class CreditsClient {
         return username;
     }
 
+    /**
+     * The user's usage from {@code from} to {@code to}, at most a year: per day, per feature per day, and what
+     * GitLab did not bill. GitLab moves the start to the subscription's. The per-feature and not-billed figures are
+     * details: when they fail, the totals still stand.
+     */
+    public History history(String namespace, LocalDate from, LocalDate to) throws GitLabException {
+        JsonObject variables = new JsonObject();
+        variables.addProperty("namespacePath", namespace);
+        variables.addProperty("startDate", from.toString());
+        variables.addProperty("endDate", to.toString());
+        Result result = graphql(HISTORY_QUERY, variables);
+        JsonObject user = obj(result.data(), "currentUser");
+        if (user == null) {
+            throw new GitLabException(result.errors().isEmpty() ? NOT_A_USER : String.join("; ", result.errors()));
+        }
+        JsonObject usage = obj(user, "creditsUsage");
+        if (usage == null) {
+            String why = result.errors().isEmpty() ? "no data returned" : String.join("; ", result.errors());
+            throw new GitLabException("GitLab returned no history for \"" + namespace + "\": " + why + ".");
+        }
+        LocalDate start = date(usage, "startDate");
+        LocalDate end = date(usage, "endDate");
+        List<FlowUsage> used = flows(usage);
+
+        List<History.FlowHistory> perFlow = new ArrayList<>();
+        String flowsError = null;
+        int priced = Math.min(used.size(), MAX_PRICED_FLOWS);
+        if (priced > 0) {
+            StringBuilder header = new StringBuilder(
+                    "query DuoMyHistoryByFlow($namespacePath: ID!, $startDate: ISO8601Date, $endDate: ISO8601Date");
+            StringBuilder fields = new StringBuilder();
+            JsonObject flowVariables = variables.deepCopy();
+            for (int i = 0; i < priced; i++) {
+                header.append(", $f").append(i).append(": [String!]");
+                fields.append("    f").append(i).append(": creditsUsage(namespacePath: $namespacePath, ")
+                        .append("startDate: $startDate, endDate: $endDate, flowTypes: $f").append(i)
+                        .append(") { dailyUsage { date creditsUsed } }\n");
+                JsonArray ids = new JsonArray();
+                ids.add(used.get(i).id());
+                flowVariables.add("f" + i, ids);
+            }
+            try {
+                Result flows = graphql(header + ") {\n  currentUser {\n" + fields + "  }\n}\n", flowVariables);
+                JsonObject byFlow = obj(flows.data(), "currentUser");
+                for (int i = 0; i < priced; i++) {
+                    JsonObject flow = obj(byFlow, "f" + i);
+                    if (flow == null) {
+                        flowsError = flows.errors().isEmpty() ? "GitLab returned no figures" : String.join("; ", flows.errors());
+                        continue;
+                    }
+                    perFlow.add(new History.FlowHistory(used.get(i).id(), used.get(i).title(), dailies(flow)));
+                }
+            } catch (GitLabException e) {
+                flowsError = e.getMessage();
+            }
+        }
+
+        List<DailyUsage> nonBillable = new ArrayList<>();
+        try {
+            JsonObject extra = obj(obj(graphql(NON_BILLABLE_QUERY, variables).data(), "currentUser"), "creditsUsage");
+            JsonElement entries = extra == null ? null : extra.get("nonBillableUsage");
+            if (entries != null && entries.isJsonArray()) {
+                for (JsonElement e : entries.getAsJsonArray()) {
+                    if (e.isJsonObject()) {
+                        nonBillable.addAll(dailies(e.getAsJsonObject()));
+                    }
+                }
+            } else if (entries != null && entries.isJsonObject()) {
+                nonBillable.addAll(dailies(entries.getAsJsonObject()));
+            }
+        } catch (GitLabException e) {
+            // Before GitLab 19.6: nothing to say about it.
+        }
+        return new History(start != null ? start : from, end != null ? end : to, dailies(usage), perFlow,
+                nonBillable, flowsError);
+    }
+
     /** The token's name, scopes and expiry, from the REST API, which tells any token about itself. */
     public TokenInfo tokenInfo() throws GitLabException {
         URI uri = endpoint.resolve("v4/personal_access_tokens/self");
@@ -222,6 +323,12 @@ public final class CreditsClient {
 
     private static CreditsReport report(String username, JsonObject usage) {
         JsonObject blocked = obj(usage, "blockedStatus");
+        return new CreditsReport(username, date(usage, "startDate"), date(usage, "endDate"),
+                orZero(num(usage, "creditsUsed")), bool(blocked, "blocked"), str(blocked, "capType"),
+                dailies(usage), flows(usage), null);
+    }
+
+    private static List<DailyUsage> dailies(JsonObject usage) {
         List<DailyUsage> daily = new ArrayList<>();
         for (JsonElement e : arr(usage, "dailyUsage")) {
             if (e.isJsonObject()) {
@@ -231,9 +338,7 @@ public final class CreditsClient {
                 }
             }
         }
-        return new CreditsReport(username, date(usage, "startDate"), date(usage, "endDate"),
-                orZero(num(usage, "creditsUsed")), bool(blocked, "blocked"), str(blocked, "capType"),
-                daily, flows(usage), null);
+        return daily;
     }
 
     /**

@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>What's New in Duo Watchdog 0.4.0</title>
+<!-- Shown by the VS Code extension in a webview and by the IntelliJ plugin in a dialog, which reads plain HTML:
+     keep it to headings, paragraphs, lists and images with a width. -->
+<style>
+body { font-family: sans-serif; font-size: 13px; line-height: 1.45; margin: 16px 24px 24px; max-width: 760px; }
+h1 { font-size: 20px; margin: 0 0 4px; }
+h2 { font-size: 15px; margin: 24px 0 6px; }
+p { margin: 4px 0 8px; }
+ul { margin: 4px 0 8px; }
+img { margin: 6px 0 4px; border: 1px solid #c9ccd6; }
+.note { font-size: 12px; opacity: 0.75; }
+</style>
+</head>
+<body>
+<h1>What's new in Duo Watchdog 0.4.0</h1>
+<p class="note">The pictures of the IntelliJ IDEA screens come from their design; the Statistics one is the real view.</p>
+
+<h2>Several accounts, one token each</h2>
+<p>An account is one GitLab user on one GitLab. When you add a token, GitLab says whose it is: a token for an account
+already in the list replaces that account's token, and its group and limit stay. The list puts the most credits left
+first, shows when each token expires, and has the filters <b>All</b>, <b>Has credits</b> and <b>Expired</b> and a
+search. A saved token shows as dots, a missing one as an empty field; the token itself is never shown.</p>
+<img src="accounts.png" width="560" alt="The accounts list in Settings, Tools, Duo Watchdog">
+
+<h2>Add a token, and see what it will do</h2>
+<p>As soon as a token is pasted, the dialog says whether it adds an account or replaces a token. A token GitLab takes
+but that cannot read usage (no <b>ai_features</b> scope) is still added, as <i>not tracked</i>.</p>
+<img src="replace-token.png" width="400" alt="The add-token dialog replacing the token of an account already listed">
+
+<h2>Statistics: your last twelve months</h2>
+<p>A new <b>Statistics</b> tab next to the dashboard: this month, last month, the monthly average and the year; a bar
+a month split by feature; every month as a row; the features over the year; and the credits GitLab did not bill. Show
+one account, or all of them added up.</p>
+<img src="statistics.png" width="400" alt="The Statistics tab: a year of usage by month and feature">
+
+<h2>One account at a time, the others in sight</h2>
+<p>Pick the account in the switcher next to Refresh; type to filter. The status bar follows it, a dot on its meter
+says another account needs a look, and the tooltip lists them all.</p>
+<img src="switcher.png" width="560" alt="The account switcher in the tool window, and the status bar meter with a dot">
+
+<h2>Popups that stay until you close them</h2>
+<ul>
+<li>A token that expires within 3 days, with <b>Replace Token</b> and <b>Create a New Token in GitLab</b>.</li>
+<li>The last alert threshold, the limit, or a block by GitLab.</li>
+<li>A token GitLab turns down, once.</li>
+</ul>
+<img src="popups.png" width="340" alt="Three popups: a token expiring, 95% of the limit, a token turned down">
+
+<h2>glab and the GitLab Duo CLI, if you want them</h2>
+<p>Each account can hand its token to glab for its GitLab, and so to the GitLab Duo CLI, which signs in through glab.
+Both are off until you tick them, one account per GitLab.</p>
+<img src="not-tracked.png" width="400" alt="Adding a glab token that cannot read usage, with glab ticked">
+
+<p class="note">Upgrading from 0.3.0 moved your saved token to its account, with its group, limit and last alert.</p>
+</body>
+</html>

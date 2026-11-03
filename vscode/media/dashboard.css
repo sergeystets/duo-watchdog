@@ -12,6 +12,26 @@
     --popup-border: var(--vscode-editorHoverWidget-border, var(--border));
 }
 
+/* The monthly chart's series: five features and Other. The text beside them stays in the text colour. */
+body {
+    --series-1: #2a78d6;
+    --series-2: #eb6834;
+    --series-3: #1baf7a;
+    --series-4: #eda100;
+    --series-5: #e87ba4;
+    --series-other: #9aa0aa;
+}
+
+body.vscode-dark,
+body.vscode-high-contrast:not(.vscode-high-contrast-light) {
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --series-5: #d55181;
+    --series-other: #6b6f78;
+}
+
 body {
     margin: 0;
     padding: 0;
@@ -483,4 +503,152 @@ svg text.callout-amount {
     fill: var(--text);
     font-size: 12px;
     font-weight: 700;
+}
+
+/* Usage | Statistics, and This account | All accounts. */
+.switch {
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+}
+
+.switch[hidden] {
+    display: none;
+}
+
+.switch button {
+    flex: 1;
+    min-width: 0;
+    height: 22px;
+    padding: 0 8px;
+    border: none;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--secondary);
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.switch button:hover {
+    color: var(--text);
+    background: var(--vscode-toolbar-hoverBackground);
+}
+
+.switch button.on {
+    background: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+}
+
+.switch button:focus-visible {
+    outline: 1px solid var(--vscode-focusBorder);
+    outline-offset: 1px;
+}
+
+.tabs {
+    margin: 10px 16px 0;
+}
+
+.switch.scope {
+    margin-bottom: 12px;
+}
+
+.summary {
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.5;
+}
+
+.legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    margin: 0 0 6px;
+    padding: 0;
+    list-style: none;
+    font-size: 11px;
+    color: var(--text);
+}
+
+.legend li {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+}
+
+.legend .swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    flex: none;
+}
+
+.months {
+    position: relative;
+    height: 196px;
+}
+
+.months-tip {
+    position: absolute;
+    padding: 5px 8px;
+    border: 1px solid var(--popup-border);
+    border-radius: 6px;
+    background: var(--popup);
+    font-size: 12px;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+.s-1 { fill: var(--series-1); background: var(--series-1); }
+.s-2 { fill: var(--series-2); background: var(--series-2); }
+.s-3 { fill: var(--series-3); background: var(--series-3); }
+.s-4 { fill: var(--series-4); background: var(--series-4); }
+.s-5 { fill: var(--series-5); background: var(--series-5); }
+.s-other { fill: var(--series-other); background: var(--series-other); }
+
+svg .seg.dim {
+    fill-opacity: 0.45;
+}
+
+svg text.year {
+    font-size: 10px;
+}
+
+.months-table {
+    width: 100%;
+    margin-top: 14px;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.months-table th {
+    padding: 0 6px 4px 0;
+    border-bottom: 1px solid var(--border);
+    color: var(--secondary);
+    font-weight: 400;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.months-table td {
+    padding: 4px 6px 4px 0;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+}
+
+.months-table .num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.months-table .feature {
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }

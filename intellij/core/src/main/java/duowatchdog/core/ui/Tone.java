@@ -25,6 +25,16 @@ public enum Tone {
     WARNING_BACKGROUND(0xFFF4E5, 0x3D3222),
     ERROR(0xC9302C, 0xE5605A),
     ERROR_BACKGROUND(0xFDECEC, 0x452B2B),
+    /**
+     * The Statistics chart's features, in this fixed order (the validated categorical palette's first five slots),
+     * and the rest folded into one gray.
+     */
+    SERIES_1(0x2A78D6, 0x3987E5),
+    SERIES_2(0xEB6834, 0xD95926),
+    SERIES_3(0x1BAF7A, 0x199E70),
+    SERIES_4(0xEDA100, 0xC98500),
+    SERIES_5(0xE87BA4, 0xD55181),
+    SERIES_OTHER(0x9AA0AA, 0x6B6F78),
     /** The status bar chip and its mini meter. */
     CHIP_BACKGROUND(0xE6EDFC, 0x2C3B5C),
     CHIP_TRACK(0xDFE1E5, 0x4A4D54);

@@ -1,7 +1,7 @@
 {
   "name": "duo-watchdog",
   "displayName": "Duo Watchdog",
-  "description": "Watches your own GitLab Credits (GitLab Duo) for the current billing period, for each of your GitLab accounts: used, left, the month-end forecast, usage by day and by feature, with alerts before you hit your limit.",
+  "description": "Watches your own GitLab Credits (GitLab Duo) for each of your GitLab accounts: used, left, the month-end forecast, usage by day and by feature, a year of statistics, with alerts before you hit your limit.",
   "version": "0.4.0",
   "publisher": "local",
   "license": "UNLICENSED",
@@ -60,6 +60,11 @@
       {
         "command": "duoWatchdog.openSettings",
         "title": "Open Settings",
+        "category": "Duo Watchdog"
+      },
+      {
+        "command": "duoWatchdog.whatsNew",
+        "title": "What's New",
         "category": "Duo Watchdog"
       },
       {

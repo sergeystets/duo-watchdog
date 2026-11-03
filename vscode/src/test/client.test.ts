@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { CreditsClient, endpoint, GitLabError, groupLabel, Transport } from '../core/client';
+import { months, nonBillableTotal, total } from '../core/history';
 
 const SELF_OK = `{"data":{"currentUser":{"username":"alice","creditsUsage":{
   "enabled":true,"startDate":"2026-10-01","endDate":"2026-10-31","creditsUsed":42.37,
@@ -226,4 +227,61 @@ test('a transport that only posts cannot read the token', async () => {
     const postOnly: Transport = { post: async () => ({ status: 200, body: '{}' }) };
     const e = await rejection(new CreditsClient('https://gitlab.com', 't', postOnly).tokenInfo());
     assert.ok(e.message.startsWith('Cannot reach gitlab.com'), e.message);
+});
+
+test('reads a year of history by month and feature', async () => {
+    const http = new FakeTransport()
+        .reply(200, `{"data":{"currentUser":{"creditsUsage":{"startDate":"2026-03-15","endDate":"2026-10-18",
+          "dailyUsage":[{"date":"2026-03-20","creditsUsed":4},{"date":"2026-09-02","creditsUsed":10},
+                        {"date":"2026-10-01","creditsUsed":6}],
+          "usedFlowTypes":[{"id":"chat","title":"Duo Chat"},{"id":"review","title":"Code Review"}]}}}}`)
+        .reply(200, `{"data":{"currentUser":{
+          "f0":{"dailyUsage":[{"date":"2026-03-20","creditsUsed":4},{"date":"2026-10-01","creditsUsed":1}]},
+          "f1":{"dailyUsage":[{"date":"2026-09-02","creditsUsed":10},{"date":"2026-10-01","creditsUsed":5}]}}}}`)
+        .reply(200, `{"data":{"currentUser":{"creditsUsage":{"nonBillableUsage":[
+          {"dailyUsage":[{"date":"2026-10-01","creditsUsed":2.5}]}]}}}}`);
+
+    const h = await new CreditsClient('https://gitlab.com', 't', http).history('acme', '2025-11-01', '2026-10-18');
+
+    assert.equal(http.requests[0].variables.startDate, '2025-11-01');
+    assert.equal(http.requests[0].variables.endDate, '2026-10-18');
+    assert.ok(http.requests[0].query.includes('creditsUsage(namespacePath: $namespacePath, startDate: $startDate, endDate: $endDate)'));
+    const byFlow = http.requests[1];
+    assert.ok(byFlow.query.includes('f1: creditsUsage(namespacePath: $namespacePath, startDate: $startDate, endDate: $endDate, flowTypes: $f1)'),
+        byFlow.query);
+    assert.deepEqual(byFlow.variables.f1, ['review']);
+    assert.ok(http.requests[2].query.includes('nonBillableUsage'));
+    assert.equal(h.start, '2026-03-15', "GitLab moves the start to the subscription's");
+    const all = months(h);
+    assert.equal(all.length, 8, 'March to October');
+    assert.equal(all[0].credits, 4);
+    assert.equal(all[1].credits, 0, 'April: nothing used');
+    assert.equal(all[7].credits, 6);
+    assert.deepEqual(all[7].byFlow.map(f => f.id), ['review', 'chat'], 'most credits first');
+    assert.equal(all[7].byFlow[0].credits, 5);
+    assert.equal(all[7].nonBillable, 2.5);
+    assert.equal(total(h), 20);
+    assert.equal(h.flowsError, null);
+});
+
+test('history stands without the features or the not billed', async () => {
+    const http = new FakeTransport()
+        .reply(200, `{"data":{"currentUser":{"creditsUsage":{"startDate":"2026-10-01","endDate":"2026-10-18",
+          "dailyUsage":[{"date":"2026-10-01","creditsUsed":6}],
+          "usedFlowTypes":[{"id":"chat","title":"Duo Chat"}]}}}}`)
+        .reply(502, '')
+        .reply(200, `{"errors":[{"message":"Field 'nonBillableUsage' doesn't exist on type 'CreditsUsage'"}]}`);
+
+    const h = await new CreditsClient('https://gitlab.com', 't', http).history('acme', '2025-11-01', '2026-10-18');
+
+    assert.equal(total(h), 6);
+    assert.deepEqual(h.flows, []);
+    assert.ok(h.flowsError!.includes('HTTP 502'), h.flowsError!);
+    assert.equal(nonBillableTotal(h), 0);
+});
+
+test('a group GitLab gives no history for says so', async () => {
+    const http = new FakeTransport().reply(200, `{"errors":[{"message":"no access"}],"data":{"currentUser":{"creditsUsage":null}}}`);
+    const e = await rejection(new CreditsClient('https://gitlab.com', 't', http).history('acme', '2025-11-01', '2026-10-18'));
+    assert.equal(e.message, 'GitLab returned no history for "acme": no access.');
 });

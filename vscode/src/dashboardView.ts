@@ -3,6 +3,8 @@ import * as vscode from 'vscode';
 import { Commands } from './commands';
 import { accountsDashboard } from './core/accountsView';
 import { localToday } from './core/dates';
+import { Scope, statisticsView, trackedStates } from './core/statistics';
+import { HistoryCache } from './history';
 import { CreditsService } from './service';
 import { settings } from './settings';
 
@@ -16,18 +18,23 @@ const ACTIONS: Record<string, string> = {
     createToken: 'duoWatchdog.createToken',
 };
 
+export type Tab = 'usage' | 'statistics';
+
 /**
  * The Duo Watchdog view in its own activity bar container. The extension works out the numbers and texts
- * (core/dashboard.ts, core/accountsView.ts) and posts them; media/dashboard.js lays them out and draws the meter
- * and the charts. The account picker at the top switches the account the view and the status bar show.
+ * (core/dashboard.ts, core/accountsView.ts, core/statistics.ts) and posts them; media/dashboard.js lays them out and
+ * draws the meter and the charts. The account picker at the top switches the account the view and the status bar
+ * show; Usage and Statistics switch between this period and the last twelve months.
  */
 export class DashboardView implements vscode.WebviewViewProvider {
 
     static readonly ID = 'duoWatchdog.dashboard';
     private view: vscode.WebviewView | undefined;
+    private tab: Tab = 'usage';
+    private scope: Scope = 'account';
 
     constructor(private readonly extensionUri: vscode.Uri, private readonly service: CreditsService,
-                private readonly commands: Commands) {
+                private readonly commands: Commands, private readonly history: HistoryCache) {
     }
 
     resolveWebviewView(view: vscode.WebviewView): void {
@@ -35,8 +42,14 @@ export class DashboardView implements vscode.WebviewViewProvider {
         const media = vscode.Uri.joinPath(this.extensionUri, 'media');
         view.webview.options = { enableScripts: true, localResourceRoots: [media] };
         view.webview.html = this.html(view.webview, media);
-        view.webview.onDidReceiveMessage((message: { type?: string; id?: unknown }) => {
+        view.webview.onDidReceiveMessage((message: { type?: string; id?: unknown; tab?: unknown; scope?: unknown }) => {
             if (message.type === 'ready') {
+                this.update();
+            } else if (message.type === 'tab' && (message.tab === 'usage' || message.tab === 'statistics')) {
+                this.tab = message.tab;
+                this.update();
+            } else if (message.type === 'scope' && (message.scope === 'account' || message.scope === 'all')) {
+                this.scope = message.scope;
                 this.update();
             } else if (message.type === 'select' && typeof message.id === 'string') {
                 void this.service.select(message.id);
@@ -50,14 +63,30 @@ export class DashboardView implements vscode.WebviewViewProvider {
         view.onDidDispose(() => this.view = undefined);
     }
 
-    /** Posts the current numbers, while the view is open. */
+    /** Refresh: the statistics are asked again too, at once when they are shown. */
+    refreshStatistics(): void {
+        this.history.invalidate();
+        this.update();
+    }
+
+    /** Posts the current numbers, while the view is open; Statistics fetches what it shows first. */
     update(): void {
         if (!this.view?.visible) {
             return;
         }
         const overview = this.service.overview();
-        const model = accountsDashboard(overview.states, overview.selected?.id ?? null, overview.setup,
-            settings().percents, localToday());
+        const today = localToday();
+        const usage = accountsDashboard(overview.states, overview.selected?.id ?? null, overview.setup,
+            settings().percents, today);
+        let statistics = null;
+        if (this.tab === 'statistics') {
+            const wanted = this.scope === 'all' ? trackedStates(overview.states)
+                : overview.selected != null && overview.selected.problem == null ? [overview.selected] : [];
+            this.history.ensure(wanted.map(s => s.account));
+            statistics = statisticsView(this.scope, overview.selected, overview.states,
+                account => this.history.entry(account), today);
+        }
+        const model = { ...usage, tab: this.tab, statistics };
         void this.view.webview.postMessage({ type: 'model', model });
     }
 
@@ -96,6 +125,10 @@ export class DashboardView implements vscode.WebviewViewProvider {
 <div class="account" id="account-row" hidden>
   <label for="account">Account</label>
   <select id="account"></select>
+</div>
+<div class="switch tabs" id="tabs" role="tablist" aria-label="View" hidden>
+  <button role="tab" data-tab="usage" aria-selected="true">Usage</button>
+  <button role="tab" data-tab="statistics" aria-selected="false">Statistics</button>
 </div>
 <main id="page"></main>
 <script nonce="${nonce}" src="${script}"></script>
