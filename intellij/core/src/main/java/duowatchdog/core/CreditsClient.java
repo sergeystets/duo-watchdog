@@ -290,6 +290,17 @@ public final class CreditsClient {
         return months.size() == 1 ? months.get(0) : History.merge(months);
     }
 
+    /**
+     * One calendar month: the current one as the Usage view asks for it, without dates, which gitlab.com answers
+     * where a range it fails on; a past one from its first day to its last.
+     */
+    public History month(String namespace, YearMonth month, LocalDate today) throws GitLabException {
+        History h = month.equals(YearMonth.from(today)) ? historyOf(namespace, null, null)
+                : historyOf(namespace, month.atDay(1), month.atEndOfMonth());
+        log.accept("history " + namespace + " " + month + ": answered");
+        return h;
+    }
+
     /** One range, or with null dates the current period, as the Usage view asks. */
     private History historyOf(String namespace, LocalDate from, LocalDate to) throws GitLabException {
         JsonObject variables = new JsonObject();

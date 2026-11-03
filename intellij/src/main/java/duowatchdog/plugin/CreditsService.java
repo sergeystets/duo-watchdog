@@ -56,9 +56,12 @@ public final class CreditsService implements Disposable {
 
     private final AtomicBoolean loading = new AtomicBoolean();
     private final Map<String, Snapshot> snapshots = new ConcurrentHashMap<>();
-    /** Each account's last year, read when Statistics shows it; kept for {@link #HISTORY_MINUTES}. */
+    /** Each account's months as Statistics last showed them, by account and range; kept {@link #HISTORY_MINUTES}. */
     private final Map<String, CachedHistory> histories = new ConcurrentHashMap<>();
     private static final long HISTORY_MINUTES = 60;
+    /** At most this many months asked of GitLab at once. */
+    private static final java.util.concurrent.ExecutorService MONTHS = AppExecutorUtil
+            .createBoundedApplicationPoolExecutor("Duo Watchdog statistics", 3);
 
     private record CachedHistory(Instant at, String token, History history) {
     }
@@ -148,10 +151,11 @@ public final class CreditsService implements Disposable {
     }
 
     /**
-     * The account's last {@link History#MONTHS} months, from the cache when it is under an hour old and the token is
-     * the same. Asks GitLab, which may block: call off the EDT.
+     * The account's last {@code count} months, a month at a time, three at once: settled months from the disk cache
+     * ({@link HistoryCache}), the others from GitLab. The whole answer is kept for an hour; {@code force} asks again
+     * for the months still changing. May block: call off the EDT.
      */
-    History history(Account account, boolean force) throws GitLabException {
+    History history(Account account, boolean force, int count) throws GitLabException {
         String token = CreditsSettings.getInstance().token(account.id());
         if (token == null || token.isBlank()) {
             throw new GitLabException("No token saved for @" + account.username + " on " + account.host() + ".");
@@ -161,17 +165,71 @@ public final class CreditsService implements Disposable {
             throw new GitLabException("No group path yet for @" + account.username + " on " + account.host()
                     + ": set it in Settings | Tools | Duo Watchdog.");
         }
-        CachedHistory cached = histories.get(account.id());
+        String key = account.id() + "|" + count;
+        CachedHistory cached = histories.get(key);
         if (!force && cached != null && cached.token().equals(token)
                 && cached.at().isAfter(Instant.now().minus(Duration.ofMinutes(HISTORY_MINUTES)))) {
             return cached.history();
         }
         LocalDate today = LocalDate.now();
-        History history = new CreditsClient(account.gitlabUrl, token.trim(), transport())
-                .log(line -> DuoLog.info(account.id() + " " + line))
-                .history(group, History.from(today), today);
-        histories.put(account.id(), new CachedHistory(Instant.now(), token, history));
+        CreditsClient client = new CreditsClient(account.gitlabUrl, token.trim(), transport())
+                .log(line -> DuoLog.info(account.id() + " " + line));
+        List<java.time.YearMonth> wanted = History.monthsFor(count, today);
+        List<java.util.concurrent.Future<History>> asked = new ArrayList<>();
+        for (java.time.YearMonth month : wanted) {
+            asked.add(MONTHS.submit(() -> month(client, account.id(), group, month, today)));
+        }
+        List<History> months = new ArrayList<>();
+        for (int i = 0; i < asked.size(); i++) {
+            try {
+                History h = asked.get(i).get();
+                if (h != null) {
+                    months.add(h);
+                }
+            } catch (java.util.concurrent.ExecutionException e) {
+                if (e.getCause() instanceof GitLabException g && (i == 0 || g.status() > 0 && g.status() < 500)) {
+                    // This month failing, or a refusal of any month, is the answer: not a gap at the old end.
+                    throw g;
+                }
+                DuoLog.warn(account.id() + " history " + wanted.get(i) + ": " + e.getCause());
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new GitLabException("Interrupted while reading the history.");
+            }
+        }
+        History history = months.size() == 1 ? months.get(0) : History.merge(months);
+        histories.put(key, new CachedHistory(Instant.now(), token, history));
         return history;
+    }
+
+    /**
+     * One month: from the disk cache when it is settled and kept, else from GitLab, kept when settled. A settled month
+     * GitLab fails on with a server error lies before the subscription: kept as empty, so it is not asked again.
+     */
+    private static History month(CreditsClient client, String accountId, String group, java.time.YearMonth month,
+                                 LocalDate today) throws GitLabException {
+        boolean settled = History.settled(month, today);
+        if (settled) {
+            History kept = HistoryCache.read(accountId, group, month);
+            if (kept != null) {
+                return kept;
+            }
+        }
+        try {
+            History h = client.month(group, month, today);
+            // A month whose breakdown by feature did not come is asked again next time, not kept without it.
+            if (settled && h.flowsError() == null) {
+                HistoryCache.write(accountId, group, month, h);
+            }
+            return h;
+        } catch (GitLabException e) {
+            if (settled && e.status() >= 500) {
+                DuoLog.info(accountId + " history " + month + ": " + e.getMessage() + ", kept as empty");
+                HistoryCache.write(accountId, group, month, History.none(month));
+                return History.none(month);
+            }
+            throw e;
+        }
     }
 
     /** Starts the periodic refresh; later calls do nothing. */

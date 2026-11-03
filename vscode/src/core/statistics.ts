@@ -170,6 +170,8 @@ function topFeature(month: Month, titles: string[]): string {
 export interface HistoryEntry {
     history: History | null;
     error: string | null;
+    /** "Some months did not load: …": shown beside the months that did. */
+    warning: string | null;
     loading: boolean;
 }
 
@@ -185,6 +187,8 @@ export function trackedStates(states: readonly AccountState[]): AccountState[] {
 
 export interface StatisticsView {
     scope: Scope;
+    /** The months asked for: 3, 6 or 12. */
+    range: number;
     /** For one account with a problem: show the Usage view's notice instead. */
     useNotice: boolean;
     /** Nothing to show yet. */
@@ -197,8 +201,9 @@ export interface StatisticsView {
 
 /** The Statistics view for the selected account, or for every tracked account added up. */
 export function statisticsView(scope: Scope, selected: AccountState | null, states: readonly AccountState[],
-                               entry: (account: Account) => HistoryEntry | undefined, today: IsoDate): StatisticsView {
-    const view: StatisticsView = { scope, useNotice: false, loading: false, errors: [], empty: null, stats: null };
+                               entry: (account: Account) => HistoryEntry | undefined, today: IsoDate,
+                               range = 12): StatisticsView {
+    const view: StatisticsView = { scope, range, useNotice: false, loading: false, errors: [], empty: null, stats: null };
     if (scope === 'account') {
         if (selected == null) {
             return view;
@@ -209,6 +214,9 @@ export function statisticsView(scope: Scope, selected: AccountState | null, stat
         const e = entry(selected.account);
         if (e?.error != null) {
             view.errors.push('Statistics did not load: ' + e.error);
+        }
+        if (e?.warning != null) {
+            view.errors.push(e.warning);
         }
         if (e?.history != null) {
             view.stats = statisticsModel(e.history, today);
@@ -232,6 +240,9 @@ export function statisticsView(scope: Scope, selected: AccountState | null, stat
         }
         if (e?.error != null) {
             view.errors.push('Not included: ' + accountName(s.account) + ': ' + e.error);
+        }
+        if (e?.warning != null) {
+            view.errors.push(accountName(s.account) + ': ' + e.warning);
         }
         pending ||= e == null || e.loading;
     }

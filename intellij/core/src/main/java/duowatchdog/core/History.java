@@ -43,6 +43,31 @@ public record History(LocalDate start, LocalDate end, List<DailyUsage> daily, Li
     public record Month(YearMonth month, double credits, Map<String, Double> byFlow, double nonBillable) {
     }
 
+    /** How long after a month ends GitLab's figures for it may still change: they lag a few hours behind use. */
+    public static final int SETTLE_DAYS = 2;
+
+    /** The ranges the Statistics view offers, in months; the first is its default. */
+    public static final List<Integer> RANGES = List.of(3, 6, 12);
+
+    /** The months to show for a range: this month and the {@code count} - 1 before it, newest first. */
+    public static List<YearMonth> monthsFor(int count, LocalDate today) {
+        List<YearMonth> months = new ArrayList<>();
+        for (int i = 0; i < Math.max(count, 1); i++) {
+            months.add(YearMonth.from(today).minusMonths(i));
+        }
+        return months;
+    }
+
+    /** Whether a month's figures no longer change, so they can be kept rather than asked for again. */
+    public static boolean settled(YearMonth month, LocalDate today) {
+        return today.isAfter(month.atEndOfMonth().plusDays(SETTLE_DAYS - 1));
+    }
+
+    /** An empty month: one GitLab had nothing for, before the subscription. */
+    public static History none(YearMonth month) {
+        return new History(month.atDay(1), month.atEndOfMonth(), List.of(), List.of(), List.of(), null);
+    }
+
     /** The first day of the month {@link #MONTHS} - 1 months before today's: what the Statistics view asks from. */
     public static LocalDate from(LocalDate today) {
         return today.withDayOfMonth(1).minusMonths(MONTHS - 1);

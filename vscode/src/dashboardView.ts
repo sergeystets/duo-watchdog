@@ -3,6 +3,8 @@ import * as vscode from 'vscode';
 import { Commands } from './commands';
 import { accountsDashboard } from './core/accountsView';
 import { localToday } from './core/dates';
+import { RANGE_KEY } from './history';
+import { rangeOrDefault, StatisticsRange } from './core/monthly';
 import { Scope, statisticsView, trackedStates } from './core/statistics';
 import { HistoryCache } from './history';
 import { CreditsService } from './service';
@@ -33,8 +35,14 @@ export class DashboardView implements vscode.WebviewViewProvider {
     private tab: Tab = 'usage';
     private scope: Scope = 'account';
 
+    /** @param state where the Statistics range is remembered */
     constructor(private readonly extensionUri: vscode.Uri, private readonly service: CreditsService,
-                private readonly commands: Commands, private readonly history: HistoryCache) {
+                private readonly commands: Commands, private readonly history: HistoryCache,
+                private readonly state: vscode.Memento) {
+    }
+
+    private get range(): StatisticsRange {
+        return rangeOrDefault(this.state.get(RANGE_KEY));
     }
 
     resolveWebviewView(view: vscode.WebviewView): void {
@@ -42,12 +50,14 @@ export class DashboardView implements vscode.WebviewViewProvider {
         const media = vscode.Uri.joinPath(this.extensionUri, 'media');
         view.webview.options = { enableScripts: true, localResourceRoots: [media] };
         view.webview.html = this.html(view.webview, media);
-        view.webview.onDidReceiveMessage((message: { type?: string; id?: unknown; tab?: unknown; scope?: unknown }) => {
+        view.webview.onDidReceiveMessage((message: { type?: string; id?: unknown; tab?: unknown; scope?: unknown; months?: unknown }) => {
             if (message.type === 'ready') {
                 this.update();
             } else if (message.type === 'tab' && (message.tab === 'usage' || message.tab === 'statistics')) {
                 this.tab = message.tab;
                 this.update();
+            } else if (message.type === 'range' && rangeOrDefault(message.months) === message.months) {
+                void this.state.update(RANGE_KEY, message.months).then(() => this.update());
             } else if (message.type === 'scope' && (message.scope === 'account' || message.scope === 'all')) {
                 this.scope = message.scope;
                 this.update();
@@ -82,9 +92,10 @@ export class DashboardView implements vscode.WebviewViewProvider {
         if (this.tab === 'statistics') {
             const wanted = this.scope === 'all' ? trackedStates(overview.states)
                 : overview.selected != null && overview.selected.problem == null ? [overview.selected] : [];
-            this.history.ensure(wanted.map(s => s.account));
+            const range = this.range;
+            this.history.ensure(wanted.map(s => s.account), range);
             statistics = statisticsView(this.scope, overview.selected, overview.states,
-                account => this.history.entry(account), today);
+                account => this.history.entry(account, range), today, range);
         }
         const model = { ...usage, tab: this.tab, statistics };
         void this.view.webview.postMessage({ type: 'model', model });

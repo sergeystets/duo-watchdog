@@ -6,7 +6,9 @@ import com.intellij.openapi.actionSystem.ActionManager;
 import com.intellij.openapi.actionSystem.ActionToolbar;
 import com.intellij.openapi.actionSystem.ActionUpdateThread;
 import com.intellij.openapi.actionSystem.AnActionEvent;
+import com.intellij.openapi.actionSystem.DataContext;
 import com.intellij.openapi.actionSystem.DefaultActionGroup;
+import com.intellij.openapi.actionSystem.ex.ComboBoxAction;
 import com.intellij.openapi.actionSystem.ToggleAction;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.project.DumbAware;
@@ -62,6 +64,7 @@ final class StatisticsPanel extends SimpleToolWindowPanel implements Disposable 
 
         DefaultActionGroup actions = new DefaultActionGroup();
         actions.add(DumbAwareAction.create("Reload Statistics", AllIcons.Actions.Refresh, e -> load(true)));
+        actions.add(new RangeChooser());
         actions.add(new AllAccountsToggle());
         actions.addSeparator();
         actions.add(new CreditsPanel.AccountSwitcher(project));
@@ -98,7 +101,8 @@ final class StatisticsPanel extends SimpleToolWindowPanel implements Disposable 
     private void load(boolean force) {
         CreditsService service = CreditsService.getInstance();
         Account account = service.selected();
-        String key = allAccounts ? "*" : account != null ? account.id() : "";
+        int count = months();
+        String key = (allAccounts ? "*" : account != null ? account.id() : "") + "|" + count;
         if (!force && key.equals(loadedFor)) {
             return;
         }
@@ -124,7 +128,7 @@ final class StatisticsPanel extends SimpleToolWindowPanel implements Disposable 
         }
         int mine = ++ticket;
         loadedFor = key;
-        statistics.showMessage("Reading " + History.MONTHS + " months from GitLab…", false);
+        statistics.showMessage("Reading " + count + " months from GitLab…", false);
         String scope = allAccounts ? "All accounts" : account.label().substring(0, account.label().indexOf(" · "))
                 + (account.namespace.isBlank() ? "" : " · " + account.namespace);
         ApplicationManager.getApplication().executeOnPooledThread(() -> {
@@ -132,7 +136,7 @@ final class StatisticsPanel extends SimpleToolWindowPanel implements Disposable 
             String error = null;
             for (Account a : accounts) {
                 try {
-                    histories.add(service.history(a, force));
+                    histories.add(service.history(a, force, count));
                 } catch (GitLabException e) {
                     error = (allAccounts ? "@" + a.username + " on " + a.host() + ": " : "") + e.getMessage();
                 }
@@ -168,7 +172,40 @@ final class StatisticsPanel extends SimpleToolWindowPanel implements Disposable 
         ticket++;
     }
 
-    /** "All Accounts": every account's year added up, features merged by name. */
+    /** How many months to show, as chosen: 3, 6 or 12; 3 until chosen. */
+    private static int months() {
+        int chosen = CreditsSettings.getInstance().getState().statisticsMonths;
+        return History.RANGES.contains(chosen) ? chosen : History.RANGES.get(0);
+    }
+
+    /** "3 months ▾": how far back to look. Fewer months, fewer questions to GitLab. */
+    private final class RangeChooser extends ComboBoxAction implements DumbAware {
+
+        @Override
+        public @NotNull ActionUpdateThread getActionUpdateThread() {
+            return ActionUpdateThread.EDT;
+        }
+
+        @Override
+        public void update(@NotNull AnActionEvent e) {
+            e.getPresentation().setText(months() + " months", false);
+            e.getPresentation().setDescription("How many months Statistics shows");
+        }
+
+        @Override
+        protected @NotNull DefaultActionGroup createPopupActionGroup(@NotNull JComponent button, @NotNull DataContext context) {
+            DefaultActionGroup group = new DefaultActionGroup();
+            for (int count : History.RANGES) {
+                group.add(DumbAwareAction.create(count + " months", e -> {
+                    CreditsSettings.getInstance().getState().statisticsMonths = count;
+                    load(false);
+                }));
+            }
+            return group;
+        }
+    }
+
+    /** "All Accounts": every account's months added up, features merged by name. */
     private final class AllAccountsToggle extends ToggleAction implements DumbAware {
 
         AllAccountsToggle() {

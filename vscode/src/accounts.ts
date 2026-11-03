@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { Account, idOf, normalized } from './core/accounts';
+import { cacheFolder } from './core/monthly';
 import { log } from './log';
 
 /** The accounts, without their tokens, in VS Code's global state. */
@@ -67,10 +68,16 @@ export class AccountStore {
         return this.saveAll(this.list().map(a => idOf(a) === id ? { ...a, ...change } : a));
     }
 
-    /** Removes the account and its token. */
+    /** Removes the account, its token and its kept months. */
     async remove(id: string): Promise<void> {
         await this.saveAll(this.list().filter(a => idOf(a) !== id));
         await this.context.secrets.delete(tokenKey(id));
+        try {
+            await vscode.workspace.fs.delete(vscode.Uri.joinPath(this.context.globalStorageUri, ...cacheFolder(id)),
+                { recursive: true, useTrash: false });
+        } catch {
+            // No months kept for it.
+        }
         if (this.selectedId() === id) {
             await this.context.globalState.update(SELECTED_KEY, undefined);
         }

@@ -3,11 +3,12 @@
 ## 0.4.0
 
 - **Statistics:** a **Usage | Statistics** switch at the top of the dashboard. Statistics shows the selected account's
-  last twelve months: this month so far, last month, the monthly average and the year; a stacked bar a month by
-  feature (the five costliest, the rest as Other); every month as a row with its top feature and what GitLab did not
-  bill; and each feature's credits over the year. **This account | All accounts** adds up every account that reads
-  usage. Read when first shown, kept for an hour; **Refresh** reads it again. When GitLab fails on the whole year
-  (gitlab.com can answer HTTP 500), it is read a month at a time, back to where GitLab's data ends.
+  last 3, 6 or 12 months (3 unless you pick another, remembered): this month so far, last month, the monthly average
+  and the total; a stacked bar a month by feature (the five costliest, the rest as Other); every month as a row with
+  its top feature and what GitLab did not bill; and each feature's credits over the range. **This account | All
+  accounts** adds up every account that reads usage. GitLab is asked a month at a time, at most three at once;
+  settled months (two days after their end) are kept on disk and never asked again, so **Reload** asks only for the
+  months that can still change.
 - **What's New:** after an update, a notification links to the new **What's New in Duo Watchdog** page; after a fresh
   install, it says how to start. **Duo Watchdog: What's New** shows the page any time.
 - **Troubleshooting:** a *Duo Watchdog* log (**Duo Watchdog: Show Log**) with each refresh, the statistics requests,

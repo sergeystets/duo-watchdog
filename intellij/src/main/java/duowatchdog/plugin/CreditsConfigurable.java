@@ -1066,6 +1066,7 @@ public final class CreditsConfigurable implements Configurable {
         ApplicationManager.getApplication().executeOnPooledThread(() -> {
             for (String id : gone) {
                 settings.setToken(id, null);
+                HistoryCache.forget(id);
             }
             tokens.forEach(settings::setToken);
             CreditsService.getInstance().syncGlab(tokens.keySet());
