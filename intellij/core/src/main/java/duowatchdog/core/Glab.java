@@ -8,6 +8,10 @@ import java.util.regex.Pattern;
 /**
  * The commands that reach glab, the GitLab CLI: its own executable, or the one inside WSL when the IDE runs on
  * Windows and the project lives in WSL. The token always goes on glab's standard input, never on a command line.
+ *
+ * <p>The WSL scripts hold no double quotes: a Windows command line mangles an argument with a quote in it. And they
+ * go through {@code wsl.exe -e}, which starts bash directly, not {@code wsl.exe --}, which hands the line to the
+ * user's shell first, where {@code $0}, {@code $1} and {@code $HOME} would be expanded before bash sees them.
  */
 public final class Glab {
 
@@ -33,13 +37,14 @@ public final class Glab {
     }
 
     /**
-     * The same inside WSL: {@code wsl.exe [-d <distro>] -- bash -lc 'exec "$1" auth login …'} with glab's path as
-     * {@link #findInWsl} printed it. The host and the path go in as arguments, never into the script.
+     * The same inside WSL: {@code wsl.exe [-d <distro>] -e bash -lc 'exec $1 auth login …'} with glab's path as
+     * {@link #findInWsl} printed it. The host and the path go in as arguments, never into the script; neither has
+     * spaces.
      *
      * @param distro the distribution, or null for WSL's default one
      */
     public static List<String> loginInWsl(String distro, String glab, String host) {
-        return inWsl(distro, "exec \"$1\" auth login --hostname \"$0\" --stdin", host, glab);
+        return inWsl(distro, "exec $1 auth login --hostname $0 --stdin", host, glab);
     }
 
     /**
@@ -49,10 +54,10 @@ public final class Glab {
      */
     public static List<String> findInWsl(String distro) {
         return inWsl(distro, String.join("; ",
-                "for c in \"$(command -v glab 2>/dev/null)\" /usr/bin/glab /usr/local/bin/glab "
-                        + "/home/linuxbrew/.linuxbrew/bin/glab \"$HOME/.linuxbrew/bin/glab\" \"$HOME/.local/bin/glab\" "
-                        + "\"$HOME/go/bin/glab\" \"$HOME/bin/glab\" /snap/bin/glab",
-                "do [ -n \"$c\" ] && [ -x \"$c\" ] && { echo \"$c\"; exit 0; }",
+                "for c in $(command -v glab 2>/dev/null) /usr/bin/glab /usr/local/bin/glab "
+                        + "/home/linuxbrew/.linuxbrew/bin/glab $HOME/.linuxbrew/bin/glab $HOME/.local/bin/glab "
+                        + "$HOME/go/bin/glab $HOME/bin/glab /snap/bin/glab",
+                "do [ -x $c ] && { echo $c; exit 0; }",
                 "done",
                 "bash -ic 'command -v glab' 2>/dev/null | tail -n 1"));
     }
@@ -83,7 +88,7 @@ public final class Glab {
             command.add("-d");
             command.add(distro);
         }
-        command.addAll(List.of("--", "bash", "-lc", script));
+        command.addAll(List.of("-e", "bash", "-lc", script));
         command.addAll(List.of(args));
         return command;
     }

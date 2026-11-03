@@ -146,7 +146,7 @@ later), so ticking it turns glab on too. If the Duo CLI already has a login of i
 keeps using that; Duo Watchdog never writes that file.
 
 Where glab is looked for: on the PATH (and in Homebrew on macOS). **On Windows with the project in WSL**, IntelliJ IDEA
-uses the glab inside that WSL distribution (`wsl.exe -d <distro> -- bash -lc 'glab auth login …'`, the token on its
+uses the glab inside that WSL distribution (`wsl.exe -d <distro> -e bash -lc '…glab auth login …'`, the token on its
 input), since that is where Git and glab run; otherwise `glab.exe` on the Windows PATH, then WSL's default
 distribution. VS Code needs nothing of the kind: with its WSL remote the extension runs inside WSL. Once glab is
 installed, the next refresh hands it the token.

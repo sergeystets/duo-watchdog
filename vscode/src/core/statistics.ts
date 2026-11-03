@@ -146,8 +146,11 @@ function summary(all: Month[], today: IsoDate, sum: number): string {
     const lastMonth = plusMonths(thisMonth + '-01', -1).slice(0, 7);
     const current = all.find(m => m.month === thisMonth)?.credits ?? 0;
     const last = all.find(m => m.month === lastMonth)?.credits ?? 0;
-    // Over the complete months; in the first month, that month so far.
-    const complete = all.filter(m => m.month < thisMonth);
+    // Over the months that are over, from the first with any use (as History.monthlyAverage in the plugin), so months
+    // before the account used Duo do not pull it down; in the first month, that month so far.
+    const over = all.filter(m => m.month < thisMonth);
+    const first = over.findIndex(m => m.credits > 0);
+    const complete = first < 0 ? [] : over.slice(first);
     const average = complete.length === 0 ? current : complete.reduce((s, m) => s + m.credits, 0) / complete.length;
     return ['This month so far ' + grouped(current), 'Last month ' + grouped(last), 'Monthly average ' + grouped(average),
         all.length + (all.length === 1 ? ' month ' : ' months ') + grouped(sum)].join(' · ');

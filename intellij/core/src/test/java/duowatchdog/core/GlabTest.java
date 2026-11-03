@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 class GlabTest {
@@ -24,11 +25,15 @@ class GlabTest {
     void theTokenNeverGoesOnTheCommandLine() {
         assertEquals(List.of("/opt/homebrew/bin/glab", "auth", "login", "--hostname", "gitlab.com", "--stdin"),
                 Glab.login("/opt/homebrew/bin/glab", "gitlab.com"));
-        assertEquals(List.of("wsl.exe", "-d", "Ubuntu", "--", "bash", "-lc",
-                        "exec \"$1\" auth login --hostname \"$0\" --stdin", "gitlab.com", "/home/s/.local/bin/glab"),
+        assertEquals(List.of("wsl.exe", "-d", "Ubuntu", "-e", "bash", "-lc",
+                        "exec $1 auth login --hostname $0 --stdin", "gitlab.com", "/home/s/.local/bin/glab"),
                 Glab.loginInWsl("Ubuntu", "/home/s/.local/bin/glab", "gitlab.com"));
-        assertEquals(List.of("wsl.exe", "--", "bash", "-lc"), Glab.findInWsl(null).subList(0, 4),
-                "no distribution: WSL's default one");
+        assertEquals(List.of("wsl.exe", "-e", "bash", "-lc"), Glab.findInWsl(null).subList(0, 4),
+                "no distribution: WSL's default one, and bash started directly, not through the user's shell");
+        for (List<String> command : List.of(Glab.findInWsl("Ubuntu"), Glab.loginInWsl("Ubuntu", "/usr/bin/glab", "gitlab.com"),
+                Glab.duoStorageInWsl("Ubuntu"))) {
+            command.forEach(arg -> assertFalse(arg.contains("\""), "a Windows command line mangles quotes: " + arg));
+        }
     }
 
     @Test

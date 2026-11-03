@@ -57,7 +57,8 @@ test('numbers group their thousands', () => {
 test('the statistics read as in the brief', () => {
     const s = statisticsModel(year(), TODAY);
 
-    assert.equal(s.summary, 'This month so far 148.6 · Last month 201 · Monthly average 19.2 · 12 months 359.6');
+    // The average starts at the first month with use: the two empty months before it don't count.
+    assert.equal(s.summary, 'This month so far 148.6 · Last month 201 · Monthly average 23.4 · 12 months 359.6');
     assert.deepEqual(s.legend, [
         { label: 'Code Review', slot: '1' }, { label: 'Duo Chat', slot: '2' }, { label: 'Agent', slot: '3' },
         { label: 'Tests', slot: '4' }, { label: 'Docs', slot: '5' }, { label: 'Other', slot: 'other' }]);

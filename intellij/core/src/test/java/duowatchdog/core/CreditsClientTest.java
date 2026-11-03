@@ -254,6 +254,21 @@ class CreditsClientTest {
     }
 
     @Test
+    void theAverageStartsAtTheFirstMonthWithUse() {
+        History h = new History(LocalDate.of(2025, 12, 1), LocalDate.of(2026, 11, 3),
+                List.of(new CreditsReport.DailyUsage(LocalDate.of(2026, 5, 3), 280),
+                        new CreditsReport.DailyUsage(LocalDate.of(2026, 6, 3), 720),
+                        new CreditsReport.DailyUsage(LocalDate.of(2026, 7, 3), 0.5),
+                        new CreditsReport.DailyUsage(LocalDate.of(2026, 11, 2), 27)),
+                List.of(), List.of(), null);
+        // December to April unused; May to October: 1000.5 over six months.
+        assertEquals(1000.5 / 6, h.monthlyAverage(java.time.YearMonth.of(2026, 11)), 1e-9);
+        History fresh = new History(LocalDate.of(2026, 11, 1), LocalDate.of(2026, 11, 3),
+                List.of(new CreditsReport.DailyUsage(LocalDate.of(2026, 11, 2), 27)), List.of(), List.of(), null);
+        assertEquals(27, fresh.monthlyAverage(java.time.YearMonth.of(2026, 11)), 1e-9, "no month over yet: this one");
+    }
+
+    @Test
     void historyGoesMonthByMonthWhenGitLabFailsOnTheYear() throws Exception {
         FakeTransport http = new FakeTransport()
                 .reply(500, "")

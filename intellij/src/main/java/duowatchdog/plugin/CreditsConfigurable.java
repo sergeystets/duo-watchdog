@@ -461,7 +461,8 @@ public final class CreditsConfigurable implements Configurable {
             if (!installed) {
                 notes.add("glab is not installed where the IDE looks (" + CliHandOff.whereLooked() + "), so it "
                         + "doesn't have this token. " + CliHandOff.howToInstall() + ", and Duo Watchdog hands the token "
-                        + "over on its next refresh.");
+                        + "over on its next refresh."
+                        + (CliHandOff.wslSaid().isEmpty() ? "" : " WSL said: " + CliHandOff.wslSaid()));
             } else if (hasIt.test(a)) {
                 notes.add("glab signs in to " + host + " with this token.");
             } else if (live != null && live.glabRefused() && !pending) {

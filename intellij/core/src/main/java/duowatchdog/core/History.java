@@ -100,6 +100,24 @@ public record History(LocalDate start, LocalDate end, List<DailyUsage> daily, Li
         return daily.stream().mapToDouble(DailyUsage::credits).sum();
     }
 
+    /**
+     * The credits of an average month: over the months that are over, from the first with any use, so months before
+     * the account used Duo do not pull it down; this month so far while there are none.
+     */
+    public double monthlyAverage(YearMonth current) {
+        List<Month> all = months();
+        List<Month> counted = new ArrayList<>();
+        for (Month m : all) {
+            if (m.month().isBefore(current) && (!counted.isEmpty() || m.credits() > 0)) {
+                counted.add(m);
+            }
+        }
+        if (counted.isEmpty()) {
+            return all.stream().filter(m -> m.month().equals(current)).mapToDouble(Month::credits).sum();
+        }
+        return counted.stream().mapToDouble(Month::credits).sum() / counted.size();
+    }
+
     public double nonBillableTotal() {
         return nonBillable.stream().mapToDouble(DailyUsage::credits).sum();
     }
