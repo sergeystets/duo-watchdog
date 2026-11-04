@@ -33,6 +33,8 @@ export interface DiagnosticsInput {
     log: string[];
     /** Where the Duo CLI's logs were looked for, and how many sessions they count steps for; undefined when not looked. */
     duoCliLogs?: { folders: { path: string; found: boolean; logs: number }[]; sessions: number };
+    /** The Duo CLI runs whose logs the live meter follows now, in counts; undefined when not asked. */
+    duoCliRuns?: string;
     /** Tokens the extension knows: masked wherever they appear, as is anything shaped like a GitLab token. */
     secrets?: Iterable<string>;
 }
@@ -66,6 +68,7 @@ export function diagnosticsReport(input: DiagnosticsInput): string {
             : input.duoCliLogs.folders.map(f => f.path + (f.found ? ' (' + f.logs + (f.logs === 1 ? ' log)' : ' logs)') : ' (not there)'))
                 .join(', ')),
         'Sessions counted in the Duo CLI logs: ' + (input.duoCliLogs?.sessions ?? 'unknown'),
+        'Duo CLI runs followed now: ' + (input.duoCliRuns ?? 'unknown'),
         'Selected account: ' + (input.selectedId ?? 'none'),
         '',
         'Accounts (' + input.accounts.length + '):',

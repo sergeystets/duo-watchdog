@@ -137,6 +137,22 @@ class RenderTest {
         save("sessions-empty", empty, 470);
     }
 
+    /** The Duo CLI session now, at the top of Sessions: priced, with a model not in the table, and none. */
+    @Test
+    void theSessionNowShowsItsStepsAndCredits() throws IOException {
+        LiveSessionView light = new LiveSessionView(Theme.light(FONT));
+        light.show(new duowatchdog.core.LiveSession.Meter(10208239L, 42, 5, "claude_opus_5", 42 * 0.909));
+        assertTrue(light.isVisible());
+        save("session-now-light", light, 470);
+
+        LiveSessionView dark = new LiveSessionView(Theme.dark(FONT));
+        dark.show(new duowatchdog.core.LiveSession.Meter(null, 0, 1, "gpt_7_mini", null));
+        save("session-now-dark-unpriced", dark, 470);
+
+        dark.show(null);
+        assertTrue(!dark.isVisible() && dark.getComponentCount() == 0);
+    }
+
     @Test
     void theDashboardLaysOutEveryPart() throws IOException {
         Dashboard light = new Dashboard(Theme.light(FONT), () -> { });

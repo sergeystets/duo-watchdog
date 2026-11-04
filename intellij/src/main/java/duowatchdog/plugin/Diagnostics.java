@@ -74,6 +74,7 @@ final class Diagnostics extends DumbAwareAction {
         r.append("Duo CLI login of its own (~/.gitlab/storage.json): ").append(CliHandOff.checkDuoHasOwnLogin() ? "yes" : "no")
                 .append('\n');
         r.append("Duo CLI logs: ").append(CliLogs.describe()).append('\n');
+        r.append("Duo CLI runs followed now: ").append(LiveMeter.getInstance().describe()).append('\n');
 
         CreditsSettings settings = CreditsSettings.getInstance();
         CreditsSettings.Settings s = settings.getState();

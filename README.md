@@ -77,6 +77,8 @@ The status bar shows a doberman icon, a small meter and `$21.5 / 300`: credits u
 - **Normal:** neutral colors while usage is below your lowest alert threshold.
 - **Warning:** amber with a warning icon once usage reaches the lowest threshold.
 - **Blocked:** red `Blocked · $300 / 300` when GitLab blocks Duo because you hit the cap.
+- **Duo CLI session:** while `duo` runs a session, `· CLI 42 steps ≈ $38.2` follows, updated within seconds of each
+  step; the tooltip adds its round trips and model (see [Sessions](#sessions)).
 
 The tooltip shows the remaining credits, the month-end forecast and when the data was last updated.
 Clicking the meter opens the dashboard.
@@ -127,6 +129,9 @@ for the months still changing.
 The **Sessions** tab lists your GitLab Duo Agent Platform sessions (the Duo CLI, Agentic Chat, flows) over **Today**,
 **Yesterday**, the **last 7 or 30 days** or a custom range, with what each cost, **estimated**:
 
+- **The Duo CLI session in progress**, at the top while `duo` runs one: its **steps** (model calls), its **round
+  trips** (prompts you sent), the **model**, and **≈ credits**, each step at that model's credits per call. It
+  updates within about two seconds of each step; click the session's number for its details.
 - The number of **sessions**, the days' **credits**, the part estimated to be **≈ in sessions**, and **Other use**:
   Code Suggestions, classic Chat, and what no session accounts for
 - Credits per **project**
@@ -148,6 +153,45 @@ groups are left out, since another group's credits are not the account's. Days a
 and GitLab lists sessions for about 30 days.
 
 <br clear="right">
+
+**The session in progress** comes from the log the interactive `duo` is writing, not from GitLab, whose credits
+arrive per day and per feature, hours later. Each run of the CLI writes a log of its own,
+`duo-cli-log-<start, UTC>-<the last three folders of where it runs>.log` in `gitlab-duo-cli` in the temporary folder
+(or the project's WSL `/tmp`), and appends each line as it logs it, at its default `debug` level. Duo Watchdog looks
+at the newest of those logs every two seconds and reads only what they gained since: a poll rather than a file
+watcher, since a folder in WSL, reached over `\\wsl$`, reports no changes. It shows the run in the project's folder,
+else the one written to last, until its log has been quiet for 30 minutes. The headless `duo run` prints its log to
+the terminal (stdout, or stderr with `--output-format json`) instead of a file, so the meter does not see it; nor a
+log folder moved with `GITLAB_DUO_CLI_LOG_DIR`. Three kinds of line are looked at, and no more than their first 400
+characters; of them only the time, the session and the one field named:
+
+| Line | Counts as |
+|------|-----------|
+| `[DuoWorkflowNodeExecutor][<session>] [requestID: <id>] Action received` | a **step**, once per session and request |
+| `[RunController] Executing workflow: {"type": "SEND_PROMPT", …}` | a **round trip**; the prompt is not read on or kept |
+| `[ModelResolverService] Using user-selected model: "<identifier>"` | the **model** of the steps after it |
+
+A prompt names no session, so it counts toward the session of the next step. A session resumed from an earlier run
+counts what this run did; the list below it counts its steps in every log. **≈ credits** price each step at its
+model's credits per call, from GitLab's Credits page (checked 2026-11-04), kept in one table in
+[`ModelCredits.java`](intellij/core/src/main/java/duowatchdog/core/ModelCredits.java) and
+[`modelCredits.ts`](vscode/src/core/modelCredits.ts):
+
+| Model | Credits per call |
+|-------|-----------------:|
+| Haiku 5.5 | 0.125 |
+| Haiku 4.5 | 0.149 |
+| Sonnet 5, Sonnet 5.5 | 0.3125 |
+| Sonnet 4.5, Sonnet 4.6 | 0.5 |
+| Opus 5.5 | 0.741 |
+| Opus 4.5 | 0.833 |
+| Opus 5, Opus 4.6, 4.7, 4.8 | 0.909 |
+| Fable 5, Fable 5.1 | 1.667 |
+
+For a model not in the table, or a log that names none, the meter shows the steps and round trips without credits.
+**Tokens are not shown**: GitLab bills each model call at its model's rate, not per token, and the Duo CLI logs no
+token counts. It is an estimate: a step is a model call the CLI logged, and GitLab's own figures are the ones it
+bills.
 
 ### Several accounts
 

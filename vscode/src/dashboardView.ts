@@ -9,7 +9,9 @@ import { Scope, statisticsView, trackedStates } from './core/statistics';
 import { accountGroup } from './core/accounts';
 import { around, contains, dayOf, Range, Session, sessionId, utcToday } from './core/sessions';
 import { DEFAULT_KIND, RANGE_KINDS, RangeKind, rangeOf, sessionsView } from './core/sessionsView';
+import { liveCard } from './core/liveSession';
 import { HistoryCache } from './history';
+import { LiveSessionWatcher } from './liveSession';
 import { log } from './log';
 import { CreditsService } from './service';
 import { SessionsService } from './sessions';
@@ -32,7 +34,8 @@ const TABS: readonly Tab[] = ['usage', 'statistics', 'sessions'];
  * The Duo Watchdog view in its own activity bar container. The extension works out the numbers and texts
  * (core/dashboard.ts, core/accountsView.ts, core/statistics.ts) and posts them; media/dashboard.js lays them out and
  * draws the meter and the charts. The account picker at the top switches the account the view and the status bar
- * show; Usage and Statistics switch between this period and the last twelve months.
+ * show; Usage and Statistics switch between this period and the last twelve months. Sessions starts with the Duo CLI
+ * session in progress, when there is one.
  */
 export class DashboardView implements vscode.WebviewViewProvider {
 
@@ -49,7 +52,15 @@ export class DashboardView implements vscode.WebviewViewProvider {
     /** @param state where the Statistics range is remembered */
     constructor(private readonly extensionUri: vscode.Uri, private readonly service: CreditsService,
                 private readonly commands: Commands, private readonly history: HistoryCache,
-                private readonly state: vscode.Memento, private readonly sessions: SessionsService) {
+                private readonly state: vscode.Memento, private readonly sessions: SessionsService,
+                private readonly live: LiveSessionWatcher) {
+    }
+
+    /** The Duo CLI session now changed: shown on Sessions only. */
+    liveChanged(): void {
+        if (this.tab === 'sessions') {
+            this.update();
+        }
     }
 
     /** Opens the view on a tab: what Duo Watchdog: Sessions does. */
@@ -192,7 +203,8 @@ export class DashboardView implements vscode.WebviewViewProvider {
             sessions = sessionsView(this.sessionsKind, range, selected.problem != null,
                 this.sessions.entry(selected.account, range), accountGroup(selected.account), this.focused, this.sessionsMessage);
         }
-        const model = { ...usage, tab: this.tab, statistics, sessions };
+        const live = this.tab === 'sessions' ? liveCard(this.live.meter()) : null;
+        const model = { ...usage, tab: this.tab, statistics, sessions, live };
         void this.view.webview.postMessage({ type: 'model', model });
     }
 

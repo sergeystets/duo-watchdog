@@ -109,6 +109,9 @@ why; the Usage view is not affected.
 The **Sessions** switch at the top of the dashboard (or **Duo Watchdog: Sessions**) lists the selected account's
 GitLab Duo Agent Platform sessions with an estimate of what each cost:
 
+- **Duo CLI, now**: while `duo` runs a session, its **steps** (model calls), **round trips** (prompts sent), **model**
+  and **≈ credits** (each step at the model's credits per call), updated within about two seconds of each step. The
+  status bar adds `CLI 42 steps ≈ $38.2`, its tooltip the round trips and the model.
 - the days: **Today**, **Yesterday**, **Last 7 days** (the default), **Last 30 days** or **Custom** (two dates). Days are
   UTC days, as GitLab counts usage; GitLab lists sessions for about 30 days.
 - a text box: a session's number (`10208239`, `#10208239`), its gid or its address finds that session, and switches
@@ -133,6 +136,13 @@ The Duo CLI writes its logs to `<temporary folder>/gitlab-duo-cli` (and `/tmp/gi
 on Windows, for a workspace folder in WSL, `\\wsl.localhost\<distro>\tmp\gitlab-duo-cli`). The logs hold prompts
 and code: Duo Watchdog reads only the time, the session and the request of each step, and keeps only the number of
 steps per session and day, so the counts survive the temporary folder being cleaned.
+
+**Duo CLI, now** follows the newest of those logs, every two seconds, reading only what they gained: the steps, the
+`SEND_PROMPT` lines as round trips (the prompt is not read) and `Using user-selected model`, no more than the start of
+each line. It shows the run in a workspace folder, else the one written to last, until its log has been quiet for 30
+minutes. The credits per call come from GitLab's Credits page (checked 2026-11-04), in one table in
+`src/core/modelCredits.ts`; for a model not in it, there are steps and round trips but no credits. Tokens are not
+shown: GitLab bills per model call, not per token.
 
 ## glab and the GitLab Duo CLI
 
