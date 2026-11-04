@@ -42,8 +42,7 @@ export class LiveSessionWatcher implements vscode.Disposable {
      */
     run(): Run | null {
         const folders = (vscode.workspace.workspaceFolders ?? []).map(f => f.uri.fsPath);
-        const run = pickRun(this.runs, folders);
-        return run?.meter != null ? run : null;
+        return pickRun(this.runs, folders);
     }
 
     /** The session to show, as run() picks it; null for none. */

@@ -139,6 +139,23 @@ test("picks the run in the workspace's folder, else the last written", () => {
     assert.equal(folderKey('C:\\x'), 'C-x');
 });
 
+test('a run with nothing counted yet does not hide a session still going', () => {
+    const a: Meter = { session: 1, steps: 4, roundTrips: 2, model: null, credits: null, started: null };
+    const sameFolder: Run[] = [
+        { log: 'duo-cli-log-2026-11-04T10-30-00-dana-projects-notes-service.log', modified: 3000, meter: null },
+        { log: 'duo-cli-log-2026-11-04T10-00-00-dana-projects-notes-service.log', modified: 2000, meter: a },
+    ];
+    const elsewhere: Run[] = [
+        { log: 'duo-cli-log-2026-11-04T10-30-00-dana-projects-sync-worker.log', modified: 3000, meter: null },
+        { log: 'duo-cli-log-2026-11-04T10-00-00-dana-projects-notes-service.log', modified: 2000, meter: a },
+    ];
+
+    assert.equal(pickRun(sameFolder, ['/home/dana/projects/notes-service'])!.meter, a,
+        'duo started again in the folder, with no prompt yet');
+    assert.equal(pickRun(elsewhere, ['/home/dana/elsewhere'])!.meter, a, 'the last written has nothing yet');
+    assert.equal(pickRun([sameFolder[0]], ['/home/dana/projects/notes-service']), null);
+});
+
 test('says the session in the status bar with its run time', () => {
     const m = read(LOG).meter()!;
     const run: Run = { log: NAME, modified: Date.parse('2026-11-04T10:01:04Z'), meter: m };

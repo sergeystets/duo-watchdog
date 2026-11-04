@@ -160,6 +160,22 @@ class LiveSessionTest {
     }
 
     @Test
+    void aRunWithNothingCountedYetDoesNotHideASessionStillGoing() {
+        LiveSession.Meter a = new LiveSession.Meter(1L, 4, 2, null, null, null);
+        List<LiveSession.Run> sameFolder = List.of(
+                new LiveSession.Run("duo-cli-log-2026-11-04T10-30-00-dana-projects-notes-service.log", 3000, null),
+                new LiveSession.Run("duo-cli-log-2026-11-04T10-00-00-dana-projects-notes-service.log", 2000, a));
+        List<LiveSession.Run> elsewhere = List.of(
+                new LiveSession.Run("duo-cli-log-2026-11-04T10-30-00-dana-projects-sync-worker.log", 3000, null),
+                new LiveSession.Run("duo-cli-log-2026-11-04T10-00-00-dana-projects-notes-service.log", 2000, a));
+
+        assertEquals(a, LiveSession.pick(sameFolder, "/home/dana/projects/notes-service").meter(),
+                "duo started again in the folder, with no prompt yet");
+        assertEquals(a, LiveSession.pick(elsewhere, "/home/dana/elsewhere").meter(), "the last written has nothing yet");
+        assertNull(LiveSession.pick(List.of(sameFolder.get(0)), "/home/dana/projects/notes-service"));
+    }
+
+    @Test
     void saysTheSessionInTheStatusBarWithItsRunTime() {
         LiveSession.Meter m = read(LOG).meter();
         LiveSession.Run run = new LiveSession.Run(NAME, Instant.parse("2026-11-04T10:01:04Z").toEpochMilli(), m);

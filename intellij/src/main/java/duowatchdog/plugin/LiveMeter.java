@@ -72,8 +72,7 @@ public final class LiveMeter implements Disposable {
      * null for none.
      */
     public @Nullable LiveSession.Run run(@Nullable Project project) {
-        LiveSession.Run run = LiveSession.pick(runs, project != null ? project.getBasePath() : null);
-        return run != null && run.meter() != null ? run : null;
+        return LiveSession.pick(runs, project != null ? project.getBasePath() : null);
     }
 
     /** The session to show for a project, as {@link #run} picks it; null for none. */
