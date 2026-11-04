@@ -6,11 +6,15 @@ import javax.swing.BorderFactory;
 import javax.swing.JPanel;
 import java.awt.BorderLayout;
 import java.awt.Font;
+import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.LongConsumer;
 
 /**
  * The top of the Sessions tab while the Duo CLI runs a session: its steps, round trips, model and ≈ credits, as the
- * CLI's log says them, updated as it grows; hidden when no session runs.
+ * CLI's log says them, updated as it grows, and when it started; its round trips amber from 80 % of the recommended
+ * most and red at it. Hidden when no session runs.
  */
 public final class LiveSessionView extends Page {
 
@@ -28,12 +32,16 @@ public final class LiveSessionView extends Page {
         this.pick = pick;
     }
 
-    /** @param meter the session now, or null for none */
-    public void show(LiveSession.Meter meter) {
+    /**
+     * @param meter the session now, or null for none
+     * @param zone  the zone to say its start in
+     * @param limit the recommended round trips per session; 0 for none
+     */
+    public void show(LiveSession.Meter meter, ZoneId zone, int limit) {
         clear();
         setVisible(meter != null);
         if (meter != null) {
-            place(new Box(meter), 0);
+            place(new Box(meter, zone, limit), 0);
         }
         revalidate();
         repaint();
@@ -41,7 +49,7 @@ public final class LiveSessionView extends Page {
 
     private final class Box extends Card {
 
-        Box(LiveSession.Meter m) {
+        Box(LiveSession.Meter m, ZoneId zone, int limit) {
             super(theme);
             JPanel top = new JPanel(new BorderLayout(theme.px(8), 0));
             top.setOpaque(false);
@@ -58,6 +66,22 @@ public final class LiveSessionView extends Page {
             body.add(text(LiveSession.what(m), 12, Tone.MUTED));
             body.add(m.credits() != null ? label(LiveSession.credits(m), 17, Font.BOLD, Tone.TEXT)
                     : text(LiveSession.credits(m), 12, Tone.SECONDARY));
+            List<String> when = new ArrayList<>();
+            String started = LiveSession.startedAt(m, zone);
+            if (started != null) {
+                when.add(started);
+            }
+            String limited = LiveSession.limitText(m, limit);
+            if (limited != null) {
+                when.add(limited);
+            }
+            if (!when.isEmpty()) {
+                body.add(text(String.join(" · ", when), 11, switch (LiveSession.level(m, limit)) {
+                    case NORMAL -> Tone.SECONDARY;
+                    case NEAR -> Tone.WARNING;
+                    case OVER -> Tone.ERROR;
+                }));
+            }
             body.add(text(LiveSession.basis(m), 11, Tone.SECONDARY));
             add(body, BorderLayout.CENTER);
         }

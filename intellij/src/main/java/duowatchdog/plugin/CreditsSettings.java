@@ -16,6 +16,7 @@ import duowatchdog.core.Accounts;
 import duowatchdog.core.Alert;
 import duowatchdog.core.CreditsClient.TokenInfo;
 import duowatchdog.core.GitLabAddress;
+import duowatchdog.core.LiveSession;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -163,6 +164,8 @@ public final class CreditsSettings implements PersistentStateComponent<CreditsSe
         public String alertPercents = Alert.DEFAULT_PERCENTS;
         public boolean alertOnForecast = true;
         public int refreshMinutes = 15;
+        /** The round trips per Duo CLI session recommended at most: the status bar's session goes amber, then red. */
+        public int roundTripLimit = LiveSession.RECOMMENDED_ROUND_TRIPS;
         /** Have GitLab rotate a token a week before it expires. */
         public boolean rotateTokens = true;
         /** How many months Statistics shows: one of History.RANGES. */

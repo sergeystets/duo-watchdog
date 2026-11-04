@@ -2,7 +2,6 @@ import * as vscode from 'vscode';
 import { accountStatusText, othersNeedAttention, tooltipModel } from './core/accountsView';
 import { clamp, level, Level } from './core/dashboard';
 import { localToday } from './core/dates';
-import { liveStatusText, liveTooltip, Meter } from './core/liveSession';
 import { Overview } from './service';
 import { settings } from './settings';
 
@@ -14,14 +13,11 @@ const BELL = ' $(bell-dot)';
 /**
  * "$21.5 / 300" with a mini meter in the status bar for the selected account, amber from the lowest alert percent
  * and red once GitLab blocks Duo or turns the token down, with a bell when another account needs attention. The
- * tooltip lists every account; a click opens the dashboard. While the Duo CLI runs a session, its steps and ≈ credits
- * follow, and the tooltip says its round trips and model too.
+ * tooltip lists every account; a click opens the dashboard.
  */
 export class StatusBar implements vscode.Disposable {
 
     private readonly item = vscode.window.createStatusBarItem('duoWatchdog.status', vscode.StatusBarAlignment.Right, 100);
-    private overview: Overview | undefined;
-    private meter: Meter | null = null;
 
     constructor() {
         this.item.name = 'Duo Watchdog';
@@ -30,22 +26,6 @@ export class StatusBar implements vscode.Disposable {
     }
 
     update(overview: Overview): void {
-        this.overview = overview;
-        this.render();
-    }
-
-    /** The Duo CLI session now, or null for none. */
-    live(meter: Meter | null): void {
-        this.meter = meter;
-        this.render();
-    }
-
-    private render(): void {
-        const overview = this.overview;
-        if (overview == null) {
-            return;
-        }
-        const live = this.meter;
         const { percents } = settings();
         const today = localToday();
         const selected = overview.selected;
@@ -54,8 +34,7 @@ export class StatusBar implements vscode.Disposable {
         const lvl: Level = selected?.problem === 'rejected' ? 'blocked' : level(report, limit, percents);
         const meter = report == null ? '' : meterText(lvl === 'blocked' ? 1 : limit > 0 ? report.creditsUsed / limit : 0) + ' ';
         const bell = othersNeedAttention(overview.states, selected?.id ?? null, percents, today) ? BELL : '';
-        this.item.text = ICONS[lvl] + ' ' + meter + accountStatusText(selected, overview.setup) + bell
-            + (live != null ? ' · ' + liveStatusText(live) : '');
+        this.item.text = ICONS[lvl] + ' ' + meter + accountStatusText(selected, overview.setup) + bell;
         this.item.backgroundColor = lvl === 'warning' ? new vscode.ThemeColor('statusBarItem.warningBackground')
             : lvl === 'blocked' ? new vscode.ThemeColor('statusBarItem.errorBackground')
                 : undefined;
@@ -67,7 +46,7 @@ export class StatusBar implements vscode.Disposable {
             tip.appendText(model.attention);
         }
         tip.supportThemeIcons = true;
-        for (const block of live != null ? [...model.blocks, liveTooltip(live)] : model.blocks) {
+        for (const block of model.blocks) {
             tip.appendMarkdown('\n\n**');
             tip.appendText(block.title);
             tip.appendMarkdown('**');

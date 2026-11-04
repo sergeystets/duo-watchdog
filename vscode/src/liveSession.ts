@@ -36,10 +36,19 @@ export class LiveSessionWatcher implements vscode.Disposable {
         void this.poll();
     }
 
-    /** The session to show: the CLI's run in a workspace folder, else the one written to last; null for none. */
-    meter(): Meter | null {
+    /**
+     * The run to show, with something counted: the CLI's in a workspace folder, else the one written to last; null for
+     * none.
+     */
+    run(): Run | null {
         const folders = (vscode.workspace.workspaceFolders ?? []).map(f => f.uri.fsPath);
-        return pickRun(this.runs, folders)?.meter ?? null;
+        const run = pickRun(this.runs, folders);
+        return run?.meter != null ? run : null;
+    }
+
+    /** The session to show, as run() picks it; null for none. */
+    meter(): Meter | null {
+        return this.run()?.meter ?? null;
     }
 
     /** For Copy Diagnostics: the runs followed now, in counts. */

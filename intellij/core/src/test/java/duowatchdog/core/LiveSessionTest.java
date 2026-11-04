@@ -2,6 +2,9 @@ package duowatchdog.core;
 
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -10,6 +13,9 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LiveSessionTest {
+
+    private static final ZoneId UTC = ZoneId.of("UTC");
+    private static final String NAME = "duo-cli-log-2026-11-04T09-59-58-dana-projects-notes-service.log";
 
     /** Never to be kept: in a prompt, and in a prompt that quotes the lines the meter counts. */
     private static final String SECRET = "rotate the key sk-live-0000 in billing.yml";
@@ -32,7 +38,7 @@ class LiveSessionTest {
             """.formatted(SECRET, SECRET);
 
     private static LiveSession read(String log) {
-        LiveSession live = new LiveSession();
+        LiveSession live = new LiveSession(UTC);
         log.lines().forEach(live::line);
         return live;
     }
@@ -46,14 +52,17 @@ class LiveSessionTest {
         assertEquals(2, m.roundTrips());
         assertEquals("claude_opus_5", m.model(), "a prompt quoting a model line does not change the model");
         assertEquals(3 * 0.909, m.credits(), 1e-9);
+        assertEquals(Instant.parse("2026-11-04T10:00:05Z"), m.started(), "from its first prompt");
     }
 
     @Test
     void keepsNothingOfAPrompt() {
         LiveSession.Meter m = read(LOG).meter();
+        LiveSession.Run run = new LiveSession.Run(NAME, Instant.parse("2026-11-04T10:01:04Z").toEpochMilli(), m);
+        Instant now = Instant.parse("2026-11-04T10:01:10Z");
 
         for (String shown : List.of(m.toString(), LiveSession.what(m), LiveSession.credits(m), LiveSession.basis(m),
-                LiveSession.statusText(m), LiveSession.tooltipHtml(m))) {
+                LiveSession.barText(run, now), LiveSession.tooltipHtml(run, now, UTC, 20))) {
             assertFalse(shown.contains("sk-live") || shown.contains("billing"), shown);
         }
     }
@@ -99,7 +108,8 @@ class LiveSessionTest {
         assertEquals(1, m.steps());
         assertEquals(1, m.roundTrips());
         assertNull(m.credits());
-        assertEquals("CLI 1 step", LiveSession.statusText(m));
+        LiveSession.Run run = new LiveSession.Run(NAME, Instant.parse("2026-11-04T10:00:02Z").toEpochMilli(), m);
+        assertEquals("30s · 1 round trip · 1 step", LiveSession.barText(run, Instant.parse("2026-11-04T10:00:31Z")));
         assertEquals("No ≈ credits: no rate known for gpt_7_mini", LiveSession.credits(m));
     }
 
@@ -111,7 +121,7 @@ class LiveSessionTest {
 
     @Test
     void looksAtTheStartOfALineOnly() {
-        LiveSession live = new LiveSession();
+        LiveSession live = new LiveSession(UTC);
         live.line("2026-11-04T10:00:00:000 [debug]: " + "x".repeat(LiveSession.HEAD)
                 + "[DuoWorkflowNodeExecutor][1] [requestID: a] Action received");
         assertNull(live.meter());
@@ -134,8 +144,8 @@ class LiveSessionTest {
 
     @Test
     void picksTheRunInTheProjectsFolderElseTheLastWritten() {
-        LiveSession.Meter a = new LiveSession.Meter(1L, 1, 1, null, null);
-        LiveSession.Meter b = new LiveSession.Meter(2L, 2, 1, null, null);
+        LiveSession.Meter a = new LiveSession.Meter(1L, 1, 1, null, null, null);
+        LiveSession.Meter b = new LiveSession.Meter(2L, 2, 1, null, null, null);
         List<LiveSession.Run> runs = List.of(
                 new LiveSession.Run("duo-cli-log-2026-11-04T09-00-00-dana-projects-sync-worker.log", 2000, a),
                 new LiveSession.Run("duo-cli-log-2026-11-04T08-00-00-dana-projects-notes-service.log", 1000, b));
@@ -150,13 +160,36 @@ class LiveSessionTest {
     }
 
     @Test
-    void addsTheSessionToTheTooltip() {
+    void saysTheSessionInTheStatusBarWithItsRunTime() {
         LiveSession.Meter m = read(LOG).meter();
-        String tooltip = LiveSession.addTo("<html><b>Duo Watchdog</b><br>Used 1 of 2<br>Click for details.</html>", m);
+        LiveSession.Run run = new LiveSession.Run(NAME, Instant.parse("2026-11-04T10:01:04Z").toEpochMilli(), m);
+        Instant now = Instant.parse("2026-11-04T10:01:10Z");
 
-        assertTrue(tooltip.contains("<br><br><b>Duo CLI, now</b> — session 10208239<br>Opus 5 · 3 steps · 2 round trips"
+        assertEquals("1m 5s · 2 round trips · 3 steps · ≈ $2.7", LiveSession.barText(run, now),
+                "running from its first prompt to now, while its log is written to");
+        String tooltip = LiveSession.tooltipHtml(run, now, UTC, 20);
+        assertTrue(tooltip.startsWith("<html><b>Duo CLI, now</b> — session 10208239<br>Opus 5 · 3 steps · 2 round trips"
                 + "<br>≈ 2.7 credits, an estimate"), tooltip);
-        assertTrue(tooltip.endsWith("<br>Click for details.</html>"), tooltip);
-        assertEquals("CLI 3 steps ≈ $2.7", LiveSession.statusText(m));
+        assertTrue(tooltip.contains("<br>Started 10:00, running 1m 5s<br>2 of 20 recommended round trips<br>"), tooltip);
+
+        Instant later = Instant.parse("2026-11-04T10:30:00Z");
+        assertEquals(Duration.ofSeconds(59), LiveSession.runTime(run, later), "a quiet log stops the clock at its last line");
+        assertEquals("Started 10:00, 59s, quiet since 10:01", LiveSession.started(run, later, UTC));
+    }
+
+    @Test
+    void coloursTheRoundTripsAgainstTheRecommendedMost() {
+        assertEquals(LiveSession.Level.NORMAL, LiveSession.level(trips(15), 20));
+        assertEquals(LiveSession.Level.NEAR, LiveSession.level(trips(16), 20), "from 80 %");
+        assertEquals(LiveSession.Level.OVER, LiveSession.level(trips(20), 20));
+        assertEquals(LiveSession.Level.NORMAL, LiveSession.level(trips(500), 0), "no limit, no colour");
+        assertNull(LiveSession.limitText(trips(5), 0));
+        assertEquals("45s", LiveSession.duration(Duration.ofSeconds(45)));
+        assertEquals("12m 4s", LiveSession.duration(Duration.ofSeconds(12 * 60 + 4)));
+        assertEquals("1h 2m", LiveSession.duration(Duration.ofSeconds(3725)));
+    }
+
+    private static LiveSession.Meter trips(int roundTrips) {
+        return new LiveSession.Meter(1L, roundTrips, roundTrips, null, null, null);
     }
 }

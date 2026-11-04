@@ -44,6 +44,7 @@ import duowatchdog.core.CreditsReport;
 import duowatchdog.core.CreditsView;
 import duowatchdog.core.GitLabAddress;
 import duowatchdog.core.GitLabException;
+import duowatchdog.core.LiveSession;
 import duowatchdog.core.Snapshot;
 import duowatchdog.plugin.CreditsSettings.Account;
 import org.jetbrains.annotations.NotNull;
@@ -151,6 +152,7 @@ public final class CreditsConfigurable implements Configurable {
     private JBTextField alertPercents;
     private JBCheckBox alertOnForecast;
     private JBIntSpinner refreshMinutes;
+    private JBIntSpinner roundTripLimit;
     private JBCheckBox rotateTokens;
 
     /** What {@link #open} asked for before the page was built. */
@@ -259,6 +261,11 @@ public final class CreditsConfigurable implements Configurable {
         JBLabel minutes = new JBLabel("minutes");
         minutes.setBorder(JBUI.Borders.emptyLeft(8));
         refreshRow.add(minutes);
+        roundTripLimit = new JBIntSpinner(LiveSession.RECOMMENDED_ROUND_TRIPS, 0, 1000);
+        JPanel roundTripRow = left(roundTripLimit);
+        JBLabel perSession = new JBLabel("round trips per session");
+        perSession.setBorder(JBUI.Borders.emptyLeft(8));
+        roundTripRow.add(perSession);
 
         panel = FormBuilder.createFormBuilder()
                 .addComponent(new TitledSeparator("Accounts"))
@@ -274,6 +281,9 @@ public final class CreditsConfigurable implements Configurable {
                 .addComponentToRightColumn(hint("For every account, of that account's limit."))
                 .addComponentToRightColumn(alertOnForecast)
                 .addLabeledComponent("Refresh every:", refreshRow)
+                .addLabeledComponent("Duo CLI, at most:", roundTripRow)
+                .addComponentToRightColumn(hint("The prompts you send in one Duo CLI session. The session in the status "
+                        + "bar and in Sessions turns amber from 80% of it and red at it; 0 for no colour."))
                 .addComponent(new TitledSeparator("Tokens"), JBUI.scale(16))
                 .addComponent(rotateTokens)
                 .addComponent(hint("A week before a token expires, GitLab replaces it with a new one that lives as long "
@@ -1018,6 +1028,7 @@ public final class CreditsConfigurable implements Configurable {
         return !alertPercents.getText().trim().equals(s.alertPercents)
                 || alertOnForecast.isSelected() != s.alertOnForecast
                 || refreshMinutes.getNumber() != s.refreshMinutes
+                || roundTripLimit.getNumber() != s.roundTripLimit
                 || rotateTokens.isSelected() != s.rotateTokens;
     }
 
@@ -1074,6 +1085,7 @@ public final class CreditsConfigurable implements Configurable {
         s.alertPercents = newPercents;
         s.alertOnForecast = alertOnForecast.isSelected();
         s.refreshMinutes = refreshMinutes.getNumber();
+        s.roundTripLimit = roundTripLimit.getNumber();
         s.rotateTokens = rotateTokens.isSelected();
 
         Map<String, String> tokens = new HashMap<>(pendingTokens);
@@ -1112,6 +1124,7 @@ public final class CreditsConfigurable implements Configurable {
         alertPercents.setText(s.alertPercents);
         alertOnForecast.setSelected(s.alertOnForecast);
         refreshMinutes.setNumber(s.refreshMinutes);
+        roundTripLimit.setNumber(s.roundTripLimit);
         rotateTokens.setSelected(s.rotateTokens);
         shown = null;
         refreshRows();

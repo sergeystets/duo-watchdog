@@ -110,8 +110,10 @@ The **Sessions** switch at the top of the dashboard (or **Duo Watchdog: Sessions
 GitLab Duo Agent Platform sessions with an estimate of what each cost:
 
 - **Duo CLI, now**: while `duo` runs a session, its **steps** (model calls), **round trips** (prompts sent), **model**
-  and **≈ credits** (each step at the model's credits per call), updated within about two seconds of each step. The
-  status bar adds `CLI 42 steps ≈ $38.2`, its tooltip the round trips and the model.
+  and **≈ credits** (each step at the model's credits per call), updated within about two seconds of each step, with
+  when it started. A second status bar item shows `▰▰▱▱▱▱ 12m 4s · 5 round trips · 42 steps · ≈ $38.2`: its round trips
+  toward the recommended most (`duoWatchdog.roundTripLimit`, 20), amber from 80% of it and red at it, then how long it
+  has run (ticking while the CLI writes its log, stopped once the log is quiet for a minute) and what it has used.
 - the days: **Today**, **Yesterday**, **Last 7 days** (the default), **Last 30 days** or **Custom** (two dates). Days are
   UTC days, as GitLab counts usage; GitLab lists sessions for about 30 days.
 - a text box: a session's number (`10208239`, `#10208239`), its gid or its address finds that session, and switches
@@ -181,6 +183,7 @@ Open *Settings → Extensions → Duo Watchdog*:
 | `duoWatchdog.alertPercents` | `80, 95` | Percentages of each account's limit that trigger an alert |
 | `duoWatchdog.forecastAlert` | `true` | Alert when the month-end forecast passes the limit |
 | `duoWatchdog.refreshMinutes` | `15` | How often to fetch new data for every account |
+| `duoWatchdog.roundTripLimit` | `20` | Round trips recommended at most per Duo CLI session; amber from 80%, red at it; `0` for no colour |
 
 Commands (*Ctrl/Cmd+Shift+P*, type "Duo Watchdog"): **Accounts**, **Add or Replace a Token**, **Find My Group**,
 **Create the Token in GitLab**, **Refresh**, **Open Dashboard**, **Sessions**, **Open Settings**, **What's New**,

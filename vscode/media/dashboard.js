@@ -377,7 +377,10 @@
         return card;
     }
 
-    /** The Duo CLI session in progress: its steps, round trips, model and ≈ credits, updated as its log grows. */
+    /**
+     * The Duo CLI session in progress: its steps, round trips, model and ≈ credits, updated as its log grows, and when
+     * it started, amber or red as its round trips near or reach the recommended most.
+     */
     function liveCard(c) {
         const card = el('div', 'session-details live-session');
         card.setAttribute('role', 'status');
@@ -391,8 +394,9 @@
         } else {
             top.append(el('span', 'small secondary', 'A new session'));
         }
-        card.append(top, el('p', 'secondary', c.what), el('p', c.priced ? 'live-credits' : 'secondary', c.credits),
-            el('p', 'small secondary', c.basis));
+        card.append(top, el('p', 'secondary', c.what), el('p', c.priced ? 'live-credits' : 'secondary', c.credits));
+        if (c.when) card.append(el('p', 'small ' + (c.level === 'normal' ? 'secondary' : 'live-' + c.level), c.when));
+        card.append(el('p', 'small secondary', c.basis));
         return card;
     }
 

@@ -1,5 +1,5 @@
 import { promises as fs } from 'fs';
-import { HEAD, LiveSession, Meter } from './liveSession';
+import { HEAD, LiveSession, LOCAL_CLOCK, LogClock, Meter } from './liveSession';
 
 /**
  * One Duo CLI log followed as it grows: each read takes the lines it gained since, up to the end of its last whole
@@ -8,8 +8,13 @@ import { HEAD, LiveSession, Meter } from './liveSession';
  */
 export class LiveLog {
 
-    private session = new LiveSession();
+    private session: LiveSession;
     private offset = 0;
+
+    /** @param clock the zone the log's times are in: the one of the machine the CLI runs on */
+    constructor(private readonly clock: LogClock = LOCAL_CLOCK) {
+        this.session = new LiveSession(clock);
+    }
 
     meter(): Meter | null {
         return this.session.meter();
@@ -19,7 +24,7 @@ export class LiveLog {
     async read(file: string): Promise<void> {
         const size = (await fs.stat(file)).size;
         if (size < this.offset) {
-            this.session = new LiveSession();
+            this.session = new LiveSession(this.clock);
             this.offset = 0;
         }
         if (size === this.offset) {

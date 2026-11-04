@@ -77,11 +77,17 @@ The status bar shows a doberman icon, a small meter and `$21.5 / 300`: credits u
 - **Normal:** neutral colors while usage is below your lowest alert threshold.
 - **Warning:** amber with a warning icon once usage reaches the lowest threshold.
 - **Blocked:** red `Blocked · $300 / 300` when GitLab blocks Duo because you hit the cap.
-- **Duo CLI session:** while `duo` runs a session, `· CLI 42 steps ≈ $38.2` follows, updated within seconds of each
-  step; the tooltip adds its round trips and model (see [Sessions](#sessions)).
 
 The tooltip shows the remaining credits, the month-end forecast and when the data was last updated.
 Clicking the meter opens the dashboard.
+
+**While `duo` runs a session**, a second, small item beside it shows the session:
+`12m 4s · 5 round trips · 42 steps · ≈ $38.2`. That is how long it has run, ticking every second while the CLI writes
+its log and stopping once the log has been quiet for a minute; then the prompts you sent, the model calls, and the
+≈ credits (see [Sessions](#sessions)). Its mini meter fills with round trips toward the **recommended most per
+session** (20 unless you set another, 0 for none): neutral, then **amber** from 80% of it, **red** at it. The tooltip
+adds the model, when the session started and `17 of 20 recommended round trips`; a click opens Sessions. The item is
+hidden when no session runs.
 
 ### Dashboard tool window
 
@@ -130,8 +136,9 @@ The **Sessions** tab lists your GitLab Duo Agent Platform sessions (the Duo CLI,
 **Yesterday**, the **last 7 or 30 days** or a custom range, with what each cost, **estimated**:
 
 - **The Duo CLI session in progress**, at the top while `duo` runs one: its **steps** (model calls), its **round
-  trips** (prompts you sent), the **model**, and **≈ credits**, each step at that model's credits per call. It
-  updates within about two seconds of each step; click the session's number for its details.
+  trips** (prompts you sent), the **model**, and **≈ credits**, each step at that model's credits per call, with when
+  it started and its round trips against the recommended most, amber or red as they near or reach it. It updates
+  within about two seconds of each step; click the session's number for its details.
 - The number of **sessions**, the days' **credits**, the part estimated to be **≈ in sessions**, and **Other use**:
   Code Suggestions, classic Chat, and what no session accounts for
 - Credits per **project**
@@ -171,7 +178,8 @@ characters; of them only the time, the session and the one field named:
 | `[RunController] Executing workflow: {"type": "SEND_PROMPT", …}` | a **round trip**; the prompt is not read on or kept |
 | `[ModelResolverService] Using user-selected model: "<identifier>"` | the **model** of the steps after it |
 
-A prompt names no session, so it counts toward the session of the next step. A session resumed from an earlier run
+A prompt names no session, so it counts toward the session of the next step, and the session's run time starts at
+its first prompt (else its first step), by the CLI machine's clock. A session resumed from an earlier run
 counts what this run did; the list below it counts its steps in every log. **≈ credits** price each step at its
 model's credits per call, from GitLab's Credits page (checked 2026-11-04), kept in one table in
 [`ModelCredits.java`](intellij/core/src/main/java/duowatchdog/core/ModelCredits.java) and
@@ -489,6 +497,7 @@ Shared by every account:
 | **Alert at % of limit** | Comma-separated thresholds, e.g. `50, 80, 95`, each of the account's own limit |
 | **Alert when the month-end forecast passes the limit** | Turns the forecast alert on or off |
 | **Refresh every … minutes** | Polling interval. Default: `15`. GitLab's data can lag a few minutes behind actual use. |
+| **Duo CLI, at most … round trips per session** | The prompts recommended at most in one Duo CLI session. Default: `20`; `0` for no colour. The session in the status bar and in Sessions turns amber from 80% of it, red at it. |
 | **Rotate tokens a week before they expire** | On by default. See [Token rotation](#token-rotation). |
 
 The box under the token field shows the token's state:
@@ -522,6 +531,7 @@ group, limit and last alert, to that account.
 | `duoWatchdog.forecastAlert` | `true` | Alert when the month-end forecast passes the limit |
 | `duoWatchdog.refreshMinutes` | `15` | Polling interval in minutes |
 | `duoWatchdog.rotateTokens` | `true` | Rotate each account's token a week before it expires: see [Token rotation](#token-rotation) |
+| `duoWatchdog.roundTripLimit` | `20` | Round trips recommended at most per Duo CLI session; amber from 80%, red at it; `0` for no colour |
 
 `duoWatchdog.groupPath` and `duoWatchdog.limit` are deprecated: each account has its own now. They are read once,
 when the token saved by 0.3.0 moves to its account. Tokens are kept in VS Code's secret storage, one per account.

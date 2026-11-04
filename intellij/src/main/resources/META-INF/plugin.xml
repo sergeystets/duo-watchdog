@@ -61,6 +61,10 @@
                                  instance="duowatchdog.plugin.CreditsConfigurable"/>
         <statusBarWidgetFactory id="DuoWatchdog"
                                 implementation="duowatchdog.plugin.CreditsWidgetFactory"/>
+        <!-- The Duo CLI session in progress, beside the credits; shown only while one runs. -->
+        <statusBarWidgetFactory id="DuoWatchdogCli"
+                                order="after DuoWatchdog"
+                                implementation="duowatchdog.plugin.LiveWidgetFactory"/>
         <toolWindow id="Duo Watchdog"
                     anchor="right"
                     secondary="true"

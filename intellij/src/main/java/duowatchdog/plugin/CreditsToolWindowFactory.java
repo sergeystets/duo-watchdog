@@ -71,4 +71,20 @@ public final class CreditsToolWindowFactory implements ToolWindowFactory, DumbAw
             window.show();
         }
     }
+
+    /** Opens the tool window on its Sessions tab. */
+    static void showSessions(@Nullable Project project) {
+        if (project == null || project.isDisposed()) {
+            return;
+        }
+        ToolWindow window = ToolWindowManager.getInstance(project).getToolWindow(ID);
+        if (window != null) {
+            window.show(() -> {
+                Content sessions = window.getContentManager().findContent("Sessions");
+                if (sessions != null) {
+                    window.getContentManager().setSelectedContent(sessions);
+                }
+            });
+        }
+    }
 }

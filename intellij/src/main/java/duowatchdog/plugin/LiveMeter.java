@@ -15,6 +15,7 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -66,9 +67,18 @@ public final class LiveMeter implements Disposable {
         }
     }
 
-    /** The session to show for a project: the CLI's run in its folder, else the one written to last; null for none. */
-    public @Nullable LiveSession.Meter meter(@Nullable Project project) {
+    /**
+     * The run to show for a project, with something counted: the CLI's in its folder, else the one written to last;
+     * null for none.
+     */
+    public @Nullable LiveSession.Run run(@Nullable Project project) {
         LiveSession.Run run = LiveSession.pick(runs, project != null ? project.getBasePath() : null);
+        return run != null && run.meter() != null ? run : null;
+    }
+
+    /** The session to show for a project, as {@link #run} picks it; null for none. */
+    public @Nullable LiveSession.Meter meter(@Nullable Project project) {
+        LiveSession.Run run = run(project);
         return run != null ? run.meter() : null;
     }
 
@@ -100,7 +110,7 @@ public final class LiveMeter implements Disposable {
                     if (now - modified > ACTIVE.toMillis()) {
                         continue;
                     }
-                    LiveLog tail = tails.computeIfAbsent(log, p -> new LiveLog());
+                    LiveLog tail = tails.computeIfAbsent(log, p -> new LiveLog(ZoneId.systemDefault()));
                     tail.read(log);
                     followed.add(log);
                     found.add(new LiveSession.Run(log.getFileName().toString(), modified, tail.meter()));

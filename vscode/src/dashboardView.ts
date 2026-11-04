@@ -203,7 +203,7 @@ export class DashboardView implements vscode.WebviewViewProvider {
             sessions = sessionsView(this.sessionsKind, range, selected.problem != null,
                 this.sessions.entry(selected.account, range), accountGroup(selected.account), this.focused, this.sessionsMessage);
         }
-        const live = this.tab === 'sessions' ? liveCard(this.live.meter()) : null;
+        const live = this.tab === 'sessions' ? liveCard(this.live.meter(), settings().roundTripLimit) : null;
         const model = { ...usage, tab: this.tab, statistics, sessions, live };
         void this.view.webview.postMessage({ type: 'model', model });
     }

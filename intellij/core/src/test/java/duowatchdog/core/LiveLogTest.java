@@ -7,6 +7,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.time.Instant;
+import java.time.ZoneId;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -27,12 +29,13 @@ class LiveLogTest {
     @Test
     void readsWhatTheLogGainsAsItGrows(@TempDir Path dir) throws Exception {
         Path log = dir.resolve("duo-cli-log-2026-11-04T09-59-58-dana-projects-notes-service.log");
-        LiveLog live = new LiveLog();
+        LiveLog live = new LiveLog(ZoneId.of("UTC"));
         String second = step(7, "b");
         append(log, MODEL + PROMPT + "x\"}\n" + step(7, "a") + second.substring(0, 50));
 
         live.read(log);
-        assertEquals(new LiveSession.Meter(7L, 1, 1, "claude_sonnet_5_5", 0.3125), live.meter(),
+        Instant started = Instant.parse("2026-11-04T10:00:01Z");
+        assertEquals(new LiveSession.Meter(7L, 1, 1, "claude_sonnet_5_5", 0.3125, started), live.meter(),
                 "a line not yet ended waits");
 
         append(log, second.substring(50));
@@ -41,11 +44,12 @@ class LiveLogTest {
 
         append(log, PROMPT + "y".repeat(1_000_000) + "\"}\n" + step(7, "c"));
         live.read(log);
-        assertEquals(new LiveSession.Meter(7L, 3, 2, "claude_sonnet_5_5", 3 * 0.3125), live.meter(),
+        assertEquals(new LiveSession.Meter(7L, 3, 2, "claude_sonnet_5_5", 3 * 0.3125, started), live.meter(),
                 "a long prompt is one round trip");
 
         Files.writeString(log, step(9, "a"), StandardCharsets.UTF_8);
         live.read(log);
-        assertEquals(new LiveSession.Meter(9L, 1, 0, null, null), live.meter(), "a log made again is read from its start");
+        assertEquals(new LiveSession.Meter(9L, 1, 0, null, null, Instant.parse("2026-11-04T10:00:02Z")), live.meter(),
+                "a log made again is read from its start");
     }
 }

@@ -6,6 +6,7 @@ import java.nio.channels.SeekableByteChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.ZoneId;
 
 /**
  * One Duo CLI log followed as it grows: each read takes the lines it gained since, up to the end of its last whole
@@ -14,8 +15,15 @@ import java.nio.file.Path;
  */
 public final class LiveLog {
 
-    private LiveSession session = new LiveSession();
+    private final ZoneId zone;
+    private LiveSession session;
     private long offset;
+
+    /** @param zone the zone the log's times are in: the one of the machine the CLI runs on */
+    public LiveLog(ZoneId zone) {
+        this.zone = zone;
+        session = new LiveSession(zone);
+    }
 
     public LiveSession.Meter meter() {
         return session.meter();
@@ -25,7 +33,7 @@ public final class LiveLog {
     public void read(Path log) throws IOException {
         long size = Files.size(log);
         if (size < offset) {
-            session = new LiveSession();
+            session = new LiveSession(zone);
             offset = 0;
         }
         if (size == offset) {

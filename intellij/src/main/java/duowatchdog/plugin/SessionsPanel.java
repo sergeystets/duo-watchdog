@@ -183,14 +183,21 @@ final class SessionsPanel extends SimpleToolWindowPanel implements Disposable {
 
         MessageBusConnection bus = ApplicationManager.getApplication().getMessageBus().connect(this);
         bus.subscribe(CreditsListener.TOPIC, () -> {
+            showLive(project);
             if (visible) {
                 load(false);
             }
         });
-        bus.subscribe(LiveMeter.Listener.TOPIC, () -> live.show(LiveMeter.getInstance().meter(project)));
+        bus.subscribe(LiveMeter.Listener.TOPIC, () -> showLive(project));
         LiveMeter.getInstance().start();
-        live.show(LiveMeter.getInstance().meter(project));
+        showLive(project);
         view.showMessage("Sessions load when this tab is shown.", false);
+    }
+
+    /** The Duo CLI session now, with the round trips recommended at most. */
+    private void showLive(Project project) {
+        live.show(LiveMeter.getInstance().meter(project), ZoneId.systemDefault(),
+                CreditsSettings.getInstance().getState().roundTripLimit);
     }
 
     /** The tab was shown or hidden. */

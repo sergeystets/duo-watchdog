@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { DEFAULT_LIMIT, OldSettings } from './core/accounts';
 import { DEFAULT_PERCENTS, percentsOrDefault } from './core/alert';
+import { RECOMMENDED_ROUND_TRIPS } from './core/liveSession';
 
 export const SECTION = 'duoWatchdog';
 /**
@@ -21,6 +22,8 @@ export interface Settings {
     refreshMinutes: number;
     /** Have GitLab rotate a token a week before it expires. */
     rotateTokens: boolean;
+    /** The round trips per Duo CLI session recommended at most; 0 for no colour. */
+    roundTripLimit: number;
 }
 
 export function settings(): Settings {
@@ -33,6 +36,7 @@ export function settings(): Settings {
         forecastAlert: c.get<boolean>('forecastAlert', true),
         refreshMinutes: Math.max(1, c.get<number>('refreshMinutes', 15)),
         rotateTokens: c.get<boolean>('rotateTokens', true),
+        roundTripLimit: Math.max(0, c.get<number>('roundTripLimit', RECOMMENDED_ROUND_TRIPS)),
     };
 }
 

@@ -10,6 +10,7 @@ import { GlabSync } from './glabSync';
 import { HistoryCache } from './history';
 import { nodeTransport } from './httpTransport';
 import { LiveSessionWatcher } from './liveSession';
+import { LiveStatusBar } from './liveStatusBar';
 import { log } from './log';
 import { CreditsService } from './service';
 import { OLD_TOKEN_KEY, SECTION, settings } from './settings';
@@ -29,6 +30,7 @@ export function activate(context: vscode.ExtensionContext): void {
     const logs = new DuoCliLogScanner(context.globalStorageUri);
     const sessions = new SessionsService(store, nodeTransport, history, logs);
     const live = new LiveSessionWatcher();
+    const liveBar = new LiveStatusBar();
     const dashboard = new DashboardView(context.extensionUri, service, commands, history, context.globalState, sessions,
         live);
 
@@ -40,12 +42,13 @@ export function activate(context: vscode.ExtensionContext): void {
         sessions,
         sessions.onDidChange(() => dashboard.update()),
         live,
+        liveBar,
         live.onDidChange(() => {
-            statusBar.live(live.meter());
+            liveBar.update(live.run());
             dashboard.liveChanged();
         }),
         // Which run of the Duo CLI is the workspace's.
-        vscode.workspace.onDidChangeWorkspaceFolders(() => statusBar.live(live.meter())),
+        vscode.workspace.onDidChangeWorkspaceFolders(() => liveBar.update(live.run())),
         // glab follows the picked account; a refresh catches up with tokens added or glab installed since.
         service.onDidRefresh(() => void glab.sync()),
         vscode.window.registerWebviewViewProvider(DashboardView.ID, dashboard),
@@ -57,6 +60,10 @@ export function activate(context: vscode.ExtensionContext): void {
             if (e.affectsConfiguration(SECTION)) {
                 warnAboutPercents();
                 service.reschedule();
+            }
+            if (e.affectsConfiguration(SECTION + '.roundTripLimit')) {
+                liveBar.update(live.run());
+                dashboard.liveChanged();
             }
         }),
         // A token saved or deleted here or in another window.

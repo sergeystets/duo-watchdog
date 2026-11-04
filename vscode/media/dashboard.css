@@ -848,6 +848,15 @@ button.secondary-button:focus-visible {
     font-weight: 700;
 }
 
+.live-near {
+    color: var(--warning);
+}
+
+.live-over {
+    color: var(--error);
+    font-weight: 700;
+}
+
 .live-credits {
     font-size: 17px;
     font-weight: 700;
