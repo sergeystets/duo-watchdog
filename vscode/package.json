@@ -4,7 +4,7 @@
   "description": "Watches your own GitLab Credits (GitLab Duo) for each of your GitLab accounts: used, left, the month-end forecast, usage by day and by feature, a year of statistics, with alerts before you hit your limit.",
   "version": "0.4.0",
   "publisher": "local",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/sergeystets/duo-watchdog"

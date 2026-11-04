@@ -65,6 +65,7 @@ GitLab Credits usage for the current billing period, forecast where the month wi
 - [Building from source](#building-from-source)
 - [Project structure](#project-structure)
 - [Troubleshooting](#troubleshooting)
+- [License](#license)
 
 ## Features
 
@@ -746,3 +747,8 @@ Duo Watchdog uses the IDE's own HTTP proxy and certificate settings. Check
 
 That's expected: GitLab shows a user's cap only to group owners. Enter your limit in the settings.
 </details>
+
+## License
+
+Duo Watchdog is released under the [MIT License](LICENSE). Anyone may use, copy, modify and redistribute it,
+including in commercial projects, as long as the copyright and license notice stay with the code.
