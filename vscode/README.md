@@ -109,6 +109,11 @@ why; the Usage view is not affected.
 The **Sessions** switch at the top of the dashboard (or **Duo Watchdog: Sessions**) lists the selected account's
 GitLab Duo Agent Platform sessions with an estimate of what each cost:
 
+- **Duo CLI, now**: while `duo` runs a session, its **steps** (model calls), **round trips** (prompts sent), **model**
+  and **≈ credits** (each step at the model's credits per call), updated within about two seconds of each step, with
+  when it started. A second status bar item shows `▰▰▱▱▱▱ 12m 4s · 5 round trips · 42 steps · ≈ $38.2`: its round trips
+  toward the recommended most (`duoWatchdog.roundTripLimit`, 20), amber from 80% of it and red at it, then how long it
+  has run (ticking while the CLI writes its log, stopped once the log is quiet for a minute) and what it has used.
 - the days: **Today**, **Yesterday**, **Last 7 days** (the default), **Last 30 days** or **Custom** (two dates). Days are
   UTC days, as GitLab counts usage; GitLab lists sessions for about 30 days.
 - a text box: a session's number (`10208239`, `#10208239`), its gid or its address finds that session, and switches
@@ -133,6 +138,13 @@ The Duo CLI writes its logs to `<temporary folder>/gitlab-duo-cli` (and `/tmp/gi
 on Windows, for a workspace folder in WSL, `\\wsl.localhost\<distro>\tmp\gitlab-duo-cli`). The logs hold prompts
 and code: Duo Watchdog reads only the time, the session and the request of each step, and keeps only the number of
 steps per session and day, so the counts survive the temporary folder being cleaned.
+
+**Duo CLI, now** follows the newest of those logs, every two seconds, reading only what they gained: the steps, the
+`SEND_PROMPT` lines as round trips (the prompt is not read) and `Using user-selected model`, no more than the start of
+each line. It shows the run in a workspace folder, else the one written to last, until its log has been quiet for 30
+minutes. The credits per call come from GitLab's Credits page (checked 2026-11-04), in one table in
+`src/core/modelCredits.ts`; for a model not in it, there are steps and round trips but no credits. Tokens are not
+shown: GitLab bills per model call, not per token.
 
 ## glab and the GitLab Duo CLI
 
@@ -171,6 +183,7 @@ Open *Settings → Extensions → Duo Watchdog*:
 | `duoWatchdog.alertPercents` | `80, 95` | Percentages of each account's limit that trigger an alert |
 | `duoWatchdog.forecastAlert` | `true` | Alert when the month-end forecast passes the limit |
 | `duoWatchdog.refreshMinutes` | `15` | How often to fetch new data for every account |
+| `duoWatchdog.roundTripLimit` | `20` | Round trips recommended at most per Duo CLI session; amber from 80%, red at it; `0` for no colour |
 
 Commands (*Ctrl/Cmd+Shift+P*, type "Duo Watchdog"): **Accounts**, **Add or Replace a Token**, **Find My Group**,
 **Create the Token in GitLab**, **Refresh**, **Open Dashboard**, **Sessions**, **Open Settings**, **What's New**,

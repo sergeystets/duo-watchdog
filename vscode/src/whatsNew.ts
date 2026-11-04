@@ -10,7 +10,7 @@ export const LAST_SEEN_KEY = 'duoWatchdog.lastSeenVersion';
 const SETTINGS = ['gitlabUrl', 'groupPath', 'limit', 'alertPercents', 'forecastAlert', 'refreshMinutes'];
 
 /**
- * Once after an update, "Duo Watchdog 0.4.0: several accounts, statistics and more.", or after a fresh install, how
+ * Once after an update, "Duo Watchdog 0.5.0: the Duo CLI session live in the status bar, and token rotation.", or after a fresh install, how
  * to start. Call it before the first refresh, which may move the token saved by 0.3 to an account.
  */
 export async function announceRelease(context: vscode.ExtensionContext, store: AccountStore): Promise<void> {

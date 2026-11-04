@@ -23,6 +23,7 @@ import com.intellij.ui.ScrollPaneFactory;
 import com.intellij.ui.SearchTextField;
 import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.components.JBTextField;
+import com.intellij.util.messages.MessageBusConnection;
 import com.intellij.util.ui.FormBuilder;
 import com.intellij.util.ui.JBUI;
 import duowatchdog.core.CreditsView;
@@ -31,6 +32,7 @@ import duowatchdog.core.GitLabException;
 import duowatchdog.core.History;
 import duowatchdog.core.Sessions;
 import duowatchdog.core.Snapshot;
+import duowatchdog.core.ui.LiveSessionView;
 import duowatchdog.core.ui.SessionsView;
 import duowatchdog.plugin.CreditsSettings.Account;
 import org.jetbrains.annotations.NotNull;
@@ -56,7 +58,8 @@ import java.util.Map;
 
 /**
  * The tool window's Sessions tab: the chosen account's Agent Platform sessions over the chosen days, with what each
- * cost, estimated. A session can be looked up by its number, or the last one shown, wherever it falls.
+ * cost, estimated. A session can be looked up by its number, or the last one shown, wherever it falls. Above them,
+ * while the Duo CLI runs a session, what it has used so far ({@link LiveMeter}).
  */
 final class SessionsPanel extends SimpleToolWindowPanel implements Disposable {
 
@@ -78,6 +81,7 @@ final class SessionsPanel extends SimpleToolWindowPanel implements Disposable {
     }
 
     private final SessionsView view;
+    private final LiveSessionView live;
     private final SearchTextField search = new SearchTextField(false);
     private Preset preset = Preset.WEEK;
     /** The days shown when not a preset's. */
@@ -125,7 +129,14 @@ final class SessionsPanel extends SimpleToolWindowPanel implements Disposable {
         JScrollPane scroll = ScrollPaneFactory.createScrollPane(view, true);
         scroll.getViewport().setBackground(background);
         scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
-        setContent(scroll);
+        live = new LiveSessionView(DuoIcons.theme());
+        live.setBackground(background);
+        live.onPick(this::find);
+        JPanel content = new JPanel(new BorderLayout());
+        content.setBackground(background);
+        content.add(live, BorderLayout.NORTH);
+        content.add(scroll, BorderLayout.CENTER);
+        setContent(content);
 
         DefaultActionGroup actions = new DefaultActionGroup();
         actions.add(DumbAwareAction.create("Reload Sessions", AllIcons.Actions.Refresh, e -> load(true)));
@@ -170,13 +181,23 @@ final class SessionsPanel extends SimpleToolWindowPanel implements Disposable {
         bar.add(searchRow, BorderLayout.SOUTH);
         setToolbar(bar);
 
-        ApplicationManager.getApplication().getMessageBus().connect(this)
-                .subscribe(CreditsListener.TOPIC, () -> {
-                    if (visible) {
-                        load(false);
-                    }
-                });
+        MessageBusConnection bus = ApplicationManager.getApplication().getMessageBus().connect(this);
+        bus.subscribe(CreditsListener.TOPIC, () -> {
+            showLive(project);
+            if (visible) {
+                load(false);
+            }
+        });
+        bus.subscribe(LiveMeter.Listener.TOPIC, () -> showLive(project));
+        LiveMeter.getInstance().start();
+        showLive(project);
         view.showMessage("Sessions load when this tab is shown.", false);
+    }
+
+    /** The Duo CLI session now, with the round trips recommended at most. */
+    private void showLive(Project project) {
+        live.show(LiveMeter.getInstance().meter(project), ZoneId.systemDefault(),
+                CreditsSettings.getInstance().getState().roundTripLimit);
     }
 
     /** The tab was shown or hidden. */

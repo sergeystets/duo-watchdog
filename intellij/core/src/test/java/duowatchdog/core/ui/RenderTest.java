@@ -137,6 +137,23 @@ class RenderTest {
         save("sessions-empty", empty, 470);
     }
 
+    /** The Duo CLI session now, at the top of Sessions: priced and near its round trips, unpriced, and none. */
+    @Test
+    void theSessionNowShowsItsStepsAndCredits() throws IOException {
+        LiveSessionView light = new LiveSessionView(Theme.light(FONT));
+        light.show(new duowatchdog.core.LiveSession.Meter(10208239L, 42, 17, "claude_opus_5", 42 * 0.909,
+                Instant.parse("2026-11-04T09:48:00Z")), java.time.ZoneId.of("UTC"), 20);
+        assertTrue(light.isVisible());
+        save("session-now-light", light, 470);
+
+        LiveSessionView dark = new LiveSessionView(Theme.dark(FONT));
+        dark.show(new duowatchdog.core.LiveSession.Meter(null, 0, 1, "gpt_7_mini", null, null), java.time.ZoneId.of("UTC"), 0);
+        save("session-now-dark-unpriced", dark, 470);
+
+        dark.show(null, java.time.ZoneId.of("UTC"), 20);
+        assertTrue(!dark.isVisible() && dark.getComponentCount() == 0);
+    }
+
     @Test
     void theDashboardLaysOutEveryPart() throws IOException {
         Dashboard light = new Dashboard(Theme.light(FONT), () -> { });
@@ -206,6 +223,16 @@ class RenderTest {
             chip.show((String) state[0], (StatusChip.Level) state[1], (double) state[2], true);
             chip.setBackground(new Color(0xF7F8FA));
             save("chip-" + i++, chip, chip.getPreferredSize().width);
+        }
+        // The Duo CLI session: its round trips against the 20 recommended.
+        for (Object[] state : new Object[][]{
+                {"4m 12s · 5 round trips · 42 steps · ≈ $38.2", StatusChip.Level.NORMAL, 5 / 20.0},
+                {"31m 2s · 17 round trips · 160 steps · ≈ $145.4", StatusChip.Level.WARNING, 17 / 20.0},
+                {"1h 4m · 23 round trips · 301 steps · ≈ $273.6", StatusChip.Level.BLOCKED, 1.0}}) {
+            StatusChip chip = new StatusChip(theme, dog, warn, stop);
+            chip.show((String) state[0], (StatusChip.Level) state[1], (double) state[2], true);
+            chip.setBackground(new Color(0xF7F8FA));
+            save("chip-cli-" + i++, chip, chip.getPreferredSize().width);
         }
     }
 

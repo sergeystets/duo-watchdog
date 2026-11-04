@@ -377,8 +377,32 @@
         return card;
     }
 
-    /** Agent Platform sessions in a range, with what each cost as far as it can be told. */
+    /**
+     * The Duo CLI session in progress: its steps, round trips, model and ≈ credits, updated as its log grows, and when
+     * it started, amber or red as its round trips near or reach the recommended most.
+     */
+    function liveCard(c) {
+        const card = el('div', 'session-details live-session');
+        card.setAttribute('role', 'status');
+        const top = el('div', 'live-top');
+        top.append(el('p', 'notice-title', 'Duo CLI, now'));
+        if (c.session != null) {
+            const show = el('button', 'link', 'Session ' + c.session);
+            show.title = 'Show this session in full';
+            show.addEventListener('click', () => vscode.postMessage({ type: 'sessionsFind', text: String(c.session) }));
+            top.append(show);
+        } else {
+            top.append(el('span', 'small secondary', 'A new session'));
+        }
+        card.append(top, el('p', 'secondary', c.what), el('p', c.priced ? 'live-credits' : 'secondary', c.credits));
+        if (c.when) card.append(el('p', 'small ' + (c.level === 'normal' ? 'secondary' : 'live-' + c.level), c.when));
+        card.append(el('p', 'small secondary', c.basis));
+        return card;
+    }
+
+    /** Agent Platform sessions in a range, with what each cost as far as it can be told; the Duo CLI's now first. */
     function renderSessions(sv) {
+        if (model.live) page.append(liveCard(model.live));
         if (!sv) return;
         const kinds = el('div', 'switch kinds');
         kinds.setAttribute('role', 'radiogroup');

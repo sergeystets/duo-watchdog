@@ -20,7 +20,7 @@ export function releaseNotice(current: string, lastSeen: string | null | undefin
 }
 
 export function upgradeText(version: string): string {
-    return 'Duo Watchdog ' + version + ': several accounts, statistics and more.';
+    return 'Duo Watchdog ' + version + ': the Duo CLI session live in the status bar, and token rotation.';
 }
 
 export const FRESH_TEXT = 'Duo Watchdog is installed. Add a GitLab token to start.';

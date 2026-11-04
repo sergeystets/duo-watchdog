@@ -8,7 +8,7 @@ test('an update or a fresh install is said once a version', () => {
     assert.equal(releaseNotice('0.4.0', undefined, true), 'upgrade', '0.3 set up, but it did not remember versions');
     assert.equal(releaseNotice('0.4.0', undefined, false), 'fresh');
     assert.equal(releaseNotice('0.4.0', '', false), 'fresh');
-    assert.equal(upgradeText('0.4.0'), 'Duo Watchdog 0.4.0: several accounts, statistics and more.');
+    assert.equal(upgradeText('0.5.0'), 'Duo Watchdog 0.5.0: the Duo CLI session live in the status bar, and token rotation.');
 });
 
 test('only paths inside the page folder are images of its own', () => {

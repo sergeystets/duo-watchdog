@@ -100,7 +100,7 @@ export class DuoCliLogScanner {
 }
 
 /** The first of the paths that is a folder. */
-async function firstFolder(paths: readonly string[]): Promise<string | null> {
+export async function firstFolder(paths: readonly string[]): Promise<string | null> {
     for (const p of paths) {
         try {
             if ((await fs.stat(p)).isDirectory()) {

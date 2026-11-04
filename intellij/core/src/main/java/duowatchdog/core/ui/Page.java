@@ -104,6 +104,18 @@ abstract class Page extends JPanel implements Scrollable {
         return label;
     }
 
+    JLabel link(String text, Runnable action) {
+        JLabel link = label(text, 11, Font.PLAIN, Tone.ACCENT);
+        link.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
+        link.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                action.run();
+            }
+        });
+        return link;
+    }
+
     JTextArea text(String text, double size, Tone tone) {
         JTextArea area = new JTextArea(text);
         area.setLineWrap(true);

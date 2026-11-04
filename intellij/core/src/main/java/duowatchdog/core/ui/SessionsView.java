@@ -9,7 +9,6 @@ import duowatchdog.core.Sessions.Share;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
-import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Cursor;
 import java.awt.Dimension;
@@ -154,12 +153,10 @@ public final class SessionsView extends Page {
     }
 
     /** The picked session: what it was, when, its estimate and how it was made, and a way to it in GitLab. */
-    private final class Details extends JPanel {
+    private final class Details extends Card {
 
         Details(Estimate e, String group, ZoneId zone) {
-            super(new BorderLayout());
-            setOpaque(false);
-            setBorder(javax.swing.BorderFactory.createEmptyBorder(theme.px(10), theme.px(12), theme.px(10), theme.px(12)));
+            super(theme);
             Sessions.Session s = e.session();
 
             JPanel top = new JPanel(new BorderLayout(theme.px(8), 0));
@@ -204,34 +201,6 @@ public final class SessionsView extends Page {
             body.add(links);
             add(body, BorderLayout.CENTER);
         }
-
-        @Override
-        protected void paintComponent(Graphics g) {
-            Graphics2D g2 = Draw.smooth(g);
-            try {
-                RoundRectangle2D box = new RoundRectangle2D.Double(0.5, 0.5, getWidth() - 1, getHeight() - 1,
-                        theme.px(16), theme.px(16));
-                g2.setColor(Draw.tint(this, theme, 0.03));
-                g2.fill(box);
-                g2.setColor(theme.color(Tone.BORDER));
-                g2.setStroke(new BasicStroke(1));
-                g2.draw(box);
-            } finally {
-                g2.dispose();
-            }
-        }
-    }
-
-    private JLabel link(String text, Runnable action) {
-        JLabel link = label(text, 11, Font.PLAIN, Tone.ACCENT);
-        link.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        link.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseClicked(MouseEvent e) {
-                action.run();
-            }
-        });
-        return link;
     }
 
     /**

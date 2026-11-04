@@ -826,3 +826,39 @@ button.secondary-button:focus-visible {
     margin: 6px 0;
     padding-left: 16px;
 }
+
+/* The Duo CLI session in progress, above the range. */
+.live-session {
+    margin: 0 0 12px;
+}
+
+.live-session p {
+    margin: 4px 0;
+}
+
+.live-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+}
+
+.live-top .notice-title {
+    margin: 0;
+    font-weight: 700;
+}
+
+.live-near {
+    color: var(--warning);
+}
+
+.live-over {
+    color: var(--error);
+    font-weight: 700;
+}
+
+.live-credits {
+    font-size: 17px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}

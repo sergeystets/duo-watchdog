@@ -17,7 +17,7 @@ GitLab Credits usage for the current billing period, forecast where the month wi
 ![Java](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-VS_Code_extension-3178C6?logo=typescript&logoColor=white)
 ![GitLab](https://img.shields.io/badge/GitLab-Duo-FC6D26?logo=gitlab&logoColor=white)
-![Version](https://img.shields.io/badge/version-0.4.0-blue)
+![Version](https://img.shields.io/badge/version-0.5.0-blue)
 
 </div>
 
@@ -28,6 +28,19 @@ GitLab Credits usage for the current billing period, forecast where the month wi
 </p>
 
 ---
+
+## What's new in 0.5.0
+
+- **The Duo CLI session, live**: while `duo` runs a session, a small status bar item beside the credits shows how long
+  it has run, its round trips (prompts you sent), its steps (model calls) and its ≈ credits, each step at its model's
+  credits per call: `12m 4s · 5 round trips · 42 steps · ≈ $38.2`, updated within seconds of each step. Its mini meter
+  fills toward a recommended most of round trips per session (20 unless you set another), amber from 80% of it and
+  red at it. The Sessions tab starts with the same session. Read from the CLI's own log; no tokens are shown, since
+  GitLab bills per model call. See [Sessions](#sessions).
+- **Token rotation**: a week before an account's token expires, GitLab replaces it with a new one that lives as long,
+  saved and handed to glab, with **Copy the New Token** for wherever else you use it. On by default. Each account says
+  when its token rotates, or why it won't. See [Token rotation](#token-rotation).
+- Released under the [MIT License](#license).
 
 ## What's new in 0.4.0
 
@@ -55,6 +68,7 @@ GitLab Credits usage for the current billing period, forecast where the month wi
 
 ## Contents
 
+- [What's new in 0.5.0](#whats-new-in-050)
 - [What's new in 0.4.0](#whats-new-in-040)
 - [Features](#features)
 - [VS Code](#vs-code)
@@ -80,6 +94,14 @@ The status bar shows a doberman icon, a small meter and `$21.5 / 300`: credits u
 
 The tooltip shows the remaining credits, the month-end forecast and when the data was last updated.
 Clicking the meter opens the dashboard.
+
+**While `duo` runs a session**, a second, small item beside it shows the session:
+`12m 4s · 5 round trips · 42 steps · ≈ $38.2`. That is how long it has run, ticking every second while the CLI writes
+its log and stopping once the log has been quiet for a minute; then the prompts you sent, the model calls, and the
+≈ credits (see [Sessions](#sessions)). Its mini meter fills with round trips toward the **recommended most per
+session** (20 unless you set another, 0 for none): neutral, then **amber** from 80% of it, **red** at it. The tooltip
+adds the model, when the session started and `17 of 20 recommended round trips`; a click opens Sessions. The item is
+hidden when no session runs.
 
 ### Dashboard tool window
 
@@ -127,6 +149,10 @@ for the months still changing.
 The **Sessions** tab lists your GitLab Duo Agent Platform sessions (the Duo CLI, Agentic Chat, flows) over **Today**,
 **Yesterday**, the **last 7 or 30 days** or a custom range, with what each cost, **estimated**:
 
+- **The Duo CLI session in progress**, at the top while `duo` runs one: its **steps** (model calls), its **round
+  trips** (prompts you sent), the **model**, and **≈ credits**, each step at that model's credits per call, with when
+  it started and its round trips against the recommended most, amber or red as they near or reach it. It updates
+  within about two seconds of each step; click the session's number for its details.
 - The number of **sessions**, the days' **credits**, the part estimated to be **≈ in sessions**, and **Other use**:
   Code Suggestions, classic Chat, and what no session accounts for
 - Credits per **project**
@@ -148,6 +174,46 @@ groups are left out, since another group's credits are not the account's. Days a
 and GitLab lists sessions for about 30 days.
 
 <br clear="right">
+
+**The session in progress** comes from the log the interactive `duo` is writing, not from GitLab, whose credits
+arrive per day and per feature, hours later. Each run of the CLI writes a log of its own,
+`duo-cli-log-<start, UTC>-<the last three folders of where it runs>.log` in `gitlab-duo-cli` in the temporary folder
+(or the project's WSL `/tmp`), and appends each line as it logs it, at its default `debug` level. Duo Watchdog looks
+at the newest of those logs every two seconds and reads only what they gained since: a poll rather than a file
+watcher, since a folder in WSL, reached over `\\wsl$`, reports no changes. It shows the run in the project's folder,
+else the one written to last, until its log has been quiet for 30 minutes. The headless `duo run` prints its log to
+the terminal (stdout, or stderr with `--output-format json`) instead of a file, so the meter does not see it; nor a
+log folder moved with `GITLAB_DUO_CLI_LOG_DIR`. Three kinds of line are looked at, and no more than their first 400
+characters; of them only the time, the session and the one field named:
+
+| Line | Counts as |
+|------|-----------|
+| `[DuoWorkflowNodeExecutor][<session>] [requestID: <id>] Action received` | a **step**, once per session and request |
+| `[RunController] Executing workflow: {"type": "SEND_PROMPT", …}` | a **round trip**; the prompt is not read on or kept |
+| `[ModelResolverService] Using user-selected model: "<identifier>"` | the **model** of the steps after it |
+
+A prompt names no session, so it counts toward the session of the next step, and the session's run time starts at
+its first prompt (else its first step), by the CLI machine's clock. A session resumed from an earlier run
+counts what this run did; the list below it counts its steps in every log. **≈ credits** price each step at its
+model's credits per call, from GitLab's Credits page (checked 2026-11-04), kept in one table in
+[`ModelCredits.java`](intellij/core/src/main/java/duowatchdog/core/ModelCredits.java) and
+[`modelCredits.ts`](vscode/src/core/modelCredits.ts):
+
+| Model | Credits per call |
+|-------|-----------------:|
+| Haiku 5.5 | 0.125 |
+| Haiku 4.5 | 0.149 |
+| Sonnet 5, Sonnet 5.5 | 0.3125 |
+| Sonnet 4.5, Sonnet 4.6 | 0.5 |
+| Opus 5.5 | 0.741 |
+| Opus 4.5 | 0.833 |
+| Opus 5, Opus 4.6, 4.7, 4.8 | 0.909 |
+| Fable 5, Fable 5.1 | 1.667 |
+
+For a model not in the table, or a log that names none, the meter shows the steps and round trips without credits.
+**Tokens are not shown**: GitLab bills each model call at its model's rate, not per token, and the Duo CLI logs no
+token counts. It is an estimate: a step is a model call the CLI logged, and GitLab's own figures are the ones it
+bills.
 
 ### Several accounts
 
@@ -348,7 +414,7 @@ so nothing wraps.
 
 ```
    (docs/images/logo.ascii: the doberman, with "D U O   W A T C H D O G", the subtitle and
-    "Installer, version 0.4.0" beside it)
+    "Installer, version 0.5.0" beside it)
 
 Looking for IntelliJ IDEA and VS Code...
 
@@ -361,7 +427,7 @@ Found on this computer:
 
   [2] IntelliJ IDEA 2026.2.0.1
       C:\Program Files\JetBrains\IntelliJ IDEA 2026.2
-      Duo Watchdog 0.3.0 is installed; 0.4.0 is available.
+      Duo Watchdog 0.4.0 is installed; 0.5.0 is available.
       It is running now; you'll be asked to close it before installing.
 
 Where should Duo Watchdog go?
@@ -374,8 +440,8 @@ Where should Duo Watchdog go?
     Exit without installing
 
 Plan:
-  - IntelliJ IDEA 2026.2.0.1: update Duo Watchdog 0.3.0 -> 0.4.0 (you'll be asked to close it first)
-  - VS Code 1.130.0: install Duo Watchdog 0.4.0
+  - IntelliJ IDEA 2026.2.0.1: update Duo Watchdog 0.4.0 -> 0.5.0 (you'll be asked to close it first)
+  - VS Code 1.130.0: install Duo Watchdog 0.5.0
 Continue? [Y/n]
 
 Installing (5 steps)
@@ -405,7 +471,7 @@ Or the IDE's own way:
 
 1. [Build the plugin](#building-from-source), or get `duo-watchdog-<version>.zip` from a teammate.
 2. In the IDE, open *Settings → Plugins → ⚙ → Install Plugin from Disk…*
-3. Select `intellij/build/distributions/duo-watchdog-0.4.0.zip` and restart if the IDE asks you to.
+3. Select `intellij/build/distributions/duo-watchdog-0.5.0.zip` and restart if the IDE asks you to.
 
 **Compatibility:** IntelliJ IDEA and any other JetBrains IDE from **2024.3** onward. This holds whichever IDE version the plugin was built against.
 
@@ -445,6 +511,7 @@ Shared by every account:
 | **Alert at % of limit** | Comma-separated thresholds, e.g. `50, 80, 95`, each of the account's own limit |
 | **Alert when the month-end forecast passes the limit** | Turns the forecast alert on or off |
 | **Refresh every … minutes** | Polling interval. Default: `15`. GitLab's data can lag a few minutes behind actual use. |
+| **Duo CLI, at most … round trips per session** | The prompts recommended at most in one Duo CLI session. Default: `20`; `0` for no colour. The session in the status bar and in Sessions turns amber from 80% of it, red at it. |
 | **Rotate tokens a week before they expire** | On by default. See [Token rotation](#token-rotation). |
 
 The box under the token field shows the token's state:
@@ -478,6 +545,7 @@ group, limit and last alert, to that account.
 | `duoWatchdog.forecastAlert` | `true` | Alert when the month-end forecast passes the limit |
 | `duoWatchdog.refreshMinutes` | `15` | Polling interval in minutes |
 | `duoWatchdog.rotateTokens` | `true` | Rotate each account's token a week before it expires: see [Token rotation](#token-rotation) |
+| `duoWatchdog.roundTripLimit` | `20` | Round trips recommended at most per Duo CLI session; amber from 80%, red at it; `0` for no colour |
 
 `duoWatchdog.groupPath` and `duoWatchdog.limit` are deprecated: each account has its own now. They are read once,
 when the token saved by 0.3.0 moves to its account. Tokens are kept in VS Code's secret storage, one per account.
@@ -492,7 +560,7 @@ VS Code extension (`:vscode`, which runs its npm build). Open the root folder in
 
 ```bash
 ./gradlew test            # all tests: the plugin's core and the VS Code extension
-./gradlew buildPlugin     # → intellij/build/distributions/duo-watchdog-0.4.0.zip
+./gradlew buildPlugin     # → intellij/build/distributions/duo-watchdog-0.5.0.zip
 ./gradlew runIde          # launch a sandbox IDE with the plugin installed
 ```
 
@@ -609,11 +677,11 @@ because the path contains spaces:
 **5. Find the result:**
 
 ```powershell
-dir intellij\build\distributions    # → duo-watchdog-0.4.0.zip
+dir intellij\build\distributions    # → duo-watchdog-0.5.0.zip
 ```
 
 Then follow [Installation](#installation): *Settings → Plugins → ⚙ → Install Plugin from Disk…* and pick
-`intellij\build\distributions\duo-watchdog-0.4.0.zip`.
+`intellij\build\distributions\duo-watchdog-0.5.0.zip`.
 
 **Optional:** run the tests or try the plugin in a sandbox IDE:
 
@@ -691,7 +759,7 @@ The VS Code extension builds with npm (Node.js 20+), from the root through Gradl
 
 ```bash
 ./gradlew :vscode:test               # 120 tests, no VS Code needed         (npm ci && npm test)
-./gradlew :vscode:packageExtension   # → vscode/duo-watchdog-0.4.0.vsix      (npm run package)
+./gradlew :vscode:packageExtension   # → vscode/duo-watchdog-0.5.0.vsix      (npm run package)
 ./gradlew :vscode:installExtension   # into VS Code; -PcodePath=codium for another CLI
 ```
 

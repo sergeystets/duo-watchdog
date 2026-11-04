@@ -2,12 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>What's New in Duo Watchdog 0.4.0</title>
+<title>What's New in Duo Watchdog 0.5.0</title>
 <!-- Shown by the VS Code extension in a webview and by the IntelliJ plugin in a dialog, which reads plain HTML:
      keep it to headings, paragraphs, lists and images with a width. -->
 <style>
 body { font-family: sans-serif; font-size: 13px; line-height: 1.45; margin: 16px 24px 24px; max-width: 760px; }
 h1 { font-size: 20px; margin: 0 0 4px; }
+h1.earlier { margin-top: 32px; }
 h2 { font-size: 15px; margin: 24px 0 6px; }
 p { margin: 4px 0 8px; }
 ul { margin: 4px 0 8px; }
@@ -16,8 +17,27 @@ img { margin: 6px 0 4px; border: 1px solid #c9ccd6; }
 </style>
 </head>
 <body>
-<h1>What's new in Duo Watchdog 0.4.0</h1>
-<p class="note">The pictures of the IntelliJ IDEA screens come from their design; the Statistics one is the real view.</p>
+<h1>What's new in Duo Watchdog 0.5.0</h1>
+<p class="note">The pictures of the IntelliJ IDEA screens come from their design; the Duo CLI and Statistics ones are the
+real views.</p>
+
+<h2>The Duo CLI session, live</h2>
+<p>While <b>duo</b> runs a session, a small item beside the credits in the status bar shows how long it has run, its
+round trips (the prompts you sent), its steps (the model calls) and its ≈ credits, each step at its model's credits
+per call. It changes within seconds of each step. Its mini meter fills toward the round trips recommended per session,
+20 unless you set another in Settings: amber from 80% of it, red at it. The tooltip says the model and when the
+session started; a click opens Sessions, which starts with the same session.</p>
+<img src="cli-session.png" width="364" alt="The status bar item: 31m 2s, 17 round trips, 160 steps, about 145.4 credits, in amber">
+<img src="session-now.png" width="470" alt="The top of Sessions: the Duo CLI session now, with its model, steps, round trips and estimate">
+<p>It is read from the log the CLI writes as it goes: only its steps, the lines that send a prompt (the prompt itself is
+not read) and the model. Tokens are not shown: GitLab bills each model call at its model's rate, not per token.</p>
+
+<h2>Tokens that renew themselves</h2>
+<p>A week before an account's token expires, GitLab replaces it with a new one that lives as long; Duo Watchdog saves
+it, hands it to glab, and the notice copies it for wherever else you use it. It is on by default and needs the
+<b>api</b> or <b>self_rotate</b> scope. Each account says when its token rotates, or why it won't.</p>
+
+<h1 class="earlier">Earlier, in 0.4.0</h1>
 
 <h2>Several accounts, one token each</h2>
 <p>An account is one GitLab user on one GitLab. When you add a token, GitLab says whose it is: a token for an account

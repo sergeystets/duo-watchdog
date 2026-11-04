@@ -2,7 +2,7 @@
   "name": "duo-watchdog",
   "displayName": "Duo Watchdog",
   "description": "Watches your own GitLab Credits (GitLab Duo) for each of your GitLab accounts: used, left, the month-end forecast, usage by day and by feature, a year of statistics, with alerts before you hit your limit.",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "publisher": "local",
   "license": "MIT",
   "repository": {
@@ -176,6 +176,15 @@
           "scope": "application",
           "order": 6,
           "markdownDescription": "Rotate each account's token a week before it expires: GitLab replaces it with a new one that lives as long (30 to 365 days) and revokes the old one, and the new one is saved and handed to glab. Needs the `api` or `self_rotate` scope. If you use the token anywhere else, the popup after a rotation copies the new one."
+        },
+        "duoWatchdog.roundTripLimit": {
+          "type": "integer",
+          "default": 20,
+          "minimum": 0,
+          "maximum": 1000,
+          "scope": "application",
+          "order": 7,
+          "markdownDescription": "The round trips (prompts you send) recommended at most in one Duo CLI session. The session in the status bar and in Sessions turns amber from 80% of it and red at it; `0` for no colour."
         }
       }
     }

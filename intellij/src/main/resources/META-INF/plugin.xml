@@ -10,7 +10,20 @@
     ]]></description>
 
     <change-notes><![CDATA[
-    <h3>What's new in 0.4.0</h3>
+    <h3>What's new in 0.5.0</h3>
+    <ul>
+      <li><b>The Duo CLI session, live</b>: while <code>duo</code> runs a session, a small status bar item beside the
+          credits shows how long it has run, its round trips (prompts sent), steps (model calls) and ≈ credits, each
+          step at its model's credits per call, updated within seconds of each step. Its mini meter fills toward the
+          round trips recommended per session (20 unless set in Settings), amber from 80% and red at it. The
+          Sessions tab starts with the same session. Read from the CLI's own log; tokens are not shown, since GitLab
+          bills per model call.</li>
+      <li><b>Token rotation</b>: a week before a token expires, GitLab replaces it with a new one that lives as long,
+          saved and handed to glab; the notice copies it for wherever else you use it. On by default. The Token
+          saved box says when the token rotates, or why it won't.</li>
+      <li>Released under the MIT License.</li>
+    </ul>
+    <h3>0.4.0</h3>
     <ul>
       <li><b>Several accounts</b>, one token each. An account is one GitLab user on one GitLab: when you add a
           token, GitLab says whose it is, and a token for an account already listed replaces its token, keeping its
@@ -61,6 +74,10 @@
                                  instance="duowatchdog.plugin.CreditsConfigurable"/>
         <statusBarWidgetFactory id="DuoWatchdog"
                                 implementation="duowatchdog.plugin.CreditsWidgetFactory"/>
+        <!-- The Duo CLI session in progress, beside the credits; shown only while one runs. -->
+        <statusBarWidgetFactory id="DuoWatchdogCli"
+                                order="after DuoWatchdog"
+                                implementation="duowatchdog.plugin.LiveWidgetFactory"/>
         <toolWindow id="Duo Watchdog"
                     anchor="right"
                     secondary="true"
