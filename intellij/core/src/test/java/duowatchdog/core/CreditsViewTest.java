@@ -119,4 +119,19 @@ class CreditsViewTest {
         assertEquals("Expires tomorrow, Oct 19, 2026", CreditsView.expiry(TODAY.plusDays(1), TODAY));
         assertEquals("Expired on Oct 18, 2026", CreditsView.expiry(TODAY, TODAY));
     }
+
+    @Test
+    void saysWhenTheTokenRotatesOrWhyItWont() {
+        List<String> rotates = List.of("api", "write_repository", "ai_features");
+        LocalDate dec4 = LocalDate.of(2026, 12, 4);
+        assertEquals("Rotates on Nov 27, 2026, a week before it expires.", CreditsView.rotation(true, dec4, rotates, false, TODAY));
+        assertEquals("Rotates at the next refresh while the IDE is focused.",
+                CreditsView.rotation(true, TODAY.plusDays(7), rotates, false, TODAY));
+        assertEquals("Doesn't rotate itself: it has neither the api nor the self_rotate scope.",
+                CreditsView.rotation(true, dec4, List.of("read_api", "ai_features"), false, TODAY));
+        assertEquals("GitLab would not rotate it: replace it before it expires.", CreditsView.rotation(true, dec4, rotates, true, TODAY));
+        assertNull(CreditsView.rotation(false, dec4, rotates, false, TODAY), "rotating is off");
+        assertNull(CreditsView.rotation(true, null, rotates, false, TODAY), "never expires");
+        assertNull(CreditsView.rotation(true, TODAY, rotates, false, TODAY), "expired");
+    }
 }

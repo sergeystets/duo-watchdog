@@ -446,7 +446,7 @@ function accountItem(state: AccountState, selected: boolean, today: string, glab
         id: state.id,
         label: (selected ? '$(check) ' : '$(account) ') + '@' + account.username,
         description: [host, accountGroup(account)].filter(part => part !== '').join(' · '),
-        detail: accountDetail(state, today, glab),
+        detail: accountDetail(state, today, glab, settings().rotateTokens),
         buttons: [
             button('terminal', account.glab ? 'Stop allowing glab to use this token (nothing is signed out)'
                 : 'Use for glab on ' + host + ': glab follows the account you pick, among those allowed', 'glab'),

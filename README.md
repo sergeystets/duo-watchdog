@@ -182,6 +182,8 @@ they expire* in IntelliJ IDEA, `duoWatchdog.rotateTokens` in VS Code.
   *Token expires in N days* notice.
 - If GitLab refuses, for example because its maximum lifetime is shorter, a notice says why and that token isn't
   tried again. Once you replace the token, the new one rotates again.
+- Each account shows when its token rotates, or why it won't: in the *Token saved* box in IntelliJ IDEA's Settings,
+  and in the **Accounts** list in VS Code (`expires Dec 4 · rotates Nov 27`).
 - Rotation only happens while the editor window is focused, and only after GitLab has just accepted the token. This
   keeps two windows or editors with the same token from both rotating it: if GitLab is asked to rotate a token it has
   already revoked, it revokes the new token too.
@@ -448,7 +450,7 @@ The box under the token field shows the token's state:
 
 | Box | Means |
 |---|---|
-| Green, ✓ **Token saved** | It says when the token was saved (`Saved on Oct 1, 14:38 EEST`) and, as GitLab reports it, when it expires and its scopes. |
+| Green, ✓ **Token saved** | It says when the token was saved (`Saved on Oct 1, 14:38 EEST`) and, as GitLab reports it, when it expires and its scopes. While rotating is ticked it also says when the token rotates (`Rotates on Nov 27, 2026, a week before it expires`), or why it won't. |
 | Amber | No token for this account, the token expires within a week, it lacks a scope, or its usage is not tracked. |
 | Red | GitLab turns the saved token down (expired or revoked), or **Check connection** failed, with GitLab's reason. |
 
