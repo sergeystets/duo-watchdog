@@ -312,6 +312,19 @@ export function expiryText(account: Account, today: IsoDate): string {
         + longDate(account.expiresAt!) + ". After that, this account's credits are no longer tracked.";
 }
 
+/** The popup after a token rotated: the account as it is now, with the new token's expiry. */
+export function rotatedText(account: Account): string {
+    return 'Duo Watchdog rotated the token of ' + accountName(account) + ' before it expired. The new one expires on '
+        + (account.expiresAt != null ? longDate(account.expiresAt) : 'no date')
+        + '. GitLab revoked the old one: if you use it anywhere else, use the new one there.';
+}
+
+/** The popup when GitLab would not rotate a token that is about to expire. */
+export function rotateRefusedText(account: Account, why: string): string {
+    return 'Duo Watchdog could not rotate the token of ' + accountName(account) + ', which expires on '
+        + longDate(account.expiresAt!) + '. ' + why + ' Replace it before then.';
+}
+
 /** The popup for a token GitLab turns down. */
 export function rejectedText(account: Account, today: IsoDate): string {
     return 'Duo Watchdog: the token of ' + accountName(account) + ' no longer works. GitLab turns it down: '

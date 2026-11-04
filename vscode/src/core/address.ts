@@ -36,15 +36,15 @@ export function host(gitlabUrl: string | null | undefined): string | null {
     }
 }
 
-/** The scopes Duo Watchdog needs to read usage, and nothing more. */
-export const USAGE_SCOPES = ['read_api', 'ai_features'];
+/** The scopes Duo Watchdog needs to read usage and to rotate the token before it expires, and nothing more. */
+export const USAGE_SCOPES = ['read_api', 'ai_features', 'self_rotate'];
 
-/** The scopes of a token that glab (and the GitLab Duo CLI through it) can also write with. */
+/** The scopes of a token that glab (and the GitLab Duo CLI through it) can also write with; api rotates it too. */
 export const GLAB_SCOPES = ['api', 'write_repository', 'ai_features'];
 
 /**
- * GitLab's new-token page with the name and the scopes filled in: read_api and ai_features, or, for a token glab
- * uses too, api, write_repository and ai_features.
+ * GitLab's new-token page with the name and the scopes filled in: read_api, ai_features and self_rotate, or, for a
+ * token glab uses too, api, write_repository and ai_features.
  */
 export function tokenPage(gitlabUrl: string | null | undefined, glab = false): string {
     return trimSlashes(gitlabUrl) + '/-/user_settings/personal_access_tokens?name=Duo+Watchdog&scopes='

@@ -207,7 +207,7 @@ test("reads the token's scopes and expiry from the REST API", async () => {
     const info = await new CreditsClient('https://gitlab.example.com/gitlab/', 't', http).tokenInfo();
 
     assert.deepEqual(http.gets, ['https://gitlab.example.com/gitlab/api/v4/personal_access_tokens/self']);
-    assert.deepEqual(info, { name: 'Duo Watchdog', scopes: ['read_api', 'ai_features'], expiresAt: '2026-12-31' });
+    assert.deepEqual(info, { name: 'Duo Watchdog', scopes: ['read_api', 'ai_features'], expiresAt: '2026-12-31', createdAt: '2026-10-01' });
 });
 
 test('a turned-down token carries its HTTP status', async () => {
@@ -221,6 +221,38 @@ test('a turned-down token carries its HTTP status', async () => {
     assert.equal((await rejection(client.username())).status, 401);
     assert.equal((await rejection(new CreditsClient('https://gitlab.com', 't', new FakeTransport().reply(403, '{}')).fetch('acme'))).status, 403);
     assert.equal((await rejection(new CreditsClient('https://gitlab.com', 't', { post: async () => { throw new Error('down'); } }).fetch('acme'))).status, 0);
+});
+
+test('rotates the token: GitLab sends the new one and its details', async () => {
+    const http = new FakeTransport().reply(201, `{"id":8,"name":"Duo Watchdog","revoked":false,"created_at":"2026-10-18T09:00:00.000Z",
+        "scopes":["read_api","ai_features","self_rotate"],"user_id":3,"active":true,"expires_at":"2026-11-17","token":"glpat-new"}`);
+
+    const rotated = await new CreditsClient('https://gitlab.example.com/gitlab/', 'glpat-old', http).rotate('2026-11-17');
+
+    assert.equal(http.endpoint?.toString(), 'https://gitlab.example.com/gitlab/api/v4/personal_access_tokens/self/rotate');
+    assert.deepEqual(http.requests, [{ expires_at: '2026-11-17' }]);
+    assert.deepEqual(http.tokens, ['glpat-old'], 'the old token asks for its own rotation');
+    assert.deepEqual(rotated, {
+        token: 'glpat-new',
+        info: { name: 'Duo Watchdog', scopes: ['read_api', 'ai_features', 'self_rotate'], expiresAt: '2026-11-17', createdAt: '2026-10-18' },
+    });
+});
+
+test('says why GitLab did not rotate the token', async () => {
+    const rotate = (status: number, body: string) =>
+        rejection(new CreditsClient('https://gitlab.com', 't', new FakeTransport().reply(status, body)).rotate('2026-11-17'));
+
+    const scope = await rotate(403, '{"message":"403 Forbidden"}');
+    assert.equal(scope.status, 403);
+    assert.equal(scope.message, 'GitLab does not let this token rotate itself: it needs the api or self_rotate scope.');
+    const date = await rotate(400, '{"message":"400 Bad request - expires_at is too late"}');
+    assert.equal(date.status, 400);
+    assert.equal(date.message, 'GitLab did not rotate the token (HTTP 400): 400 Bad request - expires_at is too late');
+    assert.equal((await rotate(405, '')).message, 'GitLab did not rotate the token (HTTP 405).');
+    const revoked = await rotate(401, '{"message":"401 Unauthorized"}');
+    assert.equal(revoked.status, 401);
+    assert.ok(revoked.message.includes('expired or revoked'), revoked.message);
+    assert.ok((await rotate(201, '{"id":8}')).message.includes('sent no new one'));
 });
 
 test('a transport that only posts cannot read the token', async () => {

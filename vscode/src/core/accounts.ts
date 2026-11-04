@@ -1,7 +1,7 @@
 import { groupPath, host, trimSlashes } from './address';
 import { TokenInfo } from './client';
 import { level } from './dashboard';
-import { daysBetween, IsoDate } from './dates';
+import { addDays, daysBetween, IsoDate } from './dates';
 import { Snapshot } from './report';
 import { day } from './view';
 
@@ -34,6 +34,8 @@ export interface Account {
     glabHanded: number | null;
     /** The tokenSavedAt of a token glab turned down, so it is not tried again until the token changes. */
     glabRefused: number | null;
+    /** The tokenSavedAt of a token GitLab would not rotate, so it is not tried again until the token changes. */
+    rotateRefused: number | null;
     /** The last per-period alert shown, so it is not repeated on every refresh. */
     lastAlertKey: string | null;
     /** The one-time popups already shown: the token expiring soon, and GitLab turning the token down. */
@@ -46,6 +48,15 @@ export const DEFAULT_LIMIT = 100;
 /** Days before its expiry that a token is pointed out, and that it gets its one popup. */
 export const ATTENTION_DAYS = 7;
 export const EXPIRY_POPUP_DAYS = 3;
+
+/** Days before its expiry that a token rotates, when rotating is on: before the popup about it is due. */
+export const ROTATE_DAYS = ATTENTION_DAYS;
+/**
+ * A rotated token lives as long as the one it replaces, within these bounds: long enough not to be due again at
+ * once, and no longer than GitLab allows by default.
+ */
+export const MIN_ROTATED_DAYS = 30;
+export const MAX_ROTATED_DAYS = 365;
 
 /** Why an account has no numbers: no token, GitLab turns it down, it cannot read usage, or no group path yet. */
 export type Problem = 'noToken' | 'rejected' | 'notTracked' | 'noGroup';
@@ -104,6 +115,7 @@ export function normalized(stored: Partial<Account> & { gitlabUrl: string; usern
         duo: stored.duo === true,
         glabHanded: typeof stored.glabHanded === 'number' ? stored.glabHanded : null,
         glabRefused: typeof stored.glabRefused === 'number' ? stored.glabRefused : null,
+        rotateRefused: typeof stored.rotateRefused === 'number' ? stored.rotateRefused : null,
         lastAlertKey: stored.lastAlertKey ?? null,
         expiryPopupKey: stored.expiryPopupKey ?? null,
         rejectedPopupKey: stored.rejectedPopupKey ?? null,
@@ -262,6 +274,30 @@ export function expiryPopupKey(account: Account, today: IsoDate): string | null 
     return key === account.expiryPopupKey ? null : key;
 }
 
+/** Whether GitLab lets the token rotate itself: api or self_rotate. Unknown scopes count as yes; a 403 says no. */
+export function canRotate(scopes: readonly string[] | null): boolean {
+    return scopes == null || scopes.includes('api') || scopes.includes('self_rotate');
+}
+
+/**
+ * Whether the account's token is due to rotate: it expires within ROTATE_DAYS, may rotate itself, and GitLab did
+ * not refuse to rotate it before. The same rule as Accounts.rotationDue in the plugin.
+ */
+export function rotationDue(account: Account, today: IsoDate): boolean {
+    const days = daysLeft(account, today);
+    return days != null && days > 0 && days <= ROTATE_DAYS && canRotate(account.scopes)
+        && account.rotateRefused !== account.tokenSavedAt;
+}
+
+/**
+ * The expiry day of a rotated token: as many days from today as the old token lived, from createdAt to expiresAt,
+ * within MIN_ROTATED_DAYS and MAX_ROTATED_DAYS; MIN_ROTATED_DAYS when its age is unknown.
+ */
+export function rotatedExpiry(createdAt: IsoDate | null, expiresAt: IsoDate, today: IsoDate): IsoDate {
+    const lived = createdAt == null ? MIN_ROTATED_DAYS : daysBetween(createdAt, expiresAt);
+    return addDays(today, Math.min(Math.max(lived, MIN_ROTATED_DAYS), MAX_ROTATED_DAYS));
+}
+
 /** The key of the popup for a token GitLab turns down, once per saved token, when it was not shown yet. */
 export function rejectedPopupKey(account: Account, rejected: boolean): string | null {
     if (!rejected) {
@@ -325,6 +361,7 @@ export function withToken(existing: Account | undefined, token: NewToken,
         duo: false,
         glabHanded: null,
         glabRefused: null,
+        rotateRefused: null,
         lastAlertKey: null,
         expiryPopupKey: null,
         rejectedPopupKey: null,

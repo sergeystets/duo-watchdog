@@ -141,6 +141,15 @@ public final class CreditsClient {
         }
     }
 
+    /** What a token's rotation gives: the new token, which alone works from then on, and its details. */
+    public record Rotated(String token, TokenInfo info) {
+        @Override
+        public String toString() {
+            // Never the token: a record would print it.
+            return "Rotated[info=" + info + "]";
+        }
+    }
+
     private final URI endpoint;
     private final String token;
     private final Transport transport;
@@ -511,7 +520,36 @@ public final class CreditsClient {
         if (!parsed.isJsonObject()) {
             throw new GitLabException("GitLab returned a response that is not JSON. Is the URL the GitLab root?");
         }
-        JsonObject o = parsed.getAsJsonObject();
+        return tokenInfo(parsed.getAsJsonObject());
+    }
+
+    /**
+     * Has GitLab replace the token with a new one that expires on {@code expiresAt}. GitLab revokes the old one at
+     * once, so the new one must be saved. Needs the api or self_rotate scope.
+     */
+    public Rotated rotate(LocalDate expiresAt) throws GitLabException {
+        URI uri = endpoint.resolve("v4/personal_access_tokens/self/rotate");
+        JsonObject body = new JsonObject();
+        body.addProperty("expires_at", expiresAt.toString());
+        Transport.Response response = reach(() -> transport.post(uri, token, body.toString()));
+        int status = response.status();
+        if (status == 403) {
+            throw new GitLabException("GitLab does not let this token rotate itself: it needs the api or self_rotate scope.", 403);
+        }
+        if (status != 401 && (status < 200 || status >= 300)) {
+            String reason = gitlabMessage(response);
+            throw new GitLabException("GitLab did not rotate the token (HTTP " + status + ")"
+                    + (reason != null ? ": " + reason : "."), status);
+        }
+        JsonElement parsed = json(check(response));
+        String next = parsed.isJsonObject() ? str(parsed.getAsJsonObject(), "token") : null;
+        if (next == null || next.isBlank()) {
+            throw new GitLabException("GitLab rotated the token but sent no new one back. Create a new token in GitLab.");
+        }
+        return new Rotated(next.trim(), tokenInfo(parsed.getAsJsonObject()));
+    }
+
+    private static TokenInfo tokenInfo(JsonObject o) {
         List<String> scopes = new ArrayList<>();
         for (JsonElement e : arr(o, "scopes")) {
             if (e.isJsonPrimitive()) {
@@ -520,6 +558,23 @@ public final class CreditsClient {
         }
         return new TokenInfo(str(o, "name"), List.copyOf(scopes), date(o, "expires_at"), instant(o, "created_at"),
                 instant(o, "last_used_at"));
+    }
+
+    /** Why GitLab said no, as its REST API puts it: {"message": …} or {"error": …}; null when it gave no reason. */
+    private static String gitlabMessage(Transport.Response response) {
+        JsonElement parsed;
+        try {
+            parsed = json(response);
+        } catch (GitLabException e) {
+            return null;
+        }
+        if (!parsed.isJsonObject()) {
+            return null;
+        }
+        JsonObject o = parsed.getAsJsonObject();
+        JsonElement message = o.has("message") ? o.get("message") : o.get("error");
+        return message == null || message.isJsonNull() ? null
+                : message.isJsonPrimitive() ? message.getAsString() : message.toString();
     }
 
     private static CreditsReport report(String username, JsonObject usage) {
@@ -632,9 +687,13 @@ public final class CreditsClient {
 
     /** Sends one request and turns what goes wrong on the way into the user's words. */
     private Transport.Response request(Call call) throws GitLabException {
-        Transport.Response response;
+        return check(reach(call));
+    }
+
+    /** Sends one request; only not getting an answer is an error here. */
+    private Transport.Response reach(Call call) throws GitLabException {
         try {
-            response = call.send();
+            return call.send();
         } catch (IOException e) {
             throw new GitLabException("Cannot reach " + endpoint.getHost() + ": "
                     + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()), e);
@@ -642,7 +701,10 @@ public final class CreditsClient {
             Thread.currentThread().interrupt();
             throw new GitLabException("Interrupted while reading GitLab credits", e);
         }
+    }
 
+    /** GitLab's answer, unless it says no. */
+    private Transport.Response check(Transport.Response response) throws GitLabException {
         if (response.status() == 401) {
             throw new GitLabException("GitLab rejected the token (HTTP 401): it is mistyped, expired or revoked. Create a personal access token with the read_api and ai_features scopes.", 401);
         }

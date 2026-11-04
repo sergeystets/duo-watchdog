@@ -3,8 +3,8 @@ import { test } from 'node:test';
 import {
     accountId, afterHandOff, attention, bareUsername, creditsLeft, duoScopeNote, expiryPopupKey, glabHandOffs, glabOwner, glabScopeNote,
     idOf, isExpired,
-    matchesFilter, migratedAccount, missingUsageScopes, needsMigration, normalized, rejectedPopupKey, sortStates,
-    usageReadable, withCli, withToken,
+    matchesFilter, migratedAccount, missingUsageScopes, needsMigration, normalized, rejectedPopupKey, rotatedExpiry,
+    rotationDue, sortStates, usageReadable, withCli, withToken, Account,
 } from '../core/accounts';
 import { account, state, TODAY } from './fixtures';
 
@@ -122,6 +122,29 @@ test('the turned-down popup shows once a saved token', () => {
     assert.equal(rejectedPopupKey({ ...a, rejectedPopupKey: 'rejected|1000', tokenSavedAt: 2000 }, true), 'rejected|2000');
 });
 
+test('a token rotates from a week before it expires, when GitLab lets it', () => {
+    const due = (change: Partial<Account>) =>
+        rotationDue(account({ scopes: ['read_api', 'ai_features', 'self_rotate'], tokenSavedAt: 1000, ...change }), TODAY);
+    assert.equal(due({ expiresAt: '2026-10-25' }), true, 'seven days');
+    assert.equal(due({ expiresAt: '2026-10-19' }), true, 'tomorrow');
+    assert.equal(due({ expiresAt: '2026-10-26' }), false, 'eight days is not yet');
+    assert.equal(due({ expiresAt: TODAY }), false, 'expired: GitLab turns it down');
+    assert.equal(due({ expiresAt: null }), false, 'never expires');
+    assert.equal(due({ expiresAt: '2026-10-21', scopes: ['read_api', 'ai_features'] }), false, 'neither api nor self_rotate');
+    assert.equal(due({ expiresAt: '2026-10-21', scopes: ['api', 'write_repository'] }), true, 'api rotates it too');
+    assert.equal(due({ expiresAt: '2026-10-21', scopes: null }), true, 'unknown scopes: GitLab says');
+    assert.equal(due({ expiresAt: '2026-10-21', rotateRefused: 1000 }), false, 'GitLab refused this token');
+    assert.equal(due({ expiresAt: '2026-10-21', rotateRefused: 500 }), true, 'it refused an older one');
+});
+
+test('a rotated token lives as long as the old one, 30 to 365 days', () => {
+    assert.equal(rotatedExpiry('2026-07-27', '2026-10-25', TODAY), '2027-01-16', '90 days');
+    assert.equal(rotatedExpiry('2025-10-25', '2026-10-25', TODAY), '2027-10-18', 'a year');
+    assert.equal(rotatedExpiry('2024-10-25', '2026-10-25', TODAY), '2027-10-18', 'no more than a year');
+    assert.equal(rotatedExpiry('2026-10-15', '2026-10-22', TODAY), '2026-11-17', 'a week becomes 30 days, so it is not due again at once');
+    assert.equal(rotatedExpiry(null, '2026-10-22', TODAY), '2026-11-17', 'unknown age');
+});
+
 test('the old token becomes the first account', () => {
     assert.equal(needsMigration(0, 'glpat-old'), true);
     assert.equal(needsMigration(1, 'glpat-old'), false, 'only while there is no account');
@@ -130,7 +153,7 @@ test('the old token becomes the first account', () => {
 
     const old = { gitlabUrl: 'https://gitlab.example.com/', groupPath: 'https://gitlab.example.com/groups/acme/-/settings',
         limit: 250, lastAlertKey: 'threshold|2026-10-01|250|80' };
-    const a = migratedAccount(old, '@alice', { name: 'Duo Watchdog', scopes: ['read_api', 'ai_features'], expiresAt: '2027-01-01' }, 1000);
+    const a = migratedAccount(old, '@alice', { name: 'Duo Watchdog', scopes: ['read_api', 'ai_features'], expiresAt: '2027-01-01', createdAt: '2026-01-01' }, 1000);
     assert.equal(idOf(a), 'gitlab.example.com/alice');
     assert.equal(a.groupPath, 'acme', 'a pasted group URL becomes its path');
     assert.equal(a.limit, 250);
@@ -147,7 +170,7 @@ test('the old token becomes the first account', () => {
 
 test("a token for a listed account replaces its token: its group, limit and the rest stay", () => {
     const existing = account({ glab: true, duo: true, lastAlertKey: 'x', expiryPopupKey: 'expiry|2027-02-01' });
-    const info = { name: 'Duo Watchdog', scopes: ['api', 'write_repository', 'ai_features'], expiresAt: '2027-11-02' };
+    const info = { name: 'Duo Watchdog', scopes: ['api', 'write_repository', 'ai_features'], expiresAt: '2027-11-02', createdAt: '2026-11-02' };
 
     const replaced = withToken(existing, { gitlabUrl: 'https://gitlab.com/', username: 'dana.k', info, savedAt: 2000 },
         { groupPath: '', limit: 100 });

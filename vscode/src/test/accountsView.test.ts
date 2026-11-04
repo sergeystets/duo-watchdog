@@ -4,7 +4,7 @@ import { glabScopeNote, idOf } from '../core/accounts';
 import {
     accountDetail, accountLabel, accountName, accountsDashboard, accountStatusText, addedText, addPlan, alertText,
     cliOffText, cliOnText, duoNote, expiryText, GLAB_FOLLOWS, glabCaption, glabNote, glabNowText, othersNeedAttention,
-    rejectedText, tooltipModel,
+    rejectedText, rotatedText, rotateRefusedText, tooltipModel,
 } from '../core/accountsView';
 import { Snapshots } from '../core/report';
 import { account, state, TODAY } from './fixtures';
@@ -129,6 +129,12 @@ test('alerts and popups name the account', () => {
         'Duo Watchdog: the token of @dana-contractor on gitlab.com · northwind no longer works. GitLab turns it down: '
         + "it expired on Oct 15, 2026. This account's credits are not tracked until you replace it.");
     assert.ok(rejectedText(acme.account, TODAY).includes('it is mistyped, expired or revoked'));
+    assert.equal(rotatedText({ ...platform.account, expiresAt: '2027-01-19' }),
+        'Duo Watchdog rotated the token of @dana.k on gitlab.acme.dev · platform before it expired. The new one expires '
+        + 'on Jan 19, 2027. GitLab revoked the old one: if you use it anywhere else, use the new one there.');
+    assert.equal(rotateRefusedText(platform.account, 'GitLab does not let this token rotate itself: it needs the api or self_rotate scope.'),
+        'Duo Watchdog could not rotate the token of @dana.k on gitlab.acme.dev · platform, which expires on Oct 21, 2026. '
+        + 'GitLab does not let this token rotate itself: it needs the api or self_rotate scope. Replace it before then.');
 });
 
 test('adding a token says what will happen first', () => {
