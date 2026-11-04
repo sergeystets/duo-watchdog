@@ -17,7 +17,7 @@ GitLab Credits usage for the current billing period, forecast where the month wi
 ![Java](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-VS_Code_extension-3178C6?logo=typescript&logoColor=white)
 ![GitLab](https://img.shields.io/badge/GitLab-Duo-FC6D26?logo=gitlab&logoColor=white)
-![Version](https://img.shields.io/badge/version-0.4.0-blue)
+![Version](https://img.shields.io/badge/version-0.5.0-blue)
 
 </div>
 
@@ -28,6 +28,19 @@ GitLab Credits usage for the current billing period, forecast where the month wi
 </p>
 
 ---
+
+## What's new in 0.5.0
+
+- **The Duo CLI session, live**: while `duo` runs a session, a small status bar item beside the credits shows how long
+  it has run, its round trips (prompts you sent), its steps (model calls) and its ≈ credits, each step at its model's
+  credits per call: `12m 4s · 5 round trips · 42 steps · ≈ $38.2`, updated within seconds of each step. Its mini meter
+  fills toward a recommended most of round trips per session (20 unless you set another), amber from 80% of it and
+  red at it. The Sessions tab starts with the same session. Read from the CLI's own log; no tokens are shown, since
+  GitLab bills per model call. See [Sessions](#sessions).
+- **Token rotation**: a week before an account's token expires, GitLab replaces it with a new one that lives as long,
+  saved and handed to glab, with **Copy the New Token** for wherever else you use it. On by default. Each account says
+  when its token rotates, or why it won't. See [Token rotation](#token-rotation).
+- Released under the [MIT License](#license).
 
 ## What's new in 0.4.0
 
@@ -55,6 +68,7 @@ GitLab Credits usage for the current billing period, forecast where the month wi
 
 ## Contents
 
+- [What's new in 0.5.0](#whats-new-in-050)
 - [What's new in 0.4.0](#whats-new-in-040)
 - [Features](#features)
 - [VS Code](#vs-code)
@@ -400,7 +414,7 @@ so nothing wraps.
 
 ```
    (docs/images/logo.ascii: the doberman, with "D U O   W A T C H D O G", the subtitle and
-    "Installer, version 0.4.0" beside it)
+    "Installer, version 0.5.0" beside it)
 
 Looking for IntelliJ IDEA and VS Code...
 
@@ -413,7 +427,7 @@ Found on this computer:
 
   [2] IntelliJ IDEA 2026.2.0.1
       C:\Program Files\JetBrains\IntelliJ IDEA 2026.2
-      Duo Watchdog 0.3.0 is installed; 0.4.0 is available.
+      Duo Watchdog 0.4.0 is installed; 0.5.0 is available.
       It is running now; you'll be asked to close it before installing.
 
 Where should Duo Watchdog go?
@@ -426,8 +440,8 @@ Where should Duo Watchdog go?
     Exit without installing
 
 Plan:
-  - IntelliJ IDEA 2026.2.0.1: update Duo Watchdog 0.3.0 -> 0.4.0 (you'll be asked to close it first)
-  - VS Code 1.130.0: install Duo Watchdog 0.4.0
+  - IntelliJ IDEA 2026.2.0.1: update Duo Watchdog 0.4.0 -> 0.5.0 (you'll be asked to close it first)
+  - VS Code 1.130.0: install Duo Watchdog 0.5.0
 Continue? [Y/n]
 
 Installing (5 steps)
@@ -457,7 +471,7 @@ Or the IDE's own way:
 
 1. [Build the plugin](#building-from-source), or get `duo-watchdog-<version>.zip` from a teammate.
 2. In the IDE, open *Settings → Plugins → ⚙ → Install Plugin from Disk…*
-3. Select `intellij/build/distributions/duo-watchdog-0.4.0.zip` and restart if the IDE asks you to.
+3. Select `intellij/build/distributions/duo-watchdog-0.5.0.zip` and restart if the IDE asks you to.
 
 **Compatibility:** IntelliJ IDEA and any other JetBrains IDE from **2024.3** onward. This holds whichever IDE version the plugin was built against.
 
@@ -546,7 +560,7 @@ VS Code extension (`:vscode`, which runs its npm build). Open the root folder in
 
 ```bash
 ./gradlew test            # all tests: the plugin's core and the VS Code extension
-./gradlew buildPlugin     # → intellij/build/distributions/duo-watchdog-0.4.0.zip
+./gradlew buildPlugin     # → intellij/build/distributions/duo-watchdog-0.5.0.zip
 ./gradlew runIde          # launch a sandbox IDE with the plugin installed
 ```
 
@@ -663,11 +677,11 @@ because the path contains spaces:
 **5. Find the result:**
 
 ```powershell
-dir intellij\build\distributions    # → duo-watchdog-0.4.0.zip
+dir intellij\build\distributions    # → duo-watchdog-0.5.0.zip
 ```
 
 Then follow [Installation](#installation): *Settings → Plugins → ⚙ → Install Plugin from Disk…* and pick
-`intellij\build\distributions\duo-watchdog-0.4.0.zip`.
+`intellij\build\distributions\duo-watchdog-0.5.0.zip`.
 
 **Optional:** run the tests or try the plugin in a sandbox IDE:
 
@@ -745,7 +759,7 @@ The VS Code extension builds with npm (Node.js 20+), from the root through Gradl
 
 ```bash
 ./gradlew :vscode:test               # 120 tests, no VS Code needed         (npm ci && npm test)
-./gradlew :vscode:packageExtension   # → vscode/duo-watchdog-0.4.0.vsix      (npm run package)
+./gradlew :vscode:packageExtension   # → vscode/duo-watchdog-0.5.0.vsix      (npm run package)
 ./gradlew :vscode:installExtension   # into VS Code; -PcodePath=codium for another CLI
 ```
 

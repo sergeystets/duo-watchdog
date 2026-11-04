@@ -198,7 +198,7 @@ forget() {
 
 new_version() { if [ "${KINDS[$1]}" = idea ]; then say "$PLUGIN_VERSION"; else say "$EXTENSION_VERSION"; fi; }
 
-# What installing does to target $1, e.g. "update Duo Watchdog 0.3.0 -> 0.4.0".
+# What installing does to target $1, e.g. "update Duo Watchdog 0.4.0 -> 0.5.0".
 plan() {
     local current=${CURRENT[$1]} new
     new=$(new_version "$1")

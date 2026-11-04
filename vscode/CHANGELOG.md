@@ -1,13 +1,22 @@
 # Changelog
 
-## Unreleased
+## 0.5.0
 
+- **The Duo CLI session, live:** while `duo` runs a session, a second status bar item shows
+  `▰▰▱▱▱▱ 12m 4s · 5 round trips · 42 steps · ≈ $38.2`: its round trips toward the recommended most per session
+  (`duoWatchdog.roundTripLimit`, 20; amber from 80%, red at it), how long it has run (ticking while the CLI writes its
+  log, stopped once the log is quiet for a minute), the model calls and the ≈ credits, each step at its model's credits
+  per call. The tooltip adds the model and when it started; a click opens Sessions, which starts with the same
+  session. It is read from the CLI's own log every two seconds: only steps, `SEND_PROMPT` lines (the prompt is not
+  read) and the model, no more than the start of each line. Tokens are not shown: GitLab bills per model call.
 - **Token rotation:** a week before an account's token expires, GitLab rotates it. The new token lives as long as
   the old one (30 to 365 days); it is saved and handed to glab, and the notice that says so has **Copy the New
   Token**, for wherever else you use it. GitLab revokes the old token at once. Needs the `api` or `self_rotate`
   scope; **Create the Token in GitLab** now asks for `self_rotate` too. Only the focused window rotates, and only a
   token GitLab has just accepted, so two windows don't both rotate the same token. On by default; turn it off with
-  `duoWatchdog.rotateTokens`.
+  `duoWatchdog.rotateTokens`. The **Accounts** list says when each token rotates, or why it won't
+  (`expires Dec 4 · rotates Nov 27`).
+- Released under the MIT License.
 
 ## 0.4.0
 
