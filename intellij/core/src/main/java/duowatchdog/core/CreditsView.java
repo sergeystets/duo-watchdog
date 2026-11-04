@@ -182,6 +182,29 @@ public final class CreditsView {
         return "Expires on " + DATE.format(expiresAt) + ", in " + days + " days";
     }
 
+    /**
+     * What the token box says of its rotation, or null when nothing: rotating is off, or the token never expires or
+     * has expired. "Rotates on Nov 27, 2026, a week before it expires", "Rotates at the next refresh…", or why it
+     * won't. rotationDetail in the VS Code extension says the same, shorter, in its Accounts list.
+     *
+     * @param refused GitLab refused to rotate this token before
+     */
+    public static String rotation(boolean on, LocalDate expiresAt, List<String> scopes, boolean refused, LocalDate today) {
+        if (!on || expiresAt == null || !expiresAt.isAfter(today)) {
+            return null;
+        }
+        if (!Accounts.canRotate(scopes)) {
+            return "Doesn't rotate itself: it has neither the api nor the self_rotate scope.";
+        }
+        if (refused) {
+            return "GitLab would not rotate it: replace it before it expires.";
+        }
+        if (Accounts.rotationDue(expiresAt, scopes, today)) {
+            return "Rotates at the next refresh while the IDE is focused.";
+        }
+        return "Rotates on " + DATE.format(expiresAt.minusDays(Accounts.ROTATE_DAYS)) + ", a week before it expires.";
+    }
+
     /** "Oct 31". */
     public static String day(LocalDate date) {
         return DAY.format(date);

@@ -115,6 +115,11 @@ public final class CreditsSettings implements PersistentStateComponent<CreditsSe
             return String.valueOf(tokenSavedAt).equals(glabFailedKey);
         }
 
+        /** Whether GitLab refused to rotate this account's current token. */
+        public boolean rotateRefused() {
+            return String.valueOf(tokenSavedAt).equals(rotateFailedKey);
+        }
+
         public Account copy() {
             Account a = new Account();
             a.gitlabUrl = gitlabUrl;
