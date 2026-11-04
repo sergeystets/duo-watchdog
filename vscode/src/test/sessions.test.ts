@@ -17,7 +17,7 @@ function session(id: number, flow: string | null, project: string | null, create
 }
 
 function steps(id: number, day: string, count: number): Steps {
-    return { id, byDay: { [day]: count }, folder: 'home-dana-projects-gateway' };
+    return { id, byDay: { [day]: count }, folder: 'home-dana-projects-notes' };
 }
 
 /** Oct 28: Agentic Chat 60 credits, Developer Flow 30, and 10 more no feature was priced for. */
@@ -107,17 +107,17 @@ test('reads the session number in what is typed', () => {
     assert.equal(sessionId(' 10208239 '), 10208239);
     assert.equal(sessionId('#10208239'), 10208239);
     assert.equal(sessionId('gid://gitlab/Ai::DuoWorkflows::Workflow/10208239'), 10208239);
-    assert.equal(sessionId('https://gitlab.com/acme/gateway/-/automate/agent-sessions/10208239'), 10208239);
-    assert.equal(sessionId('gateway'), null);
+    assert.equal(sessionId('https://gitlab.com/acme/notes/-/automate/agent-sessions/10208239'), 10208239);
+    assert.equal(sessionId('notes'), null);
     assert.equal(sessionId(''), null);
 });
 
 test('places a session in its project without the group', () => {
-    const inProject = session(1, 'chat', 'acme/mobile/gateway', '2026-10-28T09:00:00Z', '2026-10-28T10:00:00Z');
+    const inProject = session(1, 'chat', 'acme/apps/notes', '2026-10-28T09:00:00Z', '2026-10-28T10:00:00Z');
     const nowhere = session(2, 'chat', null, '2026-10-28T09:00:00Z', '2026-10-28T10:00:00Z');
 
-    assert.equal(place(inProject, null, 'acme'), 'mobile/gateway');
-    assert.equal(place(nowhere, steps(2, OCT_28, 1), 'acme'), 'home-dana-projects-gateway');
+    assert.equal(place(inProject, null, 'acme'), 'apps/notes');
+    assert.equal(place(nowhere, steps(2, OCT_28, 1), 'acme'), 'home-dana-projects-notes');
     assert.equal(place(nowhere, null, 'acme'), '—');
     assert.equal(inGroup(inProject, 'ACME'), true);
     assert.equal(inGroup(nowhere, 'acme'), true);

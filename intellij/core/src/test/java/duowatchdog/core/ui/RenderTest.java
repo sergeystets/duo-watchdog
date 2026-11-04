@@ -101,24 +101,24 @@ class RenderTest {
                                 List.of(new DailyUsage(oct27, 29.5), new DailyUsage(oct28, 30.0)))),
                 List.of(), null);
         List<Sessions.Session> sessions = List.of(
-                new Sessions.Session(10208239, "Review the gateway's security findings", "chat", "acme/mobile/gateway-service",
+                new Sessions.Session(10208239, "Review the notes service's security findings", "chat", "acme/apps/notes-service",
                         null, "Claude Sonnet 4.5", "Finished", Instant.parse("2026-10-28T14:35:25Z"),
-                        Instant.parse("2026-10-28T15:41:02Z"), "https://gitlab.com/acme/mobile/gateway-service/-/automate/agent-sessions/10208239"),
-                new Sessions.Session(10207711, "Why does the build fail on main", "chat", "acme/mobile/gateway-service",
+                        Instant.parse("2026-10-28T15:41:02Z"), "https://gitlab.com/acme/apps/notes-service/-/automate/agent-sessions/10208239"),
+                new Sessions.Session(10207711, "Why does the build fail on main", "chat", "acme/apps/notes-service",
                         null, "Claude Sonnet 4.5", "Finished", Instant.parse("2026-10-28T09:02:11Z"),
                         Instant.parse("2026-10-28T09:20:45Z"), null),
-                new Sessions.Session(10207100, "Add retries to the device sync", "developer/v1", "acme/mobile/device-sync",
+                new Sessions.Session(10207100, "Add retries to the device sync", "developer/v1", "acme/apps/sync-worker",
                         null, null, "Finished", Instant.parse("2026-10-28T07:15:00Z"),
                         Instant.parse("2026-10-28T08:01:00Z"), null),
-                new Sessions.Session(10201420, "Explain the billing module", "chat", "acme/platform/billing",
+                new Sessions.Session(10201420, "Explain the billing module", "chat", "acme/core/billing",
                         null, null, "Finished", Instant.parse("2026-10-27T16:40:00Z"),
                         Instant.parse("2026-10-27T17:05:00Z"), null),
-                new Sessions.Session(10199000, "Convert the pipeline", "developer/v1", "acme/platform/billing",
+                new Sessions.Session(10199000, "Convert the pipeline", "developer/v1", "acme/core/billing",
                         null, null, "Failed", Instant.parse("2026-10-27T11:00:00Z"),
                         Instant.parse("2026-10-27T11:30:00Z"), null));
         java.util.Map<Long, Sessions.Steps> steps = java.util.Map.of(
-                10208239L, new Sessions.Steps(10208239, java.util.Map.of(oct28, 412), "dana-projects-gateway-service"),
-                10207711L, new Sessions.Steps(10207711, java.util.Map.of(oct28, 96), "dana-projects-gateway-service"));
+                10208239L, new Sessions.Steps(10208239, java.util.Map.of(oct28, 412), "dana-projects-notes-service"),
+                10207711L, new Sessions.Steps(10207711, java.util.Map.of(oct28, 96), "dana-projects-notes-service"));
         List<Sessions.Estimate> estimates = Sessions.estimate(sessions, steps, history);
         Sessions.Summary summary = Sessions.summarize(estimates, history, new Sessions.Range(oct27.minusDays(5), oct28), "acme");
 

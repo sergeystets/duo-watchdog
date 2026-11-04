@@ -7,8 +7,8 @@ const path = (typed: string | null) => groupPath(typed, 'https://gitlab.com');
 test('keeps the top-level group of whatever was typed', () => {
     assert.equal(path('  acme '), 'acme');
     assert.equal(path('@acme'), 'acme');
-    assert.equal(path('/acme/platform/'), 'acme');
-    assert.equal(path('https://gitlab.com/acme/platform/-/issues'), 'acme');
+    assert.equal(path('/acme/core/'), 'acme');
+    assert.equal(path('https://gitlab.com/acme/core/-/issues'), 'acme');
     assert.equal(path('https://gitlab.com/groups/acme/-/settings/general'), 'acme');
     assert.equal(path('gitlab.com/acme'), 'acme');
     assert.equal(path('my.group'), 'my.group', 'a dot belongs to the path unless it is the GitLab host');

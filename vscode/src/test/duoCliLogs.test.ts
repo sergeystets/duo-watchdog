@@ -5,7 +5,7 @@ import {
 } from '../core/duoCliLogs';
 import { Steps } from '../core/sessions';
 
-const NAME = 'duo-cli-log-2026-10-28T14-35-25-dana-projects-mobile-gateway-service.log';
+const NAME = 'duo-cli-log-2026-10-28T14-35-25-dana-projects-notes-service.log';
 
 /** As the CLI writes it: steps, a repeated one, other lines, and code the agent read, which says nothing. */
 const LOG = `2026-10-28T15:01:16:072 [debug]: fetch: request for https://gitlab.com/api/v4/usage_data/track_event made with https agent.
@@ -27,7 +27,7 @@ test("counts each session's steps by UTC day", () => {
     assert.deepEqual(steps.get(10208239)!.byDay, { '2026-10-28': 2, '2026-10-29': 1 },
         'a repeated request once; 23:30 in Chicago is the next day in UTC');
     assert.equal(Object.values(steps.get(10208240)!.byDay).reduce((a, b) => a + b, 0), 1);
-    assert.equal(steps.get(10208239)!.folder, 'dana-projects-mobile-gateway-service');
+    assert.equal(steps.get(10208239)!.folder, 'dana-projects-notes-service');
 });
 
 test("knows the CLI's logs by name", () => {
@@ -72,7 +72,7 @@ test("the CLI's logs are looked for in the temporary folders, and in WSL's from 
         ['C:\\Users\\dana\\AppData\\Local\\Temp\\gitlab-duo-cli'],
         ['\\\\wsl.localhost\\Ubuntu\\tmp\\gitlab-duo-cli', '\\\\wsl$\\Ubuntu\\tmp\\gitlab-duo-cli'],
     ]);
-    assert.equal(wslDistro('\\\\wsl.localhost\\Ubuntu-22.04\\home\\dana\\gateway'), 'Ubuntu-22.04');
+    assert.equal(wslDistro('\\\\wsl.localhost\\Ubuntu-22.04\\home\\dana\\notes'), 'Ubuntu-22.04');
     assert.equal(wslDistro('\\\\WSL$\\Debian\\home'), 'Debian');
     assert.equal(wslDistro('C:\\Users\\dana'), null);
 });

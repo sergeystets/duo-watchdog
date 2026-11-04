@@ -24,7 +24,7 @@ class SessionsTest {
     }
 
     private static Sessions.Steps steps(long id, LocalDate day, int count) {
-        return new Sessions.Steps(id, Map.of(day, count), "home-dana-projects-gateway");
+        return new Sessions.Steps(id, Map.of(day, count), "home-dana-projects-notes");
     }
 
     /** Oct 28: Agentic Chat 60 credits, Developer Flow 30, and 10 more no feature was priced for. */
@@ -122,18 +122,18 @@ class SessionsTest {
         assertEquals(10208239L, Sessions.id(" 10208239 "));
         assertEquals(10208239L, Sessions.id("#10208239"));
         assertEquals(10208239L, Sessions.id("gid://gitlab/Ai::DuoWorkflows::Workflow/10208239"));
-        assertEquals(10208239L, Sessions.id("https://gitlab.com/acme/gateway/-/automate/agent-sessions/10208239"));
-        assertNull(Sessions.id("gateway"));
+        assertEquals(10208239L, Sessions.id("https://gitlab.com/acme/notes/-/automate/agent-sessions/10208239"));
+        assertNull(Sessions.id("notes"));
         assertNull(Sessions.id(""));
     }
 
     @Test
     void placesASessionInItsProjectWithoutTheGroup() {
-        Sessions.Session inProject = session(1, "chat", "acme/mobile/gateway", "2026-10-28T09:00:00Z", "2026-10-28T10:00:00Z");
+        Sessions.Session inProject = session(1, "chat", "acme/apps/notes", "2026-10-28T09:00:00Z", "2026-10-28T10:00:00Z");
         Sessions.Session nowhere = session(2, "chat", null, "2026-10-28T09:00:00Z", "2026-10-28T10:00:00Z");
 
-        assertEquals("mobile/gateway", Sessions.place(inProject, null, "acme"));
-        assertEquals("home-dana-projects-gateway", Sessions.place(nowhere, steps(2, OCT_28, 1), "acme"));
+        assertEquals("apps/notes", Sessions.place(inProject, null, "acme"));
+        assertEquals("home-dana-projects-notes", Sessions.place(nowhere, steps(2, OCT_28, 1), "acme"));
         assertEquals("—", Sessions.place(nowhere, null, "acme"));
         assertTrue(Sessions.inGroup(inProject, "ACME"));
         assertTrue(Sessions.inGroup(nowhere, "acme"));

@@ -123,7 +123,7 @@ test('a refused group says to check the path or find the group', async () => {
 test('finds the top-level groups that give credits', async () => {
     const http = new FakeTransport()
         .reply(200, `{"data":{"currentUser":{"groups":{"nodes":[
-          {"fullPath":"acme/platform/tools","name":"Tools"},
+          {"fullPath":"acme/core/tools","name":"Tools"},
           {"fullPath":"acme","name":"Acme Corp"},
           {"fullPath":"hobby","name":"hobby"},
           {"fullPath":"oss/sub","name":"Sub"}]}}}}`)
@@ -368,10 +368,10 @@ test('a group GitLab gives no history for says so', async () => {
 test('reads the sessions page by page until older ones', async () => {
     const http = new FakeTransport()
         .reply(200, `{"data":{"duoWorkflowWorkflows":{"pageInfo":{"hasNextPage":true,"endCursor":"c1"},"nodes":[
-          {"id":"gid://gitlab/Ai::DuoWorkflows::Workflow/10208239","title":"Review the gateway",
+          {"id":"gid://gitlab/Ai::DuoWorkflows::Workflow/10208239","title":"Review the notes app",
            "workflowDefinition":"chat","humanStatus":"Finished","createdAt":"2026-10-28T14:35:25Z",
            "updatedAt":"2026-10-28T15:08:33Z","webUrl":"https://gitlab.com/s/10208239",
-           "project":{"fullPath":"acme/mobile/gateway"},"namespace":{"fullPath":"acme/mobile"},
+           "project":{"fullPath":"acme/apps/notes"},"namespace":{"fullPath":"acme/apps"},
            "modelMetadataName":"Claude Sonnet"}]}}}`)
         .reply(200, `{"data":{"duoWorkflowWorkflows":{"pageInfo":{"hasNextPage":true,"endCursor":"c2"},"nodes":[
           {"id":"gid://gitlab/Ai::DuoWorkflows::Workflow/7","title":null,"goal":"Fix the build\\nand more",
@@ -387,8 +387,8 @@ test('reads the sessions page by page until older ones', async () => {
     assert.equal(http.requests[1].variables.after, 'c1');
     assert.deepEqual(sessions.map(s => s.id), [10208239, 7]);
     const first = sessions[0];
-    assert.equal(first.title, 'Review the gateway');
-    assert.equal(first.project, 'acme/mobile/gateway');
+    assert.equal(first.title, 'Review the notes app');
+    assert.equal(first.project, 'acme/apps/notes');
     assert.equal(first.model, 'Claude Sonnet');
     assert.equal(first.created, Date.parse('2026-10-28T14:35:25Z'));
     assert.equal(sessions[1].title, 'Fix the build', "the goal's first line, when it has no title");

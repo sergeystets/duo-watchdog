@@ -28,7 +28,7 @@ function history(): History {
 
 function summary() {
     const sessions = [
-        session(1, 'Review the gateway', 'chat', 'acme/mobile/gateway', '2026-10-28T09:00:00Z', '2026-10-28T10:00:00Z'),
+        session(1, 'Review the notes app', 'chat', 'acme/apps/notes', '2026-10-28T09:00:00Z', '2026-10-28T10:00:00Z'),
         session(2, 'Fix the build', 'chat', 'acme/web', '2026-10-28T11:00:00Z', '2026-10-28T12:00:00Z')];
     const steps = new Map([[1, { id: 1, byDay: { '2026-10-28': 300 }, folder: '' }], [2, { id: 2, byDay: { '2026-10-28': 100 }, folder: '' }]]);
     return summarize(estimate(sessions, steps, history()), history(), { from: '2026-10-28', to: '2026-10-28' }, 'acme');
@@ -61,13 +61,13 @@ test('the Sessions view reads as asked: tiles, projects, rows and the focused on
 
     assert.deepEqual(m.tiles.map(t => [t.caption, t.value]), [
         ['Sessions', '2'], ['Credits', '100'], ['≈ In sessions', '60'], ['Other use', '40']]);
-    assert.deepEqual(m.byProject.map(p => [p.title, p.value]), [['mobile/gateway', '45.0'], ['web', '15.0']]);
+    assert.deepEqual(m.byProject.map(p => [p.title, p.value]), [['apps/notes', '45.0'], ['web', '15.0']]);
     assert.deepEqual(m.rows.map(r => [r.id, r.title, r.meta, r.credits, r.steps]), [
         [2, 'Fix the build', 'web · chat · Finished', '≈ 15.0', '100 steps'],
-        [1, 'Review the gateway', 'mobile/gateway · chat · Finished', '≈ 45.0', '300 steps']]);
-    assert.ok(m.rows[1].search.includes('review the gateway') && m.rows[1].search.includes('acme/mobile/gateway'));
+        [1, 'Review the notes app', 'apps/notes · chat · Finished', '≈ 45.0', '300 steps']]);
+    assert.ok(m.rows[1].search.includes('review the notes app') && m.rows[1].search.includes('acme/apps/notes'));
     assert.deepEqual(m.details!.lines, [
-        { label: 'Project', value: 'mobile/gateway' }, { label: 'Flow', value: 'chat' }, { label: 'Model', value: 'Claude Sonnet' },
+        { label: 'Project', value: 'apps/notes' }, { label: 'Flow', value: 'chat' }, { label: 'Model', value: 'Claude Sonnet' },
         { label: 'Status', value: 'Finished' }, { label: 'Started', value: '2026-10-28T09:00' }, { label: 'Updated', value: '2026-10-28T10:00' },
         { label: 'Steps on this machine', value: '300' }, { label: '≈ Credits', value: '≈ 45.0' }]);
     assert.deepEqual(m.details!.shares, ['Oct 28 · Agentic Chat 60.0 credits, split by agent steps among 2 sessions → 45.0']);

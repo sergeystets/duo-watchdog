@@ -15,8 +15,8 @@ class GitLabAddressTest {
     void keepsTheTopLevelGroupOfWhateverWasTyped() {
         assertEquals("acme", path("  acme "));
         assertEquals("acme", path("@acme"));
-        assertEquals("acme", path("/acme/platform/"));
-        assertEquals("acme", path("https://gitlab.com/acme/platform/-/issues"));
+        assertEquals("acme", path("/acme/core/"));
+        assertEquals("acme", path("https://gitlab.com/acme/core/-/issues"));
         assertEquals("acme", path("https://gitlab.com/groups/acme/-/settings/general"));
         assertEquals("acme", path("gitlab.com/acme"));
         assertEquals("my.group", path("my.group"), "a dot belongs to the path unless it is the GitLab host");

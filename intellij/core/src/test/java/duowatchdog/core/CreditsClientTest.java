@@ -144,7 +144,7 @@ class CreditsClientTest {
         FakeTransport http = new FakeTransport()
                 .reply(200, """
                         {"data":{"currentUser":{"groups":{"nodes":[
-                          {"fullPath":"acme/platform/tools","name":"Tools"},
+                          {"fullPath":"acme/core/tools","name":"Tools"},
                           {"fullPath":"acme","name":"Acme Corp"},
                           {"fullPath":"hobby","name":"hobby"},
                           {"fullPath":"oss/sub","name":"Sub"}]}}}}
@@ -438,10 +438,10 @@ class CreditsClientTest {
         FakeTransport http = new FakeTransport()
                 .reply(200, """
                         {"data":{"duoWorkflowWorkflows":{"pageInfo":{"hasNextPage":true,"endCursor":"c1"},"nodes":[
-                          {"id":"gid://gitlab/Ai::DuoWorkflows::Workflow/10208239","title":"Review the gateway",
+                          {"id":"gid://gitlab/Ai::DuoWorkflows::Workflow/10208239","title":"Review the notes app",
                            "workflowDefinition":"chat","humanStatus":"Finished","createdAt":"2026-10-28T14:35:25Z",
                            "updatedAt":"2026-10-28T15:08:33Z","webUrl":"https://gitlab.com/s/10208239",
-                           "project":{"fullPath":"acme/mobile/gateway"},"namespace":{"fullPath":"acme/mobile"},
+                           "project":{"fullPath":"acme/apps/notes"},"namespace":{"fullPath":"acme/apps"},
                            "modelMetadataName":"Claude Sonnet"}]}}}
                         """)
                 .reply(200, """
@@ -461,8 +461,8 @@ class CreditsClientTest {
         assertEquals("c1", http.requests.get(1).getAsJsonObject("variables").get("after").getAsString());
         assertEquals(List.of(10208239L, 7L), sessions.stream().map(Sessions.Session::id).toList());
         Sessions.Session first = sessions.get(0);
-        assertEquals("Review the gateway", first.title());
-        assertEquals("acme/mobile/gateway", first.project());
+        assertEquals("Review the notes app", first.title());
+        assertEquals("acme/apps/notes", first.project());
         assertEquals("Claude Sonnet", first.model());
         assertEquals(Instant.parse("2026-10-28T14:35:25Z"), first.created());
         assertEquals("Fix the build", sessions.get(1).title(), "the goal's first line, when it has no title");

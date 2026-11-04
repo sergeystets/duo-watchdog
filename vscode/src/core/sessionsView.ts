@@ -56,7 +56,7 @@ export function shareLine(share: Share): string {
 export interface SessionRow {
     id: number;
     title: string;
-    /** "mobile/gateway · chat · Finished": project, feature (flow), status. */
+    /** "apps/notes · chat · Finished": project, feature (flow), status. */
     meta: string;
     /** "≈ 45.0". */
     credits: string;

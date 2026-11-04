@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DuoCliLogsTest {
 
-    private static final String NAME = "duo-cli-log-2026-10-28T14-35-25-dana-projects-mobile-gateway-service.log";
+    private static final String NAME = "duo-cli-log-2026-10-28T14-35-25-dana-projects-notes-service.log";
 
     /** As the CLI writes it: steps, a repeated one, other lines, and code the agent read, which says nothing. */
     private static final String LOG = """
@@ -36,7 +36,7 @@ class DuoCliLogsTest {
         assertEquals(Map.of(LocalDate.of(2026, 10, 28), 2, LocalDate.of(2026, 10, 29), 1), steps.get(10208239L).byDay(),
                 "a repeated request once; 23:30 in Chicago is the next day in UTC");
         assertEquals(1, steps.get(10208240L).total());
-        assertEquals("dana-projects-mobile-gateway-service", steps.get(10208239L).folder());
+        assertEquals("dana-projects-notes-service", steps.get(10208239L).folder());
     }
 
     @Test
