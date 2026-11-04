@@ -1,10 +1,11 @@
 import {
-    Account, AccountState, accountGroup, accountHost, allowsGlab, attention, daysLeft, glabHas, glabHolder, glabOwner,
-    glabRefusedIt, duoScopeNote, glabScopeNote, idOf, inDays, missingUsageScopes, sortStates, usageReadable,
+    Account, AccountState, accountGroup, accountHost, allowsGlab, attention, canRotate, daysLeft, glabHas, glabHolder,
+    glabOwner, glabRefusedIt, duoScopeNote, glabScopeNote, idOf, inDays, missingUsageScopes, ROTATE_DAYS, sortStates,
+    usageReadable,
 } from './accounts';
 import { Alert } from './alert';
 import { DashboardModel, dashboardModel } from './dashboard';
-import { IsoDate, time } from './dates';
+import { addDays, IsoDate, time } from './dates';
 import { Snapshot, Snapshots } from './report';
 import { day, number, statusText, tooltipLines, usedLine } from './view';
 
@@ -39,7 +40,7 @@ export function longDate(date: IsoDate): string {
  * "151.4 left · ••••••• · expires Feb 1, 2027 · glab signs in to gitlab.com with this token": the line under an
  * account in the Accounts list; glab is glabCaption() for it.
  */
-export function accountDetail(state: AccountState, today: IsoDate, glab: string | null = null): string {
+export function accountDetail(state: AccountState, today: IsoDate, glab: string | null = null, rotate = false): string {
     const { account, problem } = state;
     if (problem === 'noToken') {
         return 'no token';
@@ -64,6 +65,10 @@ export function accountDetail(state: AccountState, today: IsoDate, glab: string 
     } else if (account.expiresAt != null) {
         parts.push('expires ' + shortDate(account.expiresAt, today));
     }
+    const rotation = rotate && problem !== 'rejected' ? rotationDetail(account, today) : null;
+    if (rotation != null) {
+        parts.push(rotation);
+    }
     if (glab != null) {
         parts.push(glab);
     } else if (allowsGlab(account)) {
@@ -73,6 +78,26 @@ export function accountDetail(state: AccountState, today: IsoDate, glab: string 
         parts.push('the Duo CLI needs api and ai_features');
     }
     return parts.join(' · ');
+}
+
+/**
+ * When the token rotates, as the Accounts list says it while rotating is on: "rotates Nov 27", "rotates at the next
+ * refresh", or why it won't; null when it never expires or has expired. CreditsView.rotation in the plugin says the
+ * same in sentences.
+ */
+export function rotationDetail(account: Account, today: IsoDate): string | null {
+    const days = daysLeft(account, today);
+    if (days == null || days <= 0) {
+        return null;
+    }
+    if (!canRotate(account.scopes)) {
+        return "can't rotate itself (no api or self_rotate scope)";
+    }
+    if (account.rotateRefused === account.tokenSavedAt) {
+        return 'GitLab would not rotate it';
+    }
+    return days <= ROTATE_DAYS ? 'rotates at the next refresh'
+        : 'rotates ' + shortDate(addDays(account.expiresAt!, -ROTATE_DAYS), today);
 }
 
 /**
