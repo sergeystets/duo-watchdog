@@ -166,6 +166,26 @@ an account already in the list **replaces** that account's token; its group and 
 - A token GitLab takes but that **cannot read usage** (no `ai_features` scope) is still added, as *not tracked*, so
   glab and the Duo CLI can use it.
 
+### Token rotation
+
+A week before an account's token expires, Duo Watchdog has GitLab **rotate** it
+(`POST /personal_access_tokens/self/rotate`). The setting is on unless you turn it off: *Rotate tokens a week before
+they expire* in IntelliJ IDEA, `duoWatchdog.rotateTokens` in VS Code.
+
+- The new token lives **as long as the old one**, from when it was made to when it expires: at least 30 days, so it
+  isn't due again at once, and at most 365, GitLab's default limit.
+- GitLab **revokes the old token** at once. Duo Watchdog saves the new one and hands it to glab when glab has that
+  account. The notice that says so has **Copy the New Token**, for wherever else you use it, such as the other editor
+  or a script.
+- The token needs the `api` or `self_rotate` scope. **Create the token in GitLab** asks for `self_rotate` along with
+  `read_api` and `ai_features`. A token for glab has `api`, which covers it. A token with neither still gets the
+  *Token expires in N days* notice.
+- If GitLab refuses, for example because its maximum lifetime is shorter, a notice says why and that token isn't
+  tried again. Once you replace the token, the new one rotates again.
+- Rotation only happens while the editor window is focused, and only after GitLab has just accepted the token. This
+  keeps two windows or editors with the same token from both rotating it: if GitLab is asked to rotate a token it has
+  already revoked, it revokes the new token too.
+
 ### glab and the GitLab Duo CLI (optional)
 
 Each account has two boxes, **off unless you tick them**: *glab* and *the GitLab Duo CLI*. With glab ticked, Duo
@@ -204,13 +224,15 @@ Balloon notifications with an **Open Duo Watchdog** link, for every account, nam
 | Limit reached | usage reaches 100% of the limit |
 | Blocked | GitLab has blocked Duo because of the cap |
 
-The **last threshold**, the limit and a block stay on screen until you close them, as do two notices about tokens,
+The **last threshold**, the limit and a block stay on screen until you close them, as do the notices about tokens,
 each shown once:
 
 | Notice | When it shows |
 |---|---|
 | Token expires in N days | an account's token expires within 3 days (**Replace Token…**, **Create a New Token in GitLab**) |
 | The token no longer works | GitLab turns an account's token down: it expired or was revoked (**Replace Token…**) |
+| Token rotated | Duo Watchdog had GitLab rotate a token that expires within a week (**Copy the New Token**) |
+| Token not rotated | GitLab refused to rotate it, with its reason (**Replace Token…**, **Create a New Token in GitLab**) |
 
 ## VS Code
 
@@ -264,7 +286,7 @@ Requests go through the IDE's proxy and trusted certificates
 | VS Code | **1.74** | Also VS Code Insiders, VSCodium and Cursor. |
 | GitLab | **19.4** | The first version with `currentUser.creditsUsage`. Works on GitLab.com and self-managed. |
 | GitLab account | Member of the top-level group | The group must own a GitLab Duo subscription. You don't need the Owner role. |
-| Personal access token | Scopes `read_api` + `ai_features` | One per account. For glab and the Duo CLI too: `api`, `write_repository` + `ai_features`. |
+| Personal access token | Scopes `read_api` + `ai_features` | One per account. For glab and the Duo CLI too: `api`, `write_repository` + `ai_features`. To rotate before it expires: `self_rotate` or `api`. |
 | OS | Windows, macOS, Linux | Any OS the editor runs on. |
 
 ### Building from source
@@ -399,8 +421,8 @@ whose it is, and the dialog says what OK will do:
 | Amber, **usage can't be tracked** | GitLab takes the token, but it lacks `ai_features`. OK adds the account as *not tracked*. |
 | Red | GitLab turned the token down, or can't be reached: OK stays off. |
 
-The **Create the token in GitLab** link opens GitLab's new-token page with `read_api` and `ai_features` selected, or with
-`api`, `write_repository` and `ai_features` when glab or the Duo CLI box is ticked. Tokens are stored in the IDE's
+The **Create the token in GitLab** link opens GitLab's new-token page with `read_api`, `ai_features` and `self_rotate`
+selected, or with `api`, `write_repository` and `ai_features` when glab or the Duo CLI box is ticked. Tokens are stored in the IDE's
 password safe (the macOS Keychain by default on a Mac), one entry per account, never in plain settings.
 **−** removes the chosen account and deletes its token from the password safe; glab keeps any login it has.
 
@@ -420,6 +442,7 @@ Shared by every account:
 | **Alert at % of limit** | Comma-separated thresholds, e.g. `50, 80, 95`, each of the account's own limit |
 | **Alert when the month-end forecast passes the limit** | Turns the forecast alert on or off |
 | **Refresh every … minutes** | Polling interval. Default: `15`. GitLab's data can lag a few minutes behind actual use. |
+| **Rotate tokens a week before they expire** | On by default. See [Token rotation](#token-rotation). |
 
 The box under the token field shows the token's state:
 
@@ -451,6 +474,7 @@ group, limit and last alert, to that account.
 | `duoWatchdog.alertPercents` | `"80, 95"` | Thresholds in percent of each account's limit, comma-separated |
 | `duoWatchdog.forecastAlert` | `true` | Alert when the month-end forecast passes the limit |
 | `duoWatchdog.refreshMinutes` | `15` | Polling interval in minutes |
+| `duoWatchdog.rotateTokens` | `true` | Rotate each account's token a week before it expires: see [Token rotation](#token-rotation) |
 
 `duoWatchdog.groupPath` and `duoWatchdog.limit` are deprecated: each account has its own now. They are read once,
 when the token saved by 0.3.0 moves to its account. Tokens are kept in VS Code's secret storage, one per account.

@@ -140,6 +140,14 @@ export interface TokenInfo {
     scopes: string[];
     /** The day GitLab stops taking it; null when it never expires. */
     expiresAt: IsoDate | null;
+    /** The day it was made (or last rotated), in UTC; null when GitLab did not say. */
+    createdAt: IsoDate | null;
+}
+
+/** What a token's rotation gives: the new token, which alone works from then on, and its details. */
+export interface Rotated {
+    token: string;
+    info: TokenInfo;
 }
 
 type Json = Record<string, unknown>;
@@ -482,8 +490,30 @@ export class CreditsClient {
         if (!isObj(parsed)) {
             throw new GitLabError(NOT_JSON);
         }
-        const scopes = arr(parsed, 'scopes').filter((e): e is string => typeof e === 'string');
-        return { name: str(parsed, 'name'), scopes, expiresAt: date_(parsed, 'expires_at') };
+        return tokenInfoOf(parsed);
+    }
+
+    /**
+     * Has GitLab replace the token with a new one that expires on expiresAt. GitLab revokes the old one at once, so
+     * the new one must be saved. Needs the api or self_rotate scope.
+     */
+    async rotate(expiresAt: IsoDate): Promise<Rotated> {
+        const uri = new URL('v4/personal_access_tokens/self/rotate', this.endpoint);
+        const response = await this.reach(() => this.transport.post(uri, this.token, JSON.stringify({ expires_at: expiresAt })));
+        if (response.status === 403) {
+            throw new GitLabError('GitLab does not let this token rotate itself: it needs the api or self_rotate scope.', 403);
+        }
+        if (response.status !== 401 && (response.status < 200 || response.status >= 300)) {
+            const reason = gitlabMessage(response);
+            throw new GitLabError('GitLab did not rotate the token (HTTP ' + response.status + ')'
+                + (reason != null ? ': ' + reason : '.'), response.status);
+        }
+        const parsed = json(this.check(response));
+        const token = isObj(parsed) ? str(parsed, 'token') : null;
+        if (!isObj(parsed) || token == null || token.trim() === '') {
+            throw new GitLabError('GitLab rotated the token but sent no new one back. Create a new token in GitLab.');
+        }
+        return { token: token.trim(), info: tokenInfoOf(parsed) };
     }
 
     /**
@@ -549,15 +579,22 @@ export class CreditsClient {
 
     /** Sends one request and turns what goes wrong on the way into the user's words. */
     private async request(send: () => Promise<Response>): Promise<Response> {
-        const host = this.endpoint.hostname;
-        let response: Response;
+        return this.check(await this.reach(send));
+    }
+
+    /** Sends one request; only not getting an answer is an error here. */
+    private async reach(send: () => Promise<Response>): Promise<Response> {
         try {
-            response = await send();
+            return await send();
         } catch (e) {
             const message = e instanceof Error && e.message ? e.message : e instanceof Error ? e.name : String(e);
-            throw new GitLabError('Cannot reach ' + host + ': ' + message);
+            throw new GitLabError('Cannot reach ' + this.endpoint.hostname + ': ' + message);
         }
+    }
 
+    /** GitLab's answer, unless it says no. */
+    private check(response: Response): Response {
+        const host = this.endpoint.hostname;
         if (response.status === 401) {
             throw new GitLabError('GitLab rejected the token (HTTP 401): it is mistyped, expired or revoked. '
                 + 'Create a personal access token with the read_api and ai_features scopes.', 401);
@@ -587,6 +624,21 @@ function json(response: Response): unknown {
     } catch {
         return null;
     }
+}
+
+function tokenInfoOf(o: Json): TokenInfo {
+    const scopes = arr(o, 'scopes').filter((e): e is string => typeof e === 'string');
+    return { name: str(o, 'name'), scopes, expiresAt: date_(o, 'expires_at'), createdAt: date_(o, 'created_at') };
+}
+
+/** Why GitLab said no, as its REST API puts it: {"message": …} or {"error": …}; null when it gave no reason. */
+function gitlabMessage(response: Response): string | null {
+    const parsed = json(response);
+    if (!isObj(parsed)) {
+        return null;
+    }
+    const message = parsed.message ?? parsed.error;
+    return typeof message === 'string' ? message : isObj(message) ? JSON.stringify(message) : null;
 }
 
 interface SessionsPage {

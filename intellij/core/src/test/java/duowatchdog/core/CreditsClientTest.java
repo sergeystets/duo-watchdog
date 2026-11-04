@@ -349,6 +349,48 @@ class CreditsClientTest {
     }
 
     @Test
+    void rotatesTheTokenAndGetsTheNewOneWithItsDetails() throws Exception {
+        FakeTransport http = new FakeTransport().reply(201, """
+                {"id":8,"name":"Duo Watchdog","revoked":false,"created_at":"2026-10-18T09:00:00.000Z",
+                 "scopes":["read_api","ai_features","self_rotate"],"user_id":3,"active":true,
+                 "expires_at":"2026-11-17","token":"glpat-new"}
+                """);
+
+        CreditsClient.Rotated rotated = new CreditsClient("https://gitlab.example.com/gitlab/", "glpat-old", http)
+                .rotate(LocalDate.of(2026, 11, 17));
+
+        assertEquals(URI.create("https://gitlab.example.com/gitlab/api/v4/personal_access_tokens/self/rotate"), http.endpoint);
+        assertEquals("2026-11-17", http.requests.get(0).get("expires_at").getAsString());
+        assertEquals(List.of("glpat-old"), http.tokens, "the old token asks for its own rotation");
+        assertEquals("glpat-new", rotated.token());
+        assertEquals(LocalDate.of(2026, 11, 17), rotated.info().expiresAt());
+        assertEquals(List.of("read_api", "ai_features", "self_rotate"), rotated.info().scopes());
+        assertEquals(Instant.parse("2026-10-18T09:00:00Z"), rotated.info().createdAt());
+        assertFalse(rotated.toString().contains("glpat-new"), "never printed");
+    }
+
+    @Test
+    void saysWhyGitLabDidNotRotateTheToken() {
+        GitLabException scope = rotateFails(403, "{\"message\":\"403 Forbidden\"}");
+        assertEquals(403, scope.status());
+        assertEquals("GitLab does not let this token rotate itself: it needs the api or self_rotate scope.", scope.getMessage());
+        GitLabException date = rotateFails(400, "{\"message\":\"400 Bad request - expires_at is too late\"}");
+        assertEquals(400, date.status());
+        assertEquals("GitLab did not rotate the token (HTTP 400): 400 Bad request - expires_at is too late", date.getMessage());
+        assertEquals("GitLab did not rotate the token (HTTP 405).", rotateFails(405, "").getMessage());
+        GitLabException revoked = rotateFails(401, "{\"message\":\"401 Unauthorized\"}");
+        assertEquals(401, revoked.status());
+        assertTrue(revoked.getMessage().contains("expired or revoked"), revoked.getMessage());
+        assertTrue(rotateFails(201, "{\"id\":8}").getMessage().contains("sent no new one"));
+    }
+
+    private static GitLabException rotateFails(int status, String body) {
+        FakeTransport http = new FakeTransport().reply(status, body);
+        return assertThrows(GitLabException.class,
+                () -> new CreditsClient("https://gitlab.com", "t", http).rotate(LocalDate.of(2026, 11, 17)));
+    }
+
+    @Test
     void namesTheTokensUser() throws Exception {
         FakeTransport http = new FakeTransport().reply(200, "{\"data\":{\"currentUser\":{\"username\":\"alice\"}}}");
         assertEquals("alice", new CreditsClient("https://gitlab.com", "t", http).username());

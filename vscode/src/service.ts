@@ -3,11 +3,11 @@ import { AccountStore } from './accounts';
 import { groupPath, tokenPage } from './core/address';
 import {
     Account, AccountState, expiryPopupKey, idOf, migratedAccount, needsMigration, Problem, rejectedPopupKey,
-    sortStates, usageReadable,
+    rotatedExpiry, rotationDue, sortStates, usageReadable, withToken,
 } from './core/accounts';
-import { alertText, expiryText, rejectedText } from './core/accountsView';
+import { accountName, alertText, expiryText, rejectedText, rotatedText, rotateRefusedText } from './core/accountsView';
 import { alertFor, AlertKind } from './core/alert';
-import { CreditsClient, GitLabError, Transport } from './core/client';
+import { CreditsClient, GitLabError, Rotated, TokenInfo, Transport } from './core/client';
 import { localToday } from './core/dates';
 import { Snapshot, Snapshots } from './core/report';
 import { number } from './core/view';
@@ -124,12 +124,14 @@ export class CreditsService implements vscode.Disposable {
         this.refreshed.fire();
     }
 
-    private async loadAccount(id: string, account: Account): Promise<Result> {
+    private async loadAccount(id: string, stored: Account): Promise<Result> {
         const previous = this.results.get(id)?.snapshot ?? Snapshots.loading();
-        const token = await this.store.token(id);
-        if (!token) {
+        const saved = await this.store.token(id);
+        if (!saved) {
             return { snapshot: Snapshots.notConfigured(), problem: 'noToken' };
         }
+        const token = await this.rotateIfDue(id, stored, saved);
+        const account = this.store.get(id) ?? stored;
         if (usageReadable(account.scopes) === false) {
             return { snapshot: Snapshots.notConfigured(), problem: 'notTracked' };
         }
@@ -150,6 +152,10 @@ export class CreditsService implements vscode.Disposable {
         } catch (e) {
             // The message is the user's to read; it never carries the token.
             const message = e instanceof Error ? e.message : String(e);
+            if (e instanceof GitLabError && e.status === 401 && await this.store.token(id) !== token) {
+                // Replaced or rotated meanwhile, perhaps in another window: the refresh that follows reads the new one.
+                return { snapshot: previous, problem: null };
+            }
             if (e instanceof GitLabError && e.status === 401) {
                 return { snapshot: Snapshots.failed(Snapshots.loading(), message), problem: 'rejected' };
             }
@@ -158,6 +164,67 @@ export class CreditsService implements vscode.Disposable {
             }
             return { snapshot: Snapshots.failed(previous, message), problem: null };
         }
+    }
+
+    /**
+     * When rotating is on and the token expires within a week, has GitLab rotate it, saves the new one at once (GitLab
+     * has revoked the old one) and says so. Only the focused window rotates, and only a token GitLab still takes, so
+     * two windows or IDEs with the same token do not both rotate it: rotating a revoked token makes GitLab revoke the
+     * new one too. Returns the token to read the credits with.
+     */
+    private async rotateIfDue(id: string, account: Account, token: string): Promise<string> {
+        const today = localToday();
+        if (!settings().rotateTokens || !vscode.window.state.focused || !rotationDue(account, today)) {
+            return token;
+        }
+        const client = new CreditsClient(account.gitlabUrl, token, this.transport);
+        let info: TokenInfo;
+        try {
+            info = await client.tokenInfo();
+        } catch (e) {
+            // Turned down, which the refresh says, or GitLab out of reach: the next refresh looks again.
+            log.info('rotate ' + id + ': not now, ' + (e instanceof Error ? e.message : String(e)));
+            return token;
+        }
+        const current = { ...account, expiresAt: info.expiresAt, scopes: info.scopes };
+        if (!rotationDue(current, today)) {
+            await this.store.update(id, { expiresAt: info.expiresAt, scopes: info.scopes });
+            return token;
+        }
+        const expiresAt = rotatedExpiry(info.createdAt, info.expiresAt!, today);
+        let rotated: Rotated;
+        try {
+            rotated = await client.rotate(expiresAt);
+        } catch (e) {
+            const message = e instanceof Error ? e.message : String(e);
+            log.warn('rotate ' + id + ': ' + message);
+            if (e instanceof GitLabError && e.status >= 400 && e.status < 500 && e.status !== 401) {
+                // Asked again only for another token: GitLab said why, and the expiry popup still comes.
+                await this.store.update(id, { rotateRefused: account.tokenSavedAt });
+                this.offerReplace(vscode.window.showWarningMessage(rotateRefusedText(current, message), REPLACE, CREATE),
+                    current);
+            }
+            return token;
+        }
+        const copy = 'Copy the New Token';
+        try {
+            await this.store.storeToken(id, rotated.token);
+        } catch (e) {
+            log.warn('rotate ' + id + ': GitLab rotated the token, but it could not be saved: ' + String(e));
+            void vscode.window.showErrorMessage('Duo Watchdog: GitLab rotated the token of ' + accountName(account)
+                + ', but the new one could not be saved. Copy it and add it with Duo Watchdog: Add or Replace a Token.', copy)
+                .then(choice => choice === copy ? vscode.env.clipboard.writeText(rotated.token) : undefined);
+            return rotated.token;
+        }
+        const now = Date.now();
+        const renewed = withToken(this.store.get(id) ?? account,
+            { gitlabUrl: account.gitlabUrl, username: account.username, info: rotated.info, savedAt: now },
+            { groupPath: account.groupPath, limit: account.limit });
+        await this.store.put(renewed);
+        log.info('rotate ' + id + ': done, the new token expires on ' + (rotated.info.expiresAt ?? 'no date'));
+        void vscode.window.showInformationMessage(rotatedText(renewed), copy)
+            .then(choice => choice === copy ? vscode.env.clipboard.writeText(rotated.token) : undefined);
+        return rotated.token;
     }
 
     /**

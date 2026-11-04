@@ -151,6 +151,7 @@ public final class CreditsConfigurable implements Configurable {
     private JBTextField alertPercents;
     private JBCheckBox alertOnForecast;
     private JBIntSpinner refreshMinutes;
+    private JBCheckBox rotateTokens;
 
     /** What {@link #open} asked for before the page was built. */
     private String openId;
@@ -250,6 +251,7 @@ public final class CreditsConfigurable implements Configurable {
 
         alertPercents = new JBTextField(8);
         alertOnForecast = new JBCheckBox("Alert when the month-end forecast passes the limit");
+        rotateTokens = new JBCheckBox("Rotate tokens a week before they expire");
         refreshMinutes = new JBIntSpinner(15, 1, 1440);
         JPanel refreshRow = left(refreshMinutes);
         JBLabel minutes = new JBLabel("minutes");
@@ -270,6 +272,12 @@ public final class CreditsConfigurable implements Configurable {
                 .addComponentToRightColumn(hint("For every account, of that account's limit."))
                 .addComponentToRightColumn(alertOnForecast)
                 .addLabeledComponent("Refresh every:", refreshRow)
+                .addComponent(new TitledSeparator("Tokens"), JBUI.scale(16))
+                .addComponent(rotateTokens)
+                .addComponent(hint("A week before a token expires, GitLab replaces it with a new one that lives as long "
+                        + "(30 to 365 days) and revokes the old one; the new one is saved and handed to glab. Needs the "
+                        + "api or self_rotate scope. If you use the token anywhere else, the notice after a rotation "
+                        + "copies the new one."))
                 .addComponentFillVertically(new JPanel(), 0)
                 .getPanel();
 
@@ -1000,7 +1008,8 @@ public final class CreditsConfigurable implements Configurable {
         }
         return !alertPercents.getText().trim().equals(s.alertPercents)
                 || alertOnForecast.isSelected() != s.alertOnForecast
-                || refreshMinutes.getNumber() != s.refreshMinutes;
+                || refreshMinutes.getNumber() != s.refreshMinutes
+                || rotateTokens.isSelected() != s.rotateTokens;
     }
 
     @Override
@@ -1056,6 +1065,7 @@ public final class CreditsConfigurable implements Configurable {
         s.alertPercents = newPercents;
         s.alertOnForecast = alertOnForecast.isSelected();
         s.refreshMinutes = refreshMinutes.getNumber();
+        s.rotateTokens = rotateTokens.isSelected();
 
         Map<String, String> tokens = new HashMap<>(pendingTokens);
         Set<String> gone = new HashSet<>(removed);
@@ -1093,6 +1103,7 @@ public final class CreditsConfigurable implements Configurable {
         alertPercents.setText(s.alertPercents);
         alertOnForecast.setSelected(s.alertOnForecast);
         refreshMinutes.setNumber(s.refreshMinutes);
+        rotateTokens.setSelected(s.rotateTokens);
         shown = null;
         refreshRows();
         Account selected = CreditsService.getInstance().selected();

@@ -17,6 +17,14 @@ public final class Accounts {
     public static final int EXPIRY_POPUP_DAYS = 3;
     /** A token this close to its expiry turns amber. */
     public static final int EXPIRY_WARNING_DAYS = 7;
+    /** A token this close to its expiry rotates, when rotating is on: before the popup about it is due. */
+    public static final int ROTATE_DAYS = EXPIRY_WARNING_DAYS;
+    /**
+     * A rotated token lives as long as the one it replaces, within these bounds: long enough not to be due again at
+     * once, and no longer than GitLab allows by default.
+     */
+    public static final int MIN_ROTATED_DAYS = 30;
+    public static final int MAX_ROTATED_DAYS = 365;
     /** What glab needs of a token, besides what Duo Watchdog does. */
     public static final List<String> GLAB_SCOPES = List.of("api", "write_repository");
     /** What the GitLab Duo CLI needs of the token it gets through glab: read_api is not enough for it. */
@@ -71,6 +79,29 @@ public final class Accounts {
         }
         long left = ChronoUnit.DAYS.between(today, expiresAt);
         return left > 0 && left <= days;
+    }
+
+    /** Whether GitLab lets the token rotate itself: api or self_rotate. Unknown scopes count as yes; a 403 says no. */
+    public static boolean canRotate(List<String> scopes) {
+        return scopes == null || scopes.contains("api") || scopes.contains("self_rotate");
+    }
+
+    /**
+     * Whether a token is due to rotate: it expires within {@link #ROTATE_DAYS} and may rotate itself. The same rule
+     * as rotationDue in the VS Code extension, which also checks there that GitLab did not refuse it before.
+     */
+    public static boolean rotationDue(LocalDate expiresAt, List<String> scopes, LocalDate today) {
+        return expiresWithin(expiresAt, today, ROTATE_DAYS) && canRotate(scopes);
+    }
+
+    /**
+     * The expiry day of a rotated token: as many days from today as the old token lived, from {@code createdOn} to
+     * {@code expiresAt}, within {@link #MIN_ROTATED_DAYS} and {@link #MAX_ROTATED_DAYS}; the least when its age is
+     * unknown.
+     */
+    public static LocalDate rotatedExpiry(LocalDate createdOn, LocalDate expiresAt, LocalDate today) {
+        long lived = createdOn == null ? MIN_ROTATED_DAYS : ChronoUnit.DAYS.between(createdOn, expiresAt);
+        return today.plusDays(Math.min(Math.max(lived, MIN_ROTATED_DAYS), MAX_ROTATED_DAYS));
     }
 
     /**

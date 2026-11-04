@@ -19,6 +19,8 @@ export interface Settings {
     percents: number[];
     forecastAlert: boolean;
     refreshMinutes: number;
+    /** Have GitLab rotate a token a week before it expires. */
+    rotateTokens: boolean;
 }
 
 export function settings(): Settings {
@@ -30,6 +32,7 @@ export function settings(): Settings {
         percents: percentsOrDefault(alertPercents),
         forecastAlert: c.get<boolean>('forecastAlert', true),
         refreshMinutes: Math.max(1, c.get<number>('refreshMinutes', 15)),
+        rotateTokens: c.get<boolean>('rotateTokens', true),
     };
 }
 

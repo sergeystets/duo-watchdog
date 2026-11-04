@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **Token rotation:** a week before an account's token expires, GitLab rotates it. The new token lives as long as
+  the old one (30 to 365 days); it is saved and handed to glab, and the notice that says so has **Copy the New
+  Token**, for wherever else you use it. GitLab revokes the old token at once. Needs the `api` or `self_rotate`
+  scope; **Create the Token in GitLab** now asks for `self_rotate` too. Only the focused window rotates, and only a
+  token GitLab has just accepted, so two windows don't both rotate the same token. On by default; turn it off with
+  `duoWatchdog.rotateTokens`.
+
 ## 0.4.0
 
 - **Statistics:** a **Usage | Statistics** switch at the top of the dashboard. Statistics shows the selected account's
