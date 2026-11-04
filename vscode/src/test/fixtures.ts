@@ -32,6 +32,7 @@ export function account(change: Partial<Account> = {}): Account {
         duo: false,
         glabHanded: null,
         glabRefused: null,
+        rotateRefused: null,
         lastAlertKey: null,
         expiryPopupKey: null,
         rejectedPopupKey: null,

@@ -8,6 +8,7 @@ import com.intellij.notification.NotificationType;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.components.Service;
+import com.intellij.openapi.ide.CopyPasteManager;
 import com.intellij.openapi.options.ShowSettingsUtil;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.util.concurrency.AppExecutorUtil;
@@ -26,12 +27,14 @@ import duowatchdog.core.Snapshot;
 import duowatchdog.plugin.CreditsSettings.Account;
 import org.jetbrains.annotations.Nullable;
 
+import java.awt.datatransfer.StringSelection;
 import java.net.Authenticator;
 import java.net.ProxySelector;
 import java.net.http.HttpClient;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -373,6 +376,10 @@ public final class CreditsService implements Disposable {
             try {
                 TokenInfo info = client.tokenInfo();
                 account.remember(info);
+                String rotated = rotateIfDue(account, client, info);
+                if (rotated != null) {
+                    client = new CreditsClient(account.gitlabUrl, rotated, transport());
+                }
             } catch (GitLabException e) {
                 if (e.status() == 401) {
                     return rejected(account);
@@ -402,6 +409,72 @@ public final class CreditsService implements Disposable {
             DuoLog.warn("refresh " + account.id() + ": " + e);
             return previous.failed(e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
         }
+    }
+
+    /**
+     * When rotating is on and the token expires within a week, has GitLab rotate it, saves the new one at once (GitLab
+     * has revoked the old one) and says so. Only while the IDE is focused, and only a token GitLab just took, so two
+     * IDEs with the same token do not both rotate it: rotating a revoked token makes GitLab revoke the new one too.
+     *
+     * @param info what GitLab just said of the token
+     * @return the new token, or null when the token stays
+     */
+    private @Nullable String rotateIfDue(Account account, CreditsClient client, TokenInfo info) {
+        CreditsSettings settings = CreditsSettings.getInstance();
+        LocalDate today = LocalDate.now();
+        String key = String.valueOf(account.tokenSavedAt);
+        if (!settings.getState().rotateTokens || !ApplicationManager.getApplication().isActive()
+                || key.equals(account.rotateFailedKey) || !Accounts.rotationDue(info.expiresAt(), info.scopes(), today)) {
+            return null;
+        }
+        LocalDate createdOn = info.createdAt() == null ? null : info.createdAt().atZone(ZoneOffset.UTC).toLocalDate();
+        CreditsClient.Rotated rotated;
+        try {
+            rotated = client.rotate(Accounts.rotatedExpiry(createdOn, info.expiresAt(), today));
+        } catch (GitLabException e) {
+            DuoLog.warn("rotate " + account.id() + ": " + e.getMessage());
+            if (e.status() >= 400 && e.status() < 500 && e.status() != 401) {
+                // Asked again only for another token: GitLab said why, and the expiry popup still comes.
+                account.rotateFailedKey = key;
+                Notification n = notification(true, "Token not rotated", StringUtil.escapeXmlEntities(
+                        CreditsView.expiry(info.expiresAt(), today) + ". " + e.getMessage() + " Replace it before then."),
+                        NotificationType.WARNING);
+                n.setSubtitle(account.label());
+                n.addAction(NotificationAction.createSimpleExpiring("Replace Token…", () -> openSettings(account.id(), true)));
+                boolean forCli = account.glab || account.duo;
+                n.addAction(NotificationAction.createSimple("Create a New Token in GitLab",
+                        () -> BrowserUtil.browse(GitLabAddress.tokenPage(account.gitlabUrl, forCli))));
+                n.notify(null);
+            }
+            return null;
+        }
+        String token = rotated.token();
+        NotificationAction copy = NotificationAction.createSimpleExpiring("Copy the New Token",
+                () -> CopyPasteManager.getInstance().setContents(new StringSelection(token)));
+        try {
+            settings.setToken(account.id(), token);
+        } catch (RuntimeException e) {
+            DuoLog.warn("rotate " + account.id() + ": GitLab rotated the token, but it could not be saved: " + e);
+            Notification n = notification(true, "Rotated token not saved", "GitLab rotated the token, but "
+                    + StringUtil.escapeXmlEntities(CreditsSettings.storeName()) + " did not take the new one. Copy it "
+                    + "and save it with Replace Token… in Settings.", NotificationType.ERROR);
+            n.setSubtitle(account.label());
+            n.addAction(copy);
+            n.notify(null);
+            return token;
+        }
+        account.tokenSavedAt = System.currentTimeMillis();
+        account.remember(rotated.info());
+        DuoLog.info("rotate " + account.id() + ": done, the new token expires on "
+                + (rotated.info().expiresAt() != null ? rotated.info().expiresAt() : "no date"));
+        Notification n = notification(true, "Token rotated", StringUtil.escapeXmlEntities("Rotated before it expired: the "
+                + "new token " + StringUtil.decapitalize(CreditsView.expiry(rotated.info().expiresAt(), today))
+                + ". GitLab revoked the old one: if you use it anywhere else, use the new one there."),
+                NotificationType.INFORMATION);
+        n.setSubtitle(account.label());
+        n.addAction(copy);
+        n.notify(null);
+        return token;
     }
 
     private static Snapshot rejected(Account account) {

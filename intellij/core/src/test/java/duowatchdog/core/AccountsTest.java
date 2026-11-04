@@ -150,6 +150,32 @@ class AccountsTest {
     @Test
     void theTokenPageAsksForWhatGlabNeedsTooWhenAsked() {
         assertTrue(GitLabAddress.tokenPage("https://gitlab.com", true).endsWith("scopes=api,write_repository,ai_features"));
-        assertTrue(GitLabAddress.tokenPage("https://gitlab.com", false).endsWith("scopes=read_api,ai_features"));
+        assertTrue(GitLabAddress.tokenPage("https://gitlab.com", false).endsWith("scopes=read_api,ai_features,self_rotate"));
+    }
+
+    @Test
+    void aTokenRotatesFromAWeekBeforeItExpiresWhenGitLabLetsIt() {
+        List<String> rotates = List.of("read_api", "ai_features", "self_rotate");
+        assertTrue(Accounts.rotationDue(TODAY.plusDays(7), rotates, TODAY), "seven days");
+        assertTrue(Accounts.rotationDue(TODAY.plusDays(1), rotates, TODAY), "tomorrow");
+        assertFalse(Accounts.rotationDue(TODAY.plusDays(8), rotates, TODAY), "eight days is not yet");
+        assertFalse(Accounts.rotationDue(TODAY, rotates, TODAY), "expired: GitLab turns it down");
+        assertFalse(Accounts.rotationDue(null, rotates, TODAY), "never expires");
+        assertFalse(Accounts.rotationDue(TODAY.plusDays(3), List.of("read_api", "ai_features"), TODAY),
+                "neither api nor self_rotate");
+        assertTrue(Accounts.rotationDue(TODAY.plusDays(3), List.of("api", "write_repository"), TODAY), "api rotates it too");
+        assertTrue(Accounts.rotationDue(TODAY.plusDays(3), null, TODAY), "unknown scopes: GitLab says");
+    }
+
+    @Test
+    void aRotatedTokenLivesAsLongAsTheOldOneFrom30To365Days() {
+        LocalDate expires = LocalDate.of(2026, 10, 25);
+        assertEquals(LocalDate.of(2027, 1, 16), Accounts.rotatedExpiry(expires.minusDays(90), expires, TODAY), "90 days");
+        assertEquals(LocalDate.of(2027, 10, 18), Accounts.rotatedExpiry(expires.minusYears(1), expires, TODAY), "a year");
+        assertEquals(LocalDate.of(2027, 10, 18), Accounts.rotatedExpiry(expires.minusYears(2), expires, TODAY),
+                "no more than a year");
+        assertEquals(LocalDate.of(2026, 11, 17), Accounts.rotatedExpiry(expires.minusDays(7), expires, TODAY),
+                "a week becomes 30 days, so it is not due again at once");
+        assertEquals(LocalDate.of(2026, 11, 17), Accounts.rotatedExpiry(null, expires, TODAY), "unknown age");
     }
 }

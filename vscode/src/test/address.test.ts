@@ -16,15 +16,15 @@ test('keeps the top-level group of whatever was typed', () => {
     assert.equal(path(null), '');
 });
 
-test('the token page asks for the name and both scopes', () => {
+test('the token page asks for the name, the scopes that read usage and the one that rotates', () => {
     assert.equal(tokenPage(' https://gitlab.example.com/ '),
-        'https://gitlab.example.com/-/user_settings/personal_access_tokens?name=Duo+Watchdog&scopes=read_api,ai_features');
+        'https://gitlab.example.com/-/user_settings/personal_access_tokens?name=Duo+Watchdog&scopes=read_api,ai_features,self_rotate');
 });
 
 test('a token glab uses too gets the scopes glab writes with', () => {
     assert.equal(tokenPage('https://gitlab.com', true),
         'https://gitlab.com/-/user_settings/personal_access_tokens?name=Duo+Watchdog&scopes=api,write_repository,ai_features');
-    assert.ok(tokenPage('https://gitlab.com', false).endsWith('scopes=read_api,ai_features'));
+    assert.ok(tokenPage('https://gitlab.com', false).endsWith('scopes=read_api,ai_features,self_rotate'));
 });
 
 test('reads the host', () => {

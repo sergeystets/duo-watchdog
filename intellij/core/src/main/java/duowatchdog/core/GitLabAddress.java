@@ -46,14 +46,15 @@ public final class GitLabAddress {
         }
     }
 
-    /** GitLab's new-token page with the name and both scopes filled in. */
+    /** GitLab's new-token page with the name and the scopes Duo Watchdog needs filled in. */
     public static String tokenPage(String gitlabUrl) {
         return tokenPage(gitlabUrl, false);
     }
 
     /**
-     * GitLab's new-token page with the name and scopes filled in: read_api and ai_features, or, for a token glab
-     * and the Duo CLI use too, api, write_repository and ai_features.
+     * GitLab's new-token page with the name and scopes filled in: read_api, ai_features and self_rotate (so the
+     * token can rotate before it expires), or, for a token glab and the Duo CLI use too, api, write_repository and
+     * ai_features (api rotates it too).
      */
     public static String tokenPage(String gitlabUrl, boolean forCli) {
         String base = gitlabUrl == null ? "" : gitlabUrl.trim();
@@ -61,6 +62,6 @@ public final class GitLabAddress {
             base = base.substring(0, base.length() - 1);
         }
         return base + "/-/user_settings/personal_access_tokens?name=Duo+Watchdog&scopes="
-                + (forCli ? "api,write_repository,ai_features" : "read_api,ai_features");
+                + (forCli ? "api,write_repository,ai_features" : "read_api,ai_features,self_rotate");
     }
 }

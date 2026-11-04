@@ -25,8 +25,8 @@ class GitLabAddressTest {
     }
 
     @Test
-    void theTokenPageAsksForTheNameAndBothScopes() {
-        assertEquals("https://gitlab.example.com/-/user_settings/personal_access_tokens?name=Duo+Watchdog&scopes=read_api,ai_features",
+    void theTokenPageAsksForTheNameTheScopesThatReadUsageAndTheOneThatRotates() {
+        assertEquals("https://gitlab.example.com/-/user_settings/personal_access_tokens?name=Duo+Watchdog&scopes=read_api,ai_features,self_rotate",
                 GitLabAddress.tokenPage(" https://gitlab.example.com/ "));
     }
 

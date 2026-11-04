@@ -169,6 +169,13 @@
           "scope": "application",
           "order": 5,
           "markdownDescription": "How often to read the credits of every account, in minutes. GitLab's usage data can lag a few minutes behind actual use."
+        },
+        "duoWatchdog.rotateTokens": {
+          "type": "boolean",
+          "default": true,
+          "scope": "application",
+          "order": 6,
+          "markdownDescription": "Rotate each account's token a week before it expires: GitLab replaces it with a new one that lives as long (30 to 365 days) and revokes the old one, and the new one is saved and handed to glab. Needs the `api` or `self_rotate` scope. If you use the token anywhere else, the popup after a rotation copies the new one."
         }
       }
     }
