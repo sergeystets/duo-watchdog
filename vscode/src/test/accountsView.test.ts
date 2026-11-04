@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { glabScopeNote, idOf } from '../core/accounts';
+import { Account, glabScopeNote, idOf } from '../core/accounts';
 import {
     accountDetail, accountLabel, accountName, accountsDashboard, accountStatusText, addedText, addPlan, alertText,
     cliOffText, cliOnText, duoNote, expiryText, GLAB_FOLLOWS, glabCaption, glabNote, glabNowText, othersNeedAttention,
@@ -39,6 +39,19 @@ test('an account reads as in the mockup', () => {
         '••••••• · turned down by GitLab · glab and the Duo CLI allowed · the Duo CLI needs api and ai_features');
     assert.equal(accountDetail(state(account({ expiresAt: '2026-12-01' }), null, 'noGroup'), TODAY),
         'no group · ••••••• · expires Dec 1');
+});
+
+test('the Accounts list says when a token rotates, while rotating is on', () => {
+    const rotating = (change: Partial<Account>, rotate = true) =>
+        accountDetail(state(account({ scopes: ['api', 'ai_features'], tokenSavedAt: 1000, ...change }), 10), TODAY, null, rotate);
+    assert.equal(rotating({}), '290 left · ••••••• · expires Feb 1, 2027 · rotates Jan 25, 2027');
+    assert.equal(rotating({ expiresAt: '2026-12-04' }), '290 left · ••••••• · expires Dec 4 · rotates Nov 27');
+    assert.equal(rotating({ expiresAt: '2026-10-23' }), '290 left · ••••••• · expires in 5 days · rotates at the next refresh');
+    assert.equal(rotating({ scopes: ['read_api', 'ai_features'] }),
+        "290 left · ••••••• · expires Feb 1, 2027 · can't rotate itself (no api or self_rotate scope)");
+    assert.equal(rotating({ rotateRefused: 1000 }), '290 left · ••••••• · expires Feb 1, 2027 · GitLab would not rotate it');
+    assert.equal(rotating({ expiresAt: null }), '290 left · •••••••', 'never expires');
+    assert.equal(rotating({}, false), '290 left · ••••••• · expires Feb 1, 2027', 'rotating is off');
 });
 
 test('the status bar shows the selected account, with a bell for the others', () => {

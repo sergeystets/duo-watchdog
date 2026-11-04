@@ -252,6 +252,8 @@ public final class CreditsConfigurable implements Configurable {
         alertPercents = new JBTextField(8);
         alertOnForecast = new JBCheckBox("Alert when the month-end forecast passes the limit");
         rotateTokens = new JBCheckBox("Rotate tokens a week before they expire");
+        // The token box says when the shown account's token rotates, so it follows the box before Apply.
+        rotateTokens.addItemListener(e -> renderDetails());
         refreshMinutes = new JBIntSpinner(15, 1, 1440);
         JPanel refreshRow = left(refreshMinutes);
         JBLabel minutes = new JBLabel("minutes");
@@ -531,14 +533,14 @@ public final class CreditsConfigurable implements Configurable {
             if (checked.info() != null) {
                 a.remember(checked.info());
             }
-            StateBox.Look look = describe(a, pending, today, lines);
+            StateBox.Look look = describe(a, pending, rotateTokens.isSelected(), today, lines);
             if (checked.groupError() != null && look == StateBox.Look.OK) {
                 look = StateBox.Look.WARNING;
             }
             stateBox.show(look, "Connected to " + a.host() + " as @" + checked.user(), lines);
         } else if (pending) {
             List<String> lines = new ArrayList<>();
-            describe(a, true, today, lines);
+            describe(a, true, rotateTokens.isSelected(), today, lines);
             stateBox.show(StateBox.Look.INFO, "New token, not saved yet", lines);
         } else if (Boolean.FALSE.equals(saved)) {
             stateBox.show(StateBox.Look.WARNING, "No token for this account",
@@ -546,18 +548,18 @@ public final class CreditsConfigurable implements Configurable {
                             + "or the IDE keeps passwords only until it restarts. Add token… saves one."));
         } else if (snapshot.status() == Snapshot.Status.REJECTED) {
             List<String> lines = new ArrayList<>();
-            describe(a, false, today, lines);
+            describe(a, false, rotateTokens.isSelected(), today, lines);
             lines.add("GitLab turns it down: it has expired or was revoked. Create a new one and replace this one.");
             stateBox.show(StateBox.Look.ERROR, "The saved token no longer works", lines);
         } else if (!Accounts.readsUsage(a.scopeList())) {
             List<String> lines = new ArrayList<>();
-            describe(a, false, today, lines);
+            describe(a, false, rotateTokens.isSelected(), today, lines);
             lines.add("<b>No ai_features scope</b>: GitLab does not show this account's Duo usage to the token, so "
                     + "there is nothing to track. glab and the Duo CLI can still use it.");
             stateBox.show(StateBox.Look.WARNING, "Token saved, but its usage is not tracked", lines);
         } else {
             List<String> lines = new ArrayList<>();
-            StateBox.Look look = describe(a, false, today, lines);
+            StateBox.Look look = describe(a, false, rotateTokens.isSelected(), today, lines);
             stateBox.show(look, look == StateBox.Look.OK ? "Token saved"
                     : Accounts.expiresWithin(a.expiry(), today, Accounts.EXPIRY_WARNING_DAYS)
                     ? "Token saved, but it expires soon" : "Token saved, but it lacks a scope", lines);
@@ -565,24 +567,31 @@ public final class CreditsConfigurable implements Configurable {
     }
 
     /**
-     * Adds what is known of the account's token to {@code lines}: when it was saved, when it expires, its scopes.
-     * Returns WARNING_COLOR when it expires within a week or lacks a scope, else OK.
+     * Adds what is known of the account's token to {@code lines}: when it was saved, when it expires and rotates, its
+     * scopes. Returns WARNING_COLOR when it expires within a week or lacks a scope, else OK.
+     *
+     * @param rotate whether rotating is ticked on the page, applied or not
      */
-    private static StateBox.Look describe(Account a, boolean pending, LocalDate today, List<String> lines) {
+    private static StateBox.Look describe(Account a, boolean pending, boolean rotate, LocalDate today, List<String> lines) {
         if (a.tokenSavedAt > 0 && !pending) {
             lines.add("Saved on " + CreditsView.moment(Instant.ofEpochMilli(a.tokenSavedAt), ZoneId.systemDefault(), today));
         }
         StateBox.Look look = StateBox.Look.OK;
         LocalDate expiry = a.expiry();
+        List<String> scopes = a.scopeList();
         if (expiry != null || CreditsSettings.NEVER.equals(a.expiresAt)) {
             String text = CreditsView.expiry(expiry, today);
+            boolean rotates = rotate && Accounts.canRotate(scopes) && !a.rotateRefused();
             if (Accounts.expiresWithin(expiry, today, Accounts.EXPIRY_WARNING_DAYS)) {
                 look = StateBox.Look.WARNING;
-                text = "<b>" + text + "</b>: create a new token before then.";
+                text = "<b>" + text + "</b>" + (rotates ? "" : ": create a new token before then.");
             }
             lines.add(text);
+            String rotation = CreditsView.rotation(rotate, expiry, scopes, a.rotateRefused(), today);
+            if (rotation != null) {
+                lines.add(rotation);
+            }
         }
-        List<String> scopes = a.scopeList();
         if (scopes != null) {
             List<String> missing = new ArrayList<>();
             for (String scope : CreditsClient.SCOPES) {
