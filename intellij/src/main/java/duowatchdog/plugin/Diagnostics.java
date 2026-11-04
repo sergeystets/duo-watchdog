@@ -80,7 +80,8 @@ final class Diagnostics extends DumbAwareAction {
         CreditsService service = CreditsService.getInstance();
         Account picked = service.selected();
         r.append("Alerts at ").append(s.alertPercents).append("%, forecast alert ").append(s.alertOnForecast ? "on" : "off")
-                .append(", refresh every ").append(s.refreshMinutes).append(" min\n");
+                .append(", refresh every ").append(s.refreshMinutes).append(" min, rotate tokens ")
+                .append(s.rotateTokens ? "on" : "off").append("\n");
         r.append("Picked account: ").append(picked != null ? picked.id() : "none").append('\n');
         r.append("Accounts (").append(s.accounts.size()).append("):\n");
         for (Account a : s.accounts) {

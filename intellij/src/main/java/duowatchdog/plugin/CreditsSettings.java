@@ -65,6 +65,8 @@ public final class CreditsSettings implements PersistentStateComponent<CreditsSe
         public String glabHandedKey = "";
         /** {@link #tokenSavedAt} of the token glab turned down, so it is not tried again on every refresh. */
         public String glabFailedKey = "";
+        /** {@link #tokenSavedAt} of a token GitLab would not rotate, so it is not tried again until the token changes. */
+        public String rotateFailedKey = "";
 
         public String id() {
             return Accounts.id(gitlabUrl, username);
@@ -129,6 +131,7 @@ public final class CreditsSettings implements PersistentStateComponent<CreditsSe
             a.lastRejectedKey = lastRejectedKey;
             a.glabHandedKey = glabHandedKey;
             a.glabFailedKey = glabFailedKey;
+            a.rotateFailedKey = rotateFailedKey;
             return a;
         }
 
@@ -155,6 +158,8 @@ public final class CreditsSettings implements PersistentStateComponent<CreditsSe
         public String alertPercents = Alert.DEFAULT_PERCENTS;
         public boolean alertOnForecast = true;
         public int refreshMinutes = 15;
+        /** Have GitLab rotate a token a week before it expires. */
+        public boolean rotateTokens = true;
         /** How many months Statistics shows: one of History.RANGES. */
         public int statisticsMonths = 3;
         /** The plugin version the What's New page was last offered for. */
