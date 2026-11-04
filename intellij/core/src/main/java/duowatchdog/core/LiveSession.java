@@ -173,14 +173,17 @@ public final class LiveSession {
     }
 
     /**
-     * The run to show for a project: the CLI's in the project's folder, else the one written to last; null for none.
+     * The run to show for a project, of those with something counted: the CLI's in the project's folder, else the one
+     * written to last; null for none. A run that has counted nothing yet, such as {@code duo} started again or another
+     * {@code duo} command, does not hide a session still going.
      *
      * @param runs most recently written first
      */
     public static Run pick(List<Run> runs, String projectPath) {
         String key = folderKey(projectPath);
-        return runs.stream().filter(r -> !key.isEmpty() && r.folder().equalsIgnoreCase(key)).findFirst()
-                .orElse(runs.isEmpty() ? null : runs.get(0));
+        List<Run> counted = runs.stream().filter(r -> r.meter() != null).toList();
+        return counted.stream().filter(r -> !key.isEmpty() && r.folder().equalsIgnoreCase(key)).findFirst()
+                .orElse(counted.isEmpty() ? null : counted.get(0));
     }
 
     /** "42 steps". */

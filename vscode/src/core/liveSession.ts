@@ -165,12 +165,15 @@ export function folderKey(folderPath: string | null | undefined): string {
 }
 
 /**
- * The run to show for a workspace: the CLI's in one of its folders, else the one written to last; null for none.
+ * The run to show for a workspace, of those with something counted: the CLI's in one of its folders, else the one
+ * written to last; null for none. A run that has counted nothing yet, such as `duo` started again or another `duo`
+ * command, does not hide a session still going.
  * @param runs most recently written first
  */
 export function pickRun(runs: readonly Run[], folderPaths: readonly string[]): Run | null {
     const keys = new Set(folderPaths.map(p => folderKey(p).toLowerCase()).filter(k => k !== ''));
-    return runs.find(r => keys.has(logFolder(r.log).toLowerCase())) ?? runs[0] ?? null;
+    const counted = runs.filter(r => r.meter != null);
+    return counted.find(r => keys.has(logFolder(r.log).toLowerCase())) ?? counted[0] ?? null;
 }
 
 /** "42 steps". */
