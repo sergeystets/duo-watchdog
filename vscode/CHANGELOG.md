@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.1
+
+- The session of the interactive Duo CLI (9.30) counts its **round trips**: one `Running workflow` line per prompt,
+  with the `SEND_PROMPT` lines of the headless `duo run` and older CLIs used only in a log without them, never both.
+  A reply without a tool call now shows the session too.
+- A session on the group's default model (`Resolved user-selected model ref "…" is a "use the feature default"
+  sentinel`) says **Group default**, without ≈ credits, since the log does not name the model.
+
 ## 0.5.0
 
 - **The Duo CLI session, live:** while `duo` runs a session, a second status bar item shows

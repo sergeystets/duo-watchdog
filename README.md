@@ -17,7 +17,7 @@ GitLab Credits usage for the current billing period, forecast where the month wi
 ![Java](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-VS_Code_extension-3178C6?logo=typescript&logoColor=white)
 ![GitLab](https://img.shields.io/badge/GitLab-Duo-FC6D26?logo=gitlab&logoColor=white)
-![Version](https://img.shields.io/badge/version-0.5.0-blue)
+![Version](https://img.shields.io/badge/version-0.5.1-blue)
 
 </div>
 
@@ -31,6 +31,9 @@ GitLab Credits usage for the current billing period, forecast where the month wi
 
 ## What's new in 0.5.0
 
+- **0.5.1**: the session of the interactive Duo CLI (9.30) counts its **round trips**, one per prompt, and shows even
+  before its first tool call; a session on the group's default model says **Group default**; a project in WSL has its
+  Duo CLI runs followed once, not twice.
 - **The Duo CLI session, live**: while `duo` runs a session, a small status bar item beside the credits shows how long
   it has run, its round trips (prompts you sent), its steps (model calls) and its ≈ credits, each step at its model's
   credits per call: `12m 4s · 5 round trips · 42 steps · ≈ $38.2`, updated within seconds of each step. Its mini meter
@@ -180,19 +183,22 @@ arrive per day and per feature, hours later. Each run of the CLI writes a log of
 `duo-cli-log-<start, UTC>-<the last three folders of where it runs>.log` in `gitlab-duo-cli` in the temporary folder
 (or the project's WSL `/tmp`), and appends each line as it logs it, at its default `debug` level. Duo Watchdog looks
 at the newest of those logs every two seconds and reads only what they gained since: a poll rather than a file
-watcher, since a folder in WSL, reached over `\\wsl$`, reports no changes. It shows the run in the project's folder,
+watcher, since a folder in WSL, reached over `\\wsl.localhost` or `\\wsl$`, reports no changes. It shows the run in the project's folder,
 else the one written to last, until its log has been quiet for 30 minutes. The headless `duo run` prints its log to
 the terminal (stdout, or stderr with `--output-format json`) instead of a file, so the meter does not see it; nor a
 log folder moved with `GITLAB_DUO_CLI_LOG_DIR`. Three kinds of line are looked at, and no more than their first 400
-characters; of them only the time, the session and the one field named:
+characters; of them only the time, the session and the one field named (checkpoints and the other lines are no
+model calls and are not counted):
 
 | Line | Counts as |
 |------|-----------|
 | `[DuoWorkflowNodeExecutor][<session>] [requestID: <id>] Action received` | a **step**, once per session and request |
-| `[RunController] Executing workflow: {"type": "SEND_PROMPT", …}` | a **round trip**; the prompt is not read on or kept |
+| `[DuoWorkflowNodeExecutor][<session>] Running workflow` | a **round trip**, one per prompt, as the interactive CLI (9.30) logs it |
+| `[RunController] Executing workflow: {"type": "SEND_PROMPT", …}` | a **round trip** in a log with no `Running workflow` line, as the headless `duo run` and older CLIs log it (never both); the prompt is not read on or kept |
 | `[ModelResolverService] Using user-selected model: "<identifier>"` | the **model** of the steps after it |
+| `[ModelResolverService] Resolved user-selected model ref "…" is a "use the feature default" sentinel` | the group's default model, shown as **Group default**, with no ≈ credits since the log does not name it |
 
-A prompt names no session, so it counts toward the session of the next step, and the session's run time starts at
+A `SEND_PROMPT` names no session, so it counts toward the session of the next step; the session's run time starts at
 its first prompt (else its first step), by the CLI machine's clock. A session resumed from an earlier run
 counts what this run did; the list below it counts its steps in every log. **≈ credits** price each step at its
 model's credits per call, from GitLab's Credits page (checked 2026-11-04), kept in one table in
@@ -471,7 +477,7 @@ Or the IDE's own way:
 
 1. [Build the plugin](#building-from-source), or get `duo-watchdog-<version>.zip` from a teammate.
 2. In the IDE, open *Settings → Plugins → ⚙ → Install Plugin from Disk…*
-3. Select `intellij/build/distributions/duo-watchdog-0.5.0.zip` and restart if the IDE asks you to.
+3. Select `intellij/build/distributions/duo-watchdog-0.5.1.zip` and restart if the IDE asks you to.
 
 **Compatibility:** IntelliJ IDEA and any other JetBrains IDE from **2024.3** onward. This holds whichever IDE version the plugin was built against.
 
@@ -560,7 +566,7 @@ VS Code extension (`:vscode`, which runs its npm build). Open the root folder in
 
 ```bash
 ./gradlew test            # all tests: the plugin's core and the VS Code extension
-./gradlew buildPlugin     # → intellij/build/distributions/duo-watchdog-0.5.0.zip
+./gradlew buildPlugin     # → intellij/build/distributions/duo-watchdog-0.5.1.zip
 ./gradlew runIde          # launch a sandbox IDE with the plugin installed
 ```
 
@@ -677,11 +683,11 @@ because the path contains spaces:
 **5. Find the result:**
 
 ```powershell
-dir intellij\build\distributions    # → duo-watchdog-0.5.0.zip
+dir intellij\build\distributions    # → duo-watchdog-0.5.1.zip
 ```
 
 Then follow [Installation](#installation): *Settings → Plugins → ⚙ → Install Plugin from Disk…* and pick
-`intellij\build\distributions\duo-watchdog-0.5.0.zip`.
+`intellij\build\distributions\duo-watchdog-0.5.1.zip`.
 
 **Optional:** run the tests or try the plugin in a sandbox IDE:
 
@@ -759,7 +765,7 @@ The VS Code extension builds with npm (Node.js 20+), from the root through Gradl
 
 ```bash
 ./gradlew :vscode:test               # 120 tests, no VS Code needed         (npm ci && npm test)
-./gradlew :vscode:packageExtension   # → vscode/duo-watchdog-0.5.0.vsix      (npm run package)
+./gradlew :vscode:packageExtension   # → vscode/duo-watchdog-0.5.1.vsix      (npm run package)
 ./gradlew :vscode:installExtension   # into VS Code; -PcodePath=codium for another CLI
 ```
 

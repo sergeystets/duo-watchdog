@@ -5,8 +5,8 @@ import * as path from 'node:path';
 import { test } from 'node:test';
 import { LiveLog } from '../core/liveLog';
 import {
-    durationText, folderKey, HEAD, liveBarText, liveBasis, liveCard, liveCredits, liveLevel, liveStarted, liveTooltip,
-    liveWhat, limitText, LiveSession, Meter, pickRun, Run, runTime, UTC_CLOCK,
+    durationText, folderKey, GROUP_DEFAULT, HEAD, liveBarText, liveBasis, liveCard, liveCredits, liveLevel, liveStarted,
+    liveTooltip, liveWhat, limitText, LiveSession, Meter, pickRun, Run, runTime, UTC_CLOCK,
 } from '../core/liveSession';
 import { modelName, perCall } from '../core/modelCredits';
 
@@ -40,6 +40,69 @@ function read(log: string): LiveSession {
     }
     return live;
 }
+
+/**
+ * As the interactive CLI 9.30 writes it: the group's default model, then two prompts with a tool call each and a third
+ * answered without one. No SEND_PROMPT line; checkpoints, which are no model calls; a prompt in the line that runs it.
+ */
+const INTERACTIVE = `2026-11-05T09:00:00:000 [info]: [ModelResolverService] Resolved user-selected model ref "__default__duo_agent_platform_agentic_chat" is a "use the feature default" sentinel; the feature's default model is used
+2026-11-05T09:00:05:000 [debug]: [DuoWorkflowNodeExecutor][10301001] Running workflow {"goal": "${SECRET}"}
+2026-11-05T09:00:05:100 [debug]: Creating websocket connection...
+2026-11-05T09:00:05:300 [debug]: [DuoWorkflowNodeExecutor][10301001] startRequest written to stream
+2026-11-05T09:00:07:000 [debug]: [DuoWorkflowNodeExecutor][10301001] Received new checkpoint
+2026-11-05T09:00:09:500 [debug]: [DuoWorkflowNodeExecutor][10301001] [requestID: r1] Action received: {"requestID":"r1"
+2026-11-05T09:00:10:000 [debug]: [DuoWorkflowNodeExecutor][10301001] Received new checkpoint
+2026-11-05T09:00:12:000 [debug]: [GitLabBackend] Workflow turn ended
+2026-11-05T09:01:00:000 [debug]: [DuoWorkflowNodeExecutor][10301001] Running workflow {"goal": "and ${SECRET}"}
+2026-11-05T09:01:00:100 [debug]: Creating websocket connection...
+2026-11-05T09:01:03:000 [debug]: [DuoWorkflowNodeExecutor][10301001] [requestID: r2] Action received: {"requestID":"r2"
+2026-11-05T09:01:04:000 [debug]: [DuoWorkflowNodeExecutor][10301001] Received new checkpoint
+2026-11-05T09:01:06:000 [debug]: [GitLabBackend] Workflow turn ended
+2026-11-05T09:02:00:000 [debug]: [DuoWorkflowNodeExecutor][10301001] Running workflow {"goal": "thanks"}
+2026-11-05T09:02:02:000 [debug]: [DuoWorkflowNodeExecutor][10301001] Received new checkpoint
+2026-11-05T09:02:03:000 [debug]: [GitLabBackend] Workflow turn ended
+`;
+
+test('counts the round trips of an interactive session', () => {
+    const lines = INTERACTIVE.split('\n');
+    const live = new LiveSession(UTC_CLOCK);
+    lines.slice(0, 8).forEach(line => live.line(line));
+    assert.deepEqual(live.meter(), {
+        session: 10301001, steps: 1, roundTrips: 1, model: GROUP_DEFAULT, credits: null,
+        started: Date.parse('2026-11-05T09:00:05Z'),
+    }, 'one Running workflow a prompt; checkpoints no steps');
+
+    lines.slice(8).forEach(line => live.line(line));
+    const m = live.meter()!;
+    assert.deepEqual([m.steps, m.roundTrips], [2, 3], 'a reply without a tool call is a round trip too');
+    assert.equal(liveWhat(m), 'Group default · 2 steps · 3 round trips');
+    assert.equal(liveCredits(m), "No ≈ credits: the group's default model, which the log does not name");
+    const run: Run = { log: NAME, modified: Date.parse('2026-11-05T09:02:03Z'), meter: m };
+    const now = Date.parse('2026-11-05T09:02:10Z');
+    for (const shown of [JSON.stringify(m), liveBarText(run, now), JSON.stringify(liveTooltip(run, now, 20, CLOCK)),
+        JSON.stringify(liveCard(m, 20, CLOCK))]) {
+        assert.ok(!shown.includes('sk-live') && !shown.includes('billing') && !shown.includes('__default__'), shown);
+    }
+});
+
+test('a reply without a tool call shows the session', () => {
+    const live = new LiveSession(UTC_CLOCK);
+    live.line('2026-11-05T09:00:05:000 [debug]: [DuoWorkflowNodeExecutor][10301001] Running workflow');
+    assert.deepEqual(live.meter(), {
+        session: 10301001, steps: 0, roundTrips: 1, model: null, credits: null, started: Date.parse('2026-11-05T09:00:05Z'),
+    });
+});
+
+test('a headless run writing both counts its prompt once', () => {
+    const m = read(`2026-11-04T10:00:02:100 [info]: [ModelResolverService] Using user-selected model: "claude_sonnet_5_5"
+2026-11-04T10:00:05:000 [debug]: [RunController] Executing workflow: {"type": "SEND_PROMPT", "goal": "x"}
+2026-11-04T10:00:05:200 [debug]: [DuoWorkflowNodeExecutor][7] Running workflow
+2026-11-04T10:00:09:000 [debug]: [DuoWorkflowNodeExecutor][7] [requestID: a] Action received: {}`).meter()!;
+
+    assert.equal(m.roundTrips, 1);
+    assert.equal(m.model, 'claude_sonnet_5_5', 'the model line of the headless CLI is still read');
+    assert.equal(m.started, Date.parse('2026-11-04T10:00:05Z'), 'from its prompt');
+});
 
 test('counts steps, round trips and the model', () => {
     const m = read(LOG).meter()!;
