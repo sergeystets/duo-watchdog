@@ -1,5 +1,7 @@
 package duowatchdog.core;
 
+import java.util.Comparator;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -31,6 +33,16 @@ public final class ModelCredits {
             Map.entry("Fable 5", 1.667),
             Map.entry("Fable 5.1", 1.667));
 
+    /** The models in the table, the cheapest first, as GitLab's Credits page names them: for the group's default model. */
+    public static final List<String> MODELS = PER_CALL.keySet().stream()
+            .sorted(Comparator.comparing((String m) -> PER_CALL.get(m)).thenComparing(Comparator.naturalOrder())).toList();
+
+    /**
+     * What a step is priced as when the Duo CLI's log names no model, the group's default, or one not in the table,
+     * unless the settings say otherwise: GitLab's default model for the Duo Agent Platform.
+     */
+    public static final String ASSUMED = "Sonnet 4.5";
+
     /** claude_sonnet_5_5, claude_opus_5, claude-haiku-4-5-20251001: the family, the version and a minor one. */
     private static final Pattern CLAUDE = Pattern.compile("(haiku|sonnet|opus|fable)[_.-]?(\\d{1,2})(?:[_.-](\\d)(?!\\d))?");
 
@@ -54,5 +66,10 @@ public final class ModelCredits {
     /** The credits GitLab bills per call to the model; null when the table does not have it. */
     public static Double perCall(String identifier) {
         return identifier == null ? null : PER_CALL.get(name(identifier));
+    }
+
+    /** The model named, when the table has it; else {@link #ASSUMED}. */
+    public static String assumed(String name) {
+        return name != null && PER_CALL.containsKey(name) ? name : ASSUMED;
     }
 }

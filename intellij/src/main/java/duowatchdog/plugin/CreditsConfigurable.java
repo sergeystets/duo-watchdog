@@ -10,6 +10,7 @@ import com.intellij.openapi.options.Configurable;
 import com.intellij.openapi.options.ConfigurationException;
 import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.openapi.progress.ProgressManager;
+import com.intellij.openapi.ui.ComboBox;
 import com.intellij.openapi.ui.MessageDialogBuilder;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.ui.popup.JBPopupFactory;
@@ -21,6 +22,7 @@ import com.intellij.ui.DocumentAdapter;
 import com.intellij.ui.JBColor;
 import com.intellij.ui.JBIntSpinner;
 import com.intellij.ui.SearchTextField;
+import com.intellij.ui.SimpleListCellRenderer;
 import com.intellij.ui.SimpleTextAttributes;
 import com.intellij.ui.TitledSeparator;
 import com.intellij.ui.ToolbarDecorator;
@@ -45,6 +47,7 @@ import duowatchdog.core.CreditsView;
 import duowatchdog.core.GitLabAddress;
 import duowatchdog.core.GitLabException;
 import duowatchdog.core.LiveSession;
+import duowatchdog.core.ModelCredits;
 import duowatchdog.core.Snapshot;
 import duowatchdog.plugin.CreditsSettings.Account;
 import org.jetbrains.annotations.NotNull;
@@ -153,6 +156,7 @@ public final class CreditsConfigurable implements Configurable {
     private JBCheckBox alertOnForecast;
     private JBIntSpinner refreshMinutes;
     private JBIntSpinner roundTripLimit;
+    private ComboBox<String> groupDefaultModel;
     private JBCheckBox rotateTokens;
 
     /** What {@link #open} asked for before the page was built. */
@@ -266,6 +270,9 @@ public final class CreditsConfigurable implements Configurable {
         JBLabel perSession = new JBLabel("round trips per session");
         perSession.setBorder(JBUI.Borders.emptyLeft(8));
         roundTripRow.add(perSession);
+        groupDefaultModel = new ComboBox<>(ModelCredits.MODELS.toArray(String[]::new));
+        groupDefaultModel.setRenderer(
+                SimpleListCellRenderer.create("", m -> m + "  ·  " + ModelCredits.perCall(m) + " credits a call"));
 
         panel = FormBuilder.createFormBuilder()
                 .addComponent(new TitledSeparator("Accounts"))
@@ -284,6 +291,10 @@ public final class CreditsConfigurable implements Configurable {
                 .addLabeledComponent("Duo CLI, at most:", roundTripRow)
                 .addComponentToRightColumn(hint("The prompts you send in one Duo CLI session. The session in the status "
                         + "bar and in Sessions turns amber from 80% of it and red at it; 0 for no colour."))
+                .addLabeledComponent("Group default model:", left(groupDefaultModel))
+                .addComponentToRightColumn(hint("For the ≈ $ of a Duo CLI session on your group's default model: the "
+                        + "CLI's log says only that it uses the group's default, not which model. Also used for a step "
+                        + "whose log names no model, or one with no known rate."))
                 .addComponent(new TitledSeparator("Tokens"), JBUI.scale(16))
                 .addComponent(rotateTokens)
                 .addComponent(hint("A week before a token expires, GitLab replaces it with a new one that lives as long "
@@ -1029,6 +1040,7 @@ public final class CreditsConfigurable implements Configurable {
                 || alertOnForecast.isSelected() != s.alertOnForecast
                 || refreshMinutes.getNumber() != s.refreshMinutes
                 || roundTripLimit.getNumber() != s.roundTripLimit
+                || !ModelCredits.assumed(s.groupDefaultModel).equals(groupDefaultModel.getSelectedItem())
                 || rotateTokens.isSelected() != s.rotateTokens;
     }
 
@@ -1086,6 +1098,7 @@ public final class CreditsConfigurable implements Configurable {
         s.alertOnForecast = alertOnForecast.isSelected();
         s.refreshMinutes = refreshMinutes.getNumber();
         s.roundTripLimit = roundTripLimit.getNumber();
+        s.groupDefaultModel = ModelCredits.assumed((String) groupDefaultModel.getSelectedItem());
         s.rotateTokens = rotateTokens.isSelected();
 
         Map<String, String> tokens = new HashMap<>(pendingTokens);
@@ -1125,6 +1138,7 @@ public final class CreditsConfigurable implements Configurable {
         alertOnForecast.setSelected(s.alertOnForecast);
         refreshMinutes.setNumber(s.refreshMinutes);
         roundTripLimit.setNumber(s.roundTripLimit);
+        groupDefaultModel.setSelectedItem(ModelCredits.assumed(s.groupDefaultModel));
         rotateTokens.setSelected(s.rotateTokens);
         shown = null;
         refreshRows();

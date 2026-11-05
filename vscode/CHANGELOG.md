@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.2
+
+- The Duo CLI session in the status bar always shows its **≈ $**: a step on the group's default model, on a model the
+  log does not name, or on one with no known rate is priced as the model set in `duoWatchdog.groupDefaultModel`
+  (Sonnet 4.5, 0.5 credits a call, unless you pick another): `34m 17s · 0 round trips · 2 steps · ≈ $1`. The tooltip
+  and Sessions say which model the estimate takes.
+
 ## 0.5.1
 
 - The session of the interactive Duo CLI (9.30) counts its **round trips**: one `Running workflow` line per prompt,

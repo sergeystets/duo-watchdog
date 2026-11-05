@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { DEFAULT_LIMIT, OldSettings } from './core/accounts';
 import { DEFAULT_PERCENTS, percentsOrDefault } from './core/alert';
 import { RECOMMENDED_ROUND_TRIPS } from './core/liveSession';
+import { ASSUMED_MODEL, assumedModel } from './core/modelCredits';
 
 export const SECTION = 'duoWatchdog';
 /**
@@ -24,6 +25,8 @@ export interface Settings {
     rotateTokens: boolean;
     /** The round trips per Duo CLI session recommended at most; 0 for no colour. */
     roundTripLimit: number;
+    /** The model a Duo CLI step is priced as when the log names none or one with no known rate: the group's default. */
+    groupDefaultModel: string;
 }
 
 export function settings(): Settings {
@@ -37,6 +40,7 @@ export function settings(): Settings {
         refreshMinutes: Math.max(1, c.get<number>('refreshMinutes', 15)),
         rotateTokens: c.get<boolean>('rotateTokens', true),
         roundTripLimit: Math.max(0, c.get<number>('roundTripLimit', RECOMMENDED_ROUND_TRIPS)),
+        groupDefaultModel: assumedModel(c.get<string>('groupDefaultModel', ASSUMED_MODEL)),
     };
 }
 

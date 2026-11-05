@@ -1,6 +1,6 @@
 import { time } from './dates';
 import { logFolder } from './duoCliLogs';
-import { modelName, perCall } from './modelCredits';
+import { ASSUMED_MODEL, modelName, perCall } from './modelCredits';
 import { number } from './view';
 
 /**
@@ -18,8 +18,10 @@ import { number } from './view';
  *   "use the feature default" sentinel`, the group's default: the model of the steps after it.
  * Each is known by its tag coming before any quote or brace, so a prompt or code that quotes one is not taken for it.
  * No more than the start of a line is looked at, and only counts, session numbers and the model are kept. A
- * `SEND_PROMPT` names no session: it goes to the session of the next step. Each run of the CLI writes a log of its own, so a session
- * resumed from an earlier run counts what this run did. A port of LiveSession in the plugin's core.
+ * `SEND_PROMPT` names no session: it goes to the session of the next step. A step on a model the log does not name, or
+ * one with no rate in the table, is priced as the group's default model set in the settings. Each run of the CLI writes
+ * a log of its own, so a session resumed from an earlier run counts what this run did. A port of LiveSession in the
+ * plugin's core.
  */
 
 /** No more of a line than this is looked at: a step's session and request, a prompt's type, a model. */
@@ -49,8 +51,13 @@ export interface Meter {
     roundTrips: number;
     /** The model's GitLab identifier as last logged, such as claude_opus_5, or GROUP_DEFAULT; null when none was. */
     model: string | null;
-    /** ≈ credits: each step at its model's rate per call; null when a model is not in the table. */
+    /**
+     * ≈ credits: each step at its model's rate per call, or at the assumed model's when its own has no rate in the
+     * table; null when neither has one.
+     */
     credits: number | null;
+    /** The model steps were priced as for want of a rate of their own, such as "Sonnet 4.5"; null when none were. */
+    assumed: string | null;
     /** Its first prompt or step in this run, in ms since the epoch; null when the log's time does not read. */
     started: number | null;
 }
@@ -163,27 +170,26 @@ export class LiveSession {
         this.last = session;
     }
 
-    /** The session of the latest step or round trip, with the prompts sent since; null while the log has neither. */
-    meter(): Meter | null {
+    /**
+     * The session of the latest step or round trip, with the prompts sent since; null while the log has neither.
+     * @param assumed the model, as the table names it, that a step is priced as when its own has no rate: the group's
+     *     default
+     */
+    meter(assumed: string = ASSUMED_MODEL): Meter | null {
         if (this.last == null && this.waiting === 0) {
             return null;
         }
         const t = this.last == null ? undefined : this.sessions.get(this.last);
-        let credits: number | null = 0;
-        for (const [model, count] of t?.byModel ?? []) {
-            const rate = perCall(model === '' ? this.firstModel : model);
-            if (rate == null) {
-                credits = null;
-                break;
-            }
-            credits += rate * count;
-        }
-        if ((t?.steps ?? 0) === 0 && perCall(this.model) == null) {
-            credits = null;
-        }
+        const rated = [...t?.byModel ?? []]
+            .map(([model, count]) => [perCall(model === '' ? this.firstModel : model), count] as const);
+        const assuming = rated.some(([rate]) => rate == null) || ((t?.steps ?? 0) === 0 && perCall(this.model) == null);
+        const fallback = assuming ? perCall(assumed) : 0;
         return {
             session: this.last, steps: t?.steps ?? 0,
-            roundTrips: this.running ? t?.runs ?? 0 : (t?.roundTrips ?? 0) + this.waiting, model: this.model, credits, started: this.last == null ? this.waitingSince : t?.started ?? null,
+            roundTrips: this.running ? t?.runs ?? 0 : (t?.roundTrips ?? 0) + this.waiting, model: this.model,
+            credits: fallback == null ? null : rated.reduce((sum, [rate, count]) => sum + (rate ?? fallback) * count, 0),
+            assumed: assuming && fallback != null ? modelName(assumed) : null,
+            started: this.last == null ? this.waitingSince : t?.started ?? null,
         };
     }
 }
@@ -239,10 +245,27 @@ export function liveCredits(m: Meter): string {
             : 'No ≈ credits: no rate known for ' + m.model;
 }
 
+/**
+ * "Group default taken as Sonnet 4.5 (0.5 credits a step), as set in Settings": why steps are priced as another model;
+ * null when none are.
+ */
+export function liveAssumption(m: Meter): string | null {
+    if (m.assumed == null) {
+        return null;
+    }
+    const as = 'taken as ' + m.assumed + ' (' + perCall(m.assumed) + ' credits a step), as set in Settings';
+    return m.model === GROUP_DEFAULT ? 'Group default ' + as
+        : m.model == null ? 'No model in the log: ' + as
+            : perCall(m.model) == null ? 'No rate known for ' + m.model + ': ' + as
+                : 'Steps of a model without a known rate ' + as;
+}
+
 /** How the estimate is made, and what it is not. */
 export function liveBasis(m: Meter): string {
     const rate = perCall(m.model);
-    return "An estimate, updated as the session runs: GitLab bills each model call at its model's rate"
+    const assumption = liveAssumption(m);
+    return (assumption != null ? assumption + '. ' : '')
+        + "An estimate, updated as the session runs: GitLab bills each model call at its model's rate"
         + (rate != null && m.model != null ? ' (' + modelName(m.model) + ': ' + rate + ' credits)' : '')
         + ", and a step is a model call the Duo CLI logged. GitLab's own credits come per day and feature, hours later."
         + ' Tokens are not shown: GitLab bills per call, not per token.';
@@ -312,6 +335,10 @@ export function liveTooltip(run: Run, now: number, limit: number,
                             clock: (ms: number) => string = LOCAL_TIME): { title: string; lines: string[] } {
     const m = run.meter!;
     const lines = [liveWhat(m), liveCredits(m) + (m.credits != null ? ', an estimate: steps × the model\'s rate per call' : '')];
+    const assumption = liveAssumption(m);
+    if (assumption != null) {
+        lines.push(assumption);
+    }
     const started = liveStarted(run, now, clock);
     if (started != null) {
         lines.push(started);

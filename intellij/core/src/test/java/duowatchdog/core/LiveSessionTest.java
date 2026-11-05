@@ -71,7 +71,7 @@ class LiveSessionTest {
     void countsTheRoundTripsOfAnInteractiveSession() {
         LiveSession live = new LiveSession(UTC);
         INTERACTIVE.lines().limit(8).forEach(live::line);
-        assertEquals(new LiveSession.Meter(10301001L, 1, 1, LiveSession.GROUP_DEFAULT, null,
+        assertEquals(new LiveSession.Meter(10301001L, 1, 1, LiveSession.GROUP_DEFAULT, 0.5, "Sonnet 4.5",
                 Instant.parse("2026-11-05T09:00:05Z")), live.meter(), "one Running workflow a prompt; checkpoints no steps");
 
         INTERACTIVE.lines().skip(8).forEach(live::line);
@@ -79,8 +79,17 @@ class LiveSessionTest {
         assertEquals(2, m.steps());
         assertEquals(3, m.roundTrips(), "a reply without a tool call is a round trip too");
         assertEquals("Group default · 2 steps · 3 round trips", LiveSession.what(m));
-        assertEquals("No ≈ credits: the group's default model, which the log does not name", LiveSession.credits(m));
+        assertEquals("≈ 1 credits", LiveSession.credits(m), "each step at the group's default model taken as Sonnet 4.5");
+        assertEquals("Group default taken as Sonnet 4.5 (0.5 credits a step), as set in Settings", LiveSession.assumption(m));
         LiveSession.Run run = new LiveSession.Run(NAME, Instant.parse("2026-11-05T09:02:03Z").toEpochMilli(), m);
+        Instant now = Instant.parse("2026-11-05T09:02:10Z");
+        assertEquals("2m 5s · 3 round trips · 2 steps · ≈ $1", LiveSession.barText(run, now));
+        assertTrue(LiveSession.tooltipHtml(run, now, UTC, 20).contains("<br>≈ 1 credits, an estimate: steps × the model's "
+                + "rate per call<br>Group default taken as Sonnet 4.5 (0.5 credits a step), as set in Settings<br>"));
+        assertTrue(LiveSession.basis(m).startsWith(
+                "Group default taken as Sonnet 4.5 (0.5 credits a step), as set in Settings. An estimate"));
+        assertEquals(2 * 0.909, live.meter("Opus 5").credits(), 1e-9, "the group default model set in the settings");
+        assertEquals("Opus 5", live.meter("Opus 5").assumed());
         for (String shown : List.of(m.toString(), LiveSession.barText(run, Instant.parse("2026-11-05T09:02:10Z")),
                 LiveSession.tooltipHtml(run, Instant.parse("2026-11-05T09:02:10Z"), UTC, 20))) {
             assertFalse(shown.contains("sk-live") || shown.contains("billing") || shown.contains("__default__"), shown);
@@ -91,7 +100,7 @@ class LiveSessionTest {
     void aReplyWithoutAToolCallShowsTheSession() {
         LiveSession live = new LiveSession(UTC);
         live.line("2026-11-05T09:00:05:000 [debug]: [DuoWorkflowNodeExecutor][10301001] Running workflow");
-        assertEquals(new LiveSession.Meter(10301001L, 0, 1, null, null, Instant.parse("2026-11-05T09:00:05Z")),
+        assertEquals(new LiveSession.Meter(10301001L, 0, 1, null, 0.0, "Sonnet 4.5", Instant.parse("2026-11-05T09:00:05Z")),
                 live.meter());
     }
 
@@ -118,6 +127,8 @@ class LiveSessionTest {
         assertEquals(2, m.roundTrips());
         assertEquals("claude_opus_5", m.model(), "a prompt quoting a model line does not change the model");
         assertEquals(3 * 0.909, m.credits(), 1e-9);
+        assertNull(m.assumed(), "every step at its own model's rate");
+        assertNull(LiveSession.assumption(m));
         assertEquals(Instant.parse("2026-11-04T10:00:05Z"), m.started(), "from its first prompt");
     }
 
@@ -164,19 +175,67 @@ class LiveSessionTest {
     }
 
     @Test
-    void anUnknownModelGivesStepsAndRoundTripsButNoCredits() {
-        LiveSession.Meter m = read("""
+    void anUnknownModelIsPricedAsTheGroupDefaultModel() {
+        LiveSession live = read("""
                 2026-11-04T10:00:00:000 [info]: [ModelResolverService] Using user-selected model: "gpt_7_mini"
                 2026-11-04T10:00:01:000 [debug]: [RunController] Executing workflow: {"type": "SEND_PROMPT", "goal": "x"}
                 2026-11-04T10:00:02:000 [debug]: [DuoWorkflowNodeExecutor][1] [requestID: a] Action received: {}
-                """).meter();
+                """);
+        LiveSession.Meter m = live.meter();
 
         assertEquals(1, m.steps());
         assertEquals(1, m.roundTrips());
-        assertNull(m.credits());
+        assertEquals(0.5, m.credits());
+        assertEquals("Sonnet 4.5", m.assumed());
         LiveSession.Run run = new LiveSession.Run(NAME, Instant.parse("2026-11-04T10:00:02Z").toEpochMilli(), m);
-        assertEquals("30s · 1 round trip · 1 step", LiveSession.barText(run, Instant.parse("2026-11-04T10:00:31Z")));
-        assertEquals("No ≈ credits: no rate known for gpt_7_mini", LiveSession.credits(m));
+        Instant now = Instant.parse("2026-11-04T10:00:31Z");
+        assertEquals("30s · 1 round trip · 1 step · ≈ $0.5", LiveSession.barText(run, now));
+        assertEquals("No rate known for gpt_7_mini: taken as Sonnet 4.5 (0.5 credits a step), as set in Settings",
+                LiveSession.assumption(m));
+
+        LiveSession.Meter none = live.meter("Sonnet 9");
+        assertNull(none.credits(), "a model with no rate to take");
+        assertNull(none.assumed());
+        assertEquals("30s · 1 round trip · 1 step", LiveSession.barText(new LiveSession.Run(NAME, run.modified(), none), now));
+        assertEquals("No ≈ credits: no rate known for gpt_7_mini", LiveSession.credits(none));
+    }
+
+    @Test
+    void aLogThatNamesNoModelIsPricedAsTheGroupDefaultModel() {
+        LiveSession.Meter m = read("""
+                2026-11-04T10:00:00:000 [debug]: [DuoWorkflowNodeExecutor][1] [requestID: a] Action received: {}
+                2026-11-04T10:00:01:000 [debug]: [DuoWorkflowNodeExecutor][1] [requestID: b] Action received: {}
+                """).meter("Fable 5.1");
+
+        assertNull(m.model());
+        assertEquals(2 * 1.667, m.credits(), 1e-9);
+        assertEquals("No model in the log: taken as Fable 5.1 (1.667 credits a step), as set in Settings",
+                LiveSession.assumption(m));
+    }
+
+    @Test
+    void onlyTheStepsOfAModelWithNoRateArePricedAsTheGroupDefaultModel() {
+        LiveSession.Meter m = read("""
+                2026-11-04T10:00:00:000 [info]: [ModelResolverService] Resolved user-selected model ref "__default__x" is a "use the feature default" sentinel
+                2026-11-04T10:00:01:000 [debug]: [DuoWorkflowNodeExecutor][1] [requestID: a] Action received: {}
+                2026-11-04T10:00:02:000 [info]: [ModelResolverService] Using user-selected model: "claude_opus_5"
+                2026-11-04T10:00:03:000 [debug]: [DuoWorkflowNodeExecutor][1] [requestID: b] Action received: {}
+                """).meter();
+
+        assertEquals(0.5 + 0.909, m.credits(), 1e-9);
+        assertEquals("Steps of a model without a known rate taken as Sonnet 4.5 (0.5 credits a step), as set in Settings",
+                LiveSession.assumption(m));
+    }
+
+    @Test
+    void theGroupDefaultModelIsOneInTheTable() {
+        assertEquals(List.of("Haiku 5.5", "Haiku 4.5", "Sonnet 5", "Sonnet 5.5", "Sonnet 4.5", "Sonnet 4.6", "Opus 5.5",
+                "Opus 4.5", "Opus 4.6", "Opus 4.7", "Opus 4.8", "Opus 5", "Fable 5", "Fable 5.1"), ModelCredits.MODELS,
+                "the cheapest first, as in the VS Code setting");
+        assertEquals(0.5, ModelCredits.perCall(ModelCredits.ASSUMED));
+        assertEquals("Opus 5", ModelCredits.assumed("Opus 5"));
+        assertEquals(ModelCredits.ASSUMED, ModelCredits.assumed("claude_opus_5"), "as the table names it");
+        assertEquals(ModelCredits.ASSUMED, ModelCredits.assumed(null));
     }
 
     @Test
@@ -210,8 +269,8 @@ class LiveSessionTest {
 
     @Test
     void picksTheRunInTheProjectsFolderElseTheLastWritten() {
-        LiveSession.Meter a = new LiveSession.Meter(1L, 1, 1, null, null, null);
-        LiveSession.Meter b = new LiveSession.Meter(2L, 2, 1, null, null, null);
+        LiveSession.Meter a = new LiveSession.Meter(1L, 1, 1, null, null, null, null);
+        LiveSession.Meter b = new LiveSession.Meter(2L, 2, 1, null, null, null, null);
         List<LiveSession.Run> runs = List.of(
                 new LiveSession.Run("duo-cli-log-2026-11-04T09-00-00-dana-projects-sync-worker.log", 2000, a),
                 new LiveSession.Run("duo-cli-log-2026-11-04T08-00-00-dana-projects-notes-service.log", 1000, b));
@@ -227,7 +286,7 @@ class LiveSessionTest {
 
     @Test
     void aRunWithNothingCountedYetDoesNotHideASessionStillGoing() {
-        LiveSession.Meter a = new LiveSession.Meter(1L, 4, 2, null, null, null);
+        LiveSession.Meter a = new LiveSession.Meter(1L, 4, 2, null, null, null, null);
         List<LiveSession.Run> sameFolder = List.of(
                 new LiveSession.Run("duo-cli-log-2026-11-04T10-30-00-dana-projects-notes-service.log", 3000, null),
                 new LiveSession.Run("duo-cli-log-2026-11-04T10-00-00-dana-projects-notes-service.log", 2000, a));
@@ -272,6 +331,6 @@ class LiveSessionTest {
     }
 
     private static LiveSession.Meter trips(int roundTrips) {
-        return new LiveSession.Meter(1L, roundTrips, roundTrips, null, null, null);
+        return new LiveSession.Meter(1L, roundTrips, roundTrips, null, null, null, null);
     }
 }

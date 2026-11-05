@@ -24,6 +24,15 @@ const PER_CALL: ReadonlyMap<string, number> = new Map(Object.entries({
     'Fable 5.1': 1.667,
 }));
 
+/** The models in the table, the cheapest first, as GitLab's Credits page names them: for the group's default model. */
+export const MODELS: readonly string[] = [...PER_CALL.keys()].sort((a, b) => PER_CALL.get(a)! - PER_CALL.get(b)! || (a < b ? -1 : a > b ? 1 : 0));
+
+/**
+ * What a step is priced as when the Duo CLI's log names no model, the group's default, or one not in the table, unless
+ * the settings say otherwise: GitLab's default model for the Duo Agent Platform.
+ */
+export const ASSUMED_MODEL = 'Sonnet 4.5';
+
 /** claude_sonnet_5_5, claude_opus_5, claude-haiku-4-5-20251001: the family, the version and a minor one. */
 const CLAUDE = /(haiku|sonnet|opus|fable)[_.-]?(\d{1,2})(?:[_.-](\d)(?!\d))?/;
 
@@ -39,4 +48,9 @@ export function modelName(identifier: string): string {
 /** The credits GitLab bills per call to the model; null when the table does not have it. */
 export function perCall(identifier: string | null): number | null {
     return identifier == null ? null : PER_CALL.get(modelName(identifier)) ?? null;
+}
+
+/** The model named, when the table has it; else ASSUMED_MODEL. */
+export function assumedModel(name: string | null | undefined): string {
+    return name != null && PER_CALL.has(name) ? name : ASSUMED_MODEL;
 }
