@@ -17,6 +17,7 @@ import com.intellij.openapi.ui.popup.JBPopupFactory;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.ThrowableComputable;
 import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.ui.CollectionListModel;
 import com.intellij.ui.ColoredTableCellRenderer;
 import com.intellij.ui.DocumentAdapter;
 import com.intellij.ui.JBColor;
@@ -29,6 +30,7 @@ import com.intellij.ui.ToolbarDecorator;
 import com.intellij.ui.components.ActionLink;
 import com.intellij.ui.components.JBCheckBox;
 import com.intellij.ui.components.JBLabel;
+import com.intellij.ui.components.JBList;
 import com.intellij.ui.components.JBPasswordField;
 import com.intellij.ui.components.JBRadioButton;
 import com.intellij.ui.components.JBTextField;
@@ -39,6 +41,7 @@ import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
 import duowatchdog.core.Accounts;
 import duowatchdog.core.Alert;
+import duowatchdog.core.CliLaunch;
 import duowatchdog.core.CreditsClient;
 import duowatchdog.core.CreditsClient.GroupMatch;
 import duowatchdog.core.CreditsClient.TokenInfo;
@@ -157,6 +160,9 @@ public final class CreditsConfigurable implements Configurable {
     private JBIntSpinner refreshMinutes;
     private JBIntSpinner roundTripLimit;
     private ComboBox<String> groupDefaultModel;
+    /** The quick commands as edited here, until Apply. */
+    private final CollectionListModel<CliLaunch.QuickCommand> quickCommands = new CollectionListModel<>();
+    private JPanel quickCommandsList;
     private JBCheckBox rotateTokens;
 
     /** What {@link #open} asked for before the page was built. */
@@ -273,6 +279,27 @@ public final class CreditsConfigurable implements Configurable {
         groupDefaultModel = new ComboBox<>(ModelCredits.MODELS.toArray(String[]::new));
         groupDefaultModel.setRenderer(
                 SimpleListCellRenderer.create("", m -> m + "  ·  " + ModelCredits.perCall(m) + " credits a call"));
+        JBList<CliLaunch.QuickCommand> quickList = new JBList<>(quickCommands);
+        quickList.setCellRenderer(SimpleListCellRenderer.create("", c -> c.name() + "  ·  " + c.command()));
+        quickList.getEmptyText().setText("None yet: + adds one, such as /ab-testing");
+        quickList.setVisibleRowCount(4);
+        quickCommandsList = ToolbarDecorator.createDecorator(quickList)
+                .setAddAction(button -> {
+                    CliLaunch.QuickCommand made = QuickCommandDialog.add(null, quickList, quickCommands.getItems());
+                    if (made != null) {
+                        quickCommands.add(made);
+                        quickList.setSelectedIndex(quickCommands.getSize() - 1);
+                    }
+                })
+                .setAddActionUpdater(e -> quickCommands.getSize() < CliLaunch.MAX_QUICK_COMMANDS)
+                .setEditAction(button -> {
+                    int index = quickList.getSelectedIndex();
+                    CliLaunch.QuickCommand changed = QuickCommandDialog.edit(quickList, quickCommands.getItems(), index);
+                    if (changed != null) {
+                        quickCommands.setElementAt(changed, index);
+                    }
+                })
+                .createPanel();
 
         panel = FormBuilder.createFormBuilder()
                 .addComponent(new TitledSeparator("Accounts"))
@@ -295,6 +322,9 @@ public final class CreditsConfigurable implements Configurable {
                 .addComponentToRightColumn(hint("For the ≈ $ of a Duo CLI session on your group's default model: the "
                         + "CLI's log says only that it uses the group's default, not which model. Also used for a step "
                         + "whose log names no model, or one with no known rate."))
+                .addLabeledComponent("Duo CLI quick commands:", quickCommandsList)
+                .addComponentToRightColumn(hint("Buttons of your own on Usage, beside New Session and Doctor: each "
+                        + "starts the Duo CLI as the drop-downs there say, then types its command at the CLI's prompt."))
                 .addComponent(new TitledSeparator("Tokens"), JBUI.scale(16))
                 .addComponent(rotateTokens)
                 .addComponent(hint("A week before a token expires, GitLab replaces it with a new one that lives as long "
@@ -1041,6 +1071,7 @@ public final class CreditsConfigurable implements Configurable {
                 || refreshMinutes.getNumber() != s.refreshMinutes
                 || roundTripLimit.getNumber() != s.roundTripLimit
                 || !ModelCredits.assumed(s.groupDefaultModel).equals(groupDefaultModel.getSelectedItem())
+                || !quickCommands.getItems().equals(CreditsSettings.getInstance().quickCommands())
                 || rotateTokens.isSelected() != s.rotateTokens;
     }
 
@@ -1099,6 +1130,7 @@ public final class CreditsConfigurable implements Configurable {
         s.refreshMinutes = refreshMinutes.getNumber();
         s.roundTripLimit = roundTripLimit.getNumber();
         s.groupDefaultModel = ModelCredits.assumed((String) groupDefaultModel.getSelectedItem());
+        settings.setQuickCommands(quickCommands.getItems());
         s.rotateTokens = rotateTokens.isSelected();
 
         Map<String, String> tokens = new HashMap<>(pendingTokens);
@@ -1139,6 +1171,7 @@ public final class CreditsConfigurable implements Configurable {
         refreshMinutes.setNumber(s.refreshMinutes);
         roundTripLimit.setNumber(s.roundTripLimit);
         groupDefaultModel.setSelectedItem(ModelCredits.assumed(s.groupDefaultModel));
+        quickCommands.replaceAll(CreditsSettings.getInstance().quickCommands());
         rotateTokens.setSelected(s.rotateTokens);
         shown = null;
         refreshRows();

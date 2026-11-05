@@ -14,6 +14,7 @@ import com.intellij.openapi.components.Storage;
 import com.intellij.openapi.util.SystemInfo;
 import duowatchdog.core.Accounts;
 import duowatchdog.core.Alert;
+import duowatchdog.core.CliLaunch;
 import duowatchdog.core.CreditsClient.TokenInfo;
 import duowatchdog.core.GitLabAddress;
 import duowatchdog.core.LiveSession;
@@ -172,12 +173,32 @@ public final class CreditsSettings implements PersistentStateComponent<CreditsSe
          * as {@link ModelCredits#MODELS} names it.
          */
         public String groupDefaultModel = ModelCredits.ASSUMED;
+        /** How Usage's quick actions start the Duo CLI: "duo", or "glab duo cli", as {@link CliLaunch.Cli} names them. */
+        public String cli = CliLaunch.Cli.DUO.command();
+        /** Whether the Duo CLI they start asks before each tool: "ask", or "autoApprove", as {@link CliLaunch.Mode} names them. */
+        public String cliMode = CliLaunch.Mode.ASK.id();
+        /** Quick commands of your own on Usage: a button each, that types its command at the Duo CLI's prompt. */
+        public List<QuickCommand> quickCommands = new ArrayList<>();
         /** Have GitLab rotate a token a week before it expires. */
         public boolean rotateTokens = true;
         /** How many months Statistics shows: one of History.RANGES. */
         public int statisticsMonths = 3;
         /** The plugin version the What's New page was last offered for. */
         public String lastSeenVersion = "";
+    }
+
+    /** A quick command of your own, as kept: its button's name and what it types at the Duo CLI's prompt. */
+    public static final class QuickCommand {
+        public String name = "";
+        public String command = "";
+
+        public QuickCommand() {
+        }
+
+        QuickCommand(CliLaunch.QuickCommand c) {
+            name = c.name();
+            command = c.command();
+        }
     }
 
     private Settings settings = new Settings();
@@ -199,6 +220,16 @@ public final class CreditsSettings implements PersistentStateComponent<CreditsSe
     /** The account with this id, or null. */
     public @Nullable Account account(String id) {
         return settings.accounts.stream().filter(a -> a.id().equals(id)).findFirst().orElse(null);
+    }
+
+    /** The quick commands of your own that can be, in their order. */
+    public List<CliLaunch.QuickCommand> quickCommands() {
+        return CliLaunch.quickCommands(settings.quickCommands.stream()
+                .map(c -> new CliLaunch.QuickCommand(c.name, c.command)).toList());
+    }
+
+    public void setQuickCommands(List<CliLaunch.QuickCommand> commands) {
+        settings.quickCommands = new ArrayList<>(CliLaunch.quickCommands(commands).stream().map(QuickCommand::new).toList());
     }
 
     /** The alert percents, or the default ones while the saved text does not parse. */

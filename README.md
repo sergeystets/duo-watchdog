@@ -17,7 +17,7 @@ GitLab Credits usage for the current billing period, forecast where the month wi
 ![Java](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-VS_Code_extension-3178C6?logo=typescript&logoColor=white)
 ![GitLab](https://img.shields.io/badge/GitLab-Duo-FC6D26?logo=gitlab&logoColor=white)
-![Version](https://img.shields.io/badge/version-0.5.2-blue)
+![Version](https://img.shields.io/badge/version-0.6.0-blue)
 
 </div>
 
@@ -28,6 +28,13 @@ GitLab Credits usage for the current billing period, forecast where the month wi
 </p>
 
 ---
+
+## What's new in 0.6.0
+
+- **Duo CLI quick actions on Usage**: start the GitLab Duo CLI in a new terminal in the project, as `duo` or
+  `glab duo cli`, asking before each tool or auto-approving them all, from two drop-downs; **New session** starts it,
+  **Doctor** then types `/doctor`, and **quick commands** of your own type theirs: **+** builds one, the command first
+  (`/ab-testing`), then its button's name (`AB Testing`). See [Duo CLI quick actions](#duo-cli-quick-actions).
 
 ## What's new in 0.5.0
 
@@ -73,6 +80,7 @@ GitLab Credits usage for the current billing period, forecast where the month wi
 
 ## Contents
 
+- [What's new in 0.6.0](#whats-new-in-060)
 - [What's new in 0.5.0](#whats-new-in-050)
 - [What's new in 0.4.0](#whats-new-in-040)
 - [Features](#features)
@@ -113,6 +121,8 @@ hidden when no session runs.
 <img align="right" src="docs/images/dashboard-warning.png" alt="Dashboard in the warning state" width="300">
 
 - A toolbar with **Refresh** and **Settings**, plus `@user · group · Updated HH:mm`
+- A **Duo CLI** row under it: the CLI and the tool approval to start it with, **New Session**, **Doctor** and your
+  quick commands, and **+** to add one (see [Duo CLI quick actions](#duo-cli-quick-actions))
 - The headline: credits used, an **Active** / **Blocked** status and the period with the current day
 - A usage bar with a dashed forecast marker and ticks at each alert threshold
 - Tiles for **Left**, **Forecast**, **Pace** (credits per day) and **Spent today**: four abreast in a wide tool window,
@@ -122,6 +132,36 @@ hidden when no session runs.
 - **Shift+Esc** hides it and **Esc** goes back to the editor, as in the IDE's own tool windows
 
 <br clear="right">
+
+### Duo CLI quick actions
+
+Usage starts the [GitLab Duo CLI](https://docs.gitlab.com/user/gitlab_duo_cli/) for you, in a new terminal in the
+project (IntelliJ IDEA's Terminal, VS Code's integrated terminal). Two drop-downs say how, and are remembered:
+
+| Drop-down | Choices |
+|---|---|
+| **The CLI** | `duo`, or `glab duo cli`, which hands its arguments to `duo` |
+| **Tool approval** | **Ask before tools** (the CLI's default), or **Auto-approve tools**: `--dangerously-skip-permissions`, the CLI runs every tool without asking |
+
+| Button | Does |
+|---|---|
+| **New session** | Runs the CLI, e.g. `duo --dangerously-skip-permissions` |
+| **Doctor** | Runs it, then types `/doctor` at its prompt: the CLI's diagnostics |
+| **Your quick commands** | Run it, then type their command at its prompt: a slash command of your own such as `/ab-testing`, or a prompt |
+
+**Building a quick command.** Click **+** (VS Code: **+ Add command**). Type what it should type at the CLI's
+prompt, such as `/ab-testing`, then its button's name, such as `AB Testing`: the name starts as one made from the
+command (`Ab Testing`) for you to change. In IntelliJ IDEA, **✎** opens Settings, where **Duo CLI quick commands**
+lists them to change, move up or down, or remove; in VS Code, **Edit…** does the same in a list. Up to twelve, each
+name once; a command is one line.
+
+A command is typed only once the CLI has started: Duo Watchdog waits for the new log the CLI writes (the same
+logs the [live session](#whats-new-in-050) is read from), then a moment for its prompt. If no log comes within a minute
+nothing is typed, so a CLI that did not start never gets the command typed into your shell; a notice says to type it
+yourself. The CLI's Build, Plan and Auto modes have no command-line flag: switch them with Tab in the CLI. In IntelliJ
+IDEA the buttons need the bundled Terminal plugin, which is on unless you turned it off. In VS Code they are also
+commands: **Duo Watchdog: New Duo CLI Session**, **Duo CLI Doctor**, **Run a Duo CLI Quick Command…**, **Add a Duo
+CLI Quick Command…** and **Edit Duo CLI Quick Commands…**.
 
 ### Statistics
 
@@ -481,7 +521,7 @@ Or the IDE's own way:
 
 1. [Build the plugin](#building-from-source), or get `duo-watchdog-<version>.zip` from a teammate.
 2. In the IDE, open *Settings → Plugins → ⚙ → Install Plugin from Disk…*
-3. Select `intellij/build/distributions/duo-watchdog-0.5.2.zip` and restart if the IDE asks you to.
+3. Select `intellij/build/distributions/duo-watchdog-0.6.0.zip` and restart if the IDE asks you to.
 
 **Compatibility:** IntelliJ IDEA and any other JetBrains IDE from **2024.3** onward. This holds whichever IDE version the plugin was built against.
 
@@ -523,6 +563,7 @@ Shared by every account:
 | **Refresh every … minutes** | Polling interval. Default: `15`. GitLab's data can lag a few minutes behind actual use. |
 | **Duo CLI, at most … round trips per session** | The prompts recommended at most in one Duo CLI session. Default: `20`; `0` for no colour. The session in the status bar and in Sessions turns amber from 80% of it, red at it. |
 | **Group default model** | The model your group's default is, for the ≈ $ of a Duo CLI session on it: the CLI's log does not name it. Default: `Sonnet 4.5`. Also prices a step whose log names no model, or one with no known rate. |
+| **Duo CLI quick commands** | Buttons of your own on Usage: each starts the Duo CLI, then types its command at the CLI's prompt. **+** adds one, the pencil changes it, the arrows move it. None by default. The CLI and the tool approval are the drop-downs on Usage. |
 | **Rotate tokens a week before they expire** | On by default. See [Token rotation](#token-rotation). |
 
 The box under the token field shows the token's state:
@@ -558,6 +599,9 @@ group, limit and last alert, to that account.
 | `duoWatchdog.rotateTokens` | `true` | Rotate each account's token a week before it expires: see [Token rotation](#token-rotation) |
 | `duoWatchdog.roundTripLimit` | `20` | Round trips recommended at most per Duo CLI session; amber from 80%, red at it; `0` for no colour |
 | `duoWatchdog.groupDefaultModel` | `"Sonnet 4.5"` | The model your group's default is: prices a Duo CLI step on it, on a model the log does not name, or on one with no known rate |
+| `duoWatchdog.cli` | `"duo"` | How Usage's quick actions start the Duo CLI: `duo` or `glab duo cli`; also the drop-down on Usage |
+| `duoWatchdog.cliMode` | `"ask"` | `ask` before each tool, or `autoApprove` them all (`--dangerously-skip-permissions`); also the drop-down on Usage. Your user settings only, never a workspace's |
+| `duoWatchdog.quickCommands` | `[]` | Quick commands of your own, e.g. `[{ "name": "AB Testing", "command": "/ab-testing" }]`: a button each on Usage that types its command at the Duo CLI's prompt. **+ Add command** and **Edit…** on Usage build them |
 
 `duoWatchdog.groupPath` and `duoWatchdog.limit` are deprecated: each account has its own now. They are read once,
 when the token saved by 0.3.0 moves to its account. Tokens are kept in VS Code's secret storage, one per account.
@@ -572,7 +616,7 @@ VS Code extension (`:vscode`, which runs its npm build). Open the root folder in
 
 ```bash
 ./gradlew test            # all tests: the plugin's core and the VS Code extension
-./gradlew buildPlugin     # → intellij/build/distributions/duo-watchdog-0.5.2.zip
+./gradlew buildPlugin     # → intellij/build/distributions/duo-watchdog-0.6.0.zip
 ./gradlew runIde          # launch a sandbox IDE with the plugin installed
 ```
 
@@ -689,11 +733,11 @@ because the path contains spaces:
 **5. Find the result:**
 
 ```powershell
-dir intellij\build\distributions    # → duo-watchdog-0.5.2.zip
+dir intellij\build\distributions    # → duo-watchdog-0.6.0.zip
 ```
 
 Then follow [Installation](#installation): *Settings → Plugins → ⚙ → Install Plugin from Disk…* and pick
-`intellij\build\distributions\duo-watchdog-0.5.2.zip`.
+`intellij\build\distributions\duo-watchdog-0.6.0.zip`.
 
 **Optional:** run the tests or try the plugin in a sandbox IDE:
 
@@ -770,8 +814,8 @@ Running `./gradlew test` also renders every dashboard state to PNG (in `intellij
 The VS Code extension builds with npm (Node.js 20+), from the root through Gradle or in `vscode/` directly:
 
 ```bash
-./gradlew :vscode:test               # 144 tests, no VS Code needed         (npm ci && npm test)
-./gradlew :vscode:packageExtension   # → vscode/duo-watchdog-0.5.2.vsix      (npm run package)
+./gradlew :vscode:test               # 153 tests, no VS Code needed         (npm ci && npm test)
+./gradlew :vscode:packageExtension   # → vscode/duo-watchdog-0.6.0.vsix      (npm run package)
 ./gradlew :vscode:installExtension   # into VS Code; -PcodePath=codium for another CLI
 ```
 

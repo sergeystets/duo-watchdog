@@ -139,6 +139,9 @@
             drawMonths();
             return;
         }
+        if (model.quick) {
+            renderQuick(model.quick);
+        }
         if (model.error && !model.notice) {
             page.append(el('p', 'error', model.error));
         }
@@ -161,6 +164,55 @@
             drawMeter();
             drawChart();
         }
+    }
+
+    /**
+     * The Duo CLI in a new terminal: as duo or glab duo cli, asking before tools or not; New session, Doctor, the quick
+     * commands of your own, and the buttons that add and edit them.
+     */
+    function renderQuick(q) {
+        const box = el('section', 'quick');
+        box.setAttribute('aria-label', 'Duo CLI');
+        const choices = el('div', 'quick-row');
+        choices.append(
+            choice('Duo CLI command', q.clis, q.cli, value => vscode.postMessage({ type: 'cli', cli: value })),
+            choice('Tool approval', q.modes, q.mode, value => vscode.postMessage({ type: 'cliMode', mode: value })));
+        const buttons = el('div', 'quick-row');
+        for (const b of q.buttons) {
+            const button = el('button', b.kind === 'session' ? 'primary' : 'secondary-button', b.label);
+            button.title = b.title;
+            button.addEventListener('click', () => vscode.postMessage(b.kind === 'session' ? { type: 'cliSession' }
+                : b.kind === 'doctor' ? { type: 'cliDoctor' } : { type: 'quickCommand', index: b.index }));
+            buttons.append(button);
+        }
+        if (q.canAdd) {
+            const add = el('button', 'secondary-button quick-add', '+ Add command');
+            add.title = "A button of your own: what it types at the Duo CLI's prompt, such as /ab-testing, then its name";
+            add.addEventListener('click', () => vscode.postMessage({ type: 'addQuickCommand' }));
+            buttons.append(add);
+        }
+        if (q.buttons.some(b => b.kind === 'command')) {
+            buttons.append(link('Edit…', 'editQuickCommands'));
+        }
+        box.append(el('p', 'quick-title', 'Duo CLI'), choices, buttons);
+        page.append(box);
+    }
+
+    /** A drop-down of { value, label, title? } options. */
+    function choice(name, options, selected, changed) {
+        const select = el('select');
+        select.setAttribute('aria-label', name);
+        select.append(...options.map(o => {
+            const option = el('option', null, o.label);
+            option.value = o.value;
+            option.selected = o.value === selected;
+            if (o.title) option.title = o.title;
+            return option;
+        }));
+        const current = options.find(o => o.value === selected);
+        select.title = current && current.title ? current.title : name;
+        select.addEventListener('change', () => changed(select.value));
+        return select;
     }
 
     function renderReport(r) {

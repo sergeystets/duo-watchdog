@@ -46,8 +46,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The tool window: Refresh, Settings and the account it shows, with "@user · group · Updated HH:mm", over the
- * dashboard.
+ * The tool window: Refresh, Settings and the account it shows, with "@user · group · Updated HH:mm", then the Duo CLI's
+ * quick actions ({@link CliActions}), over the dashboard.
  */
 final class CreditsPanel extends SimpleToolWindowPanel implements Disposable {
 
@@ -86,7 +86,25 @@ final class CreditsPanel extends SimpleToolWindowPanel implements Disposable {
         bar.setBorder(JBUI.Borders.customLineBottom(JBColor.border()));
         bar.add(toolbar.getComponent(), BorderLayout.WEST);
         bar.add(byline, BorderLayout.EAST);
-        setToolbar(bar);
+
+        ActionToolbar cliToolbar = ActionManager.getInstance().createActionToolbar("DuoWatchdogCli",
+                CliActions.group(project), true);
+        cliToolbar.setTargetComponent(this);
+        JBLabel cliLabel = new JBLabel("Duo CLI");
+        cliLabel.setFont(JBFont.small());
+        cliLabel.setForeground(UIUtil.getContextHelpForeground());
+        cliLabel.setBorder(JBUI.Borders.emptyLeft(10));
+        JPanel cliRow = new JPanel(new BorderLayout());
+        cliRow.setOpaque(false);
+        cliRow.setBorder(JBUI.Borders.customLineBottom(JBColor.border()));
+        cliRow.add(cliLabel, BorderLayout.WEST);
+        cliRow.add(cliToolbar.getComponent(), BorderLayout.CENTER);
+
+        JPanel bars = new JPanel(new BorderLayout());
+        bars.setOpaque(false);
+        bars.add(bar, BorderLayout.NORTH);
+        bars.add(cliRow, BorderLayout.SOUTH);
+        setToolbar(bars);
 
         ApplicationManager.getApplication().getMessageBus().connect(this).subscribe(CreditsListener.TOPIC, this::render);
         CreditsService.getInstance().start();

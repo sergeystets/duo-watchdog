@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "local.duowatchdog"
-version = "0.5.2"
+version = "0.6.0"
 
 repositories {
     mavenCentral()
@@ -109,6 +109,8 @@ dependencies {
             logger.lifecycle("Duo Watchdog: compiling against the installed IDE at $installedIdea with JDK $compileJdk")
             local(installedIdea)
         }
+        // Usage's Duo CLI quick actions open a terminal tab; an optional dependency in plugin.xml.
+        bundledPlugin("org.jetbrains.plugins.terminal")
     }
 }
 

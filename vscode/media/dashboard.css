@@ -123,6 +123,59 @@ main {
     padding: 16px 16px 12px;
 }
 
+/* New session, Doctor and A/B testing: the Duo CLI in a new terminal. */
+.quick {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 16px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--border);
+}
+
+.quick-title {
+    font-size: 12px;
+    color: var(--secondary);
+}
+
+.quick-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+.quick select {
+    min-width: 0;
+    height: 26px;
+    padding: 0 6px;
+    border: 1px solid var(--vscode-dropdown-border, var(--border));
+    border-radius: 2px;
+    background: var(--vscode-dropdown-background, var(--background));
+    color: var(--vscode-dropdown-foreground, var(--text));
+    font: inherit;
+}
+
+.quick select:focus {
+    outline: 1px solid var(--vscode-focusBorder);
+    outline-offset: -1px;
+}
+
+.quick button.secondary-button {
+    height: 26px;
+}
+
+.quick button.quick-add {
+    background: transparent;
+    border: 1px dashed var(--vscode-button-secondaryBackground, var(--border));
+    color: var(--vscode-foreground, var(--text));
+}
+
+.quick button.link {
+    font-size: 12px;
+    margin-left: 4px;
+}
+
 /* No token, a token GitLab turns down, usage not tracked, no group: what is wrong and the button that fixes it. */
 .notice {
     position: relative;

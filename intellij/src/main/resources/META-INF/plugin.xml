@@ -10,7 +10,17 @@
     ]]></description>
 
     <change-notes><![CDATA[
-    <h3>What's new in 0.5.2</h3>
+    <h3>What's new in 0.6.0</h3>
+    <ul>
+      <li><b>Duo CLI quick actions on Usage</b>: a row under the toolbar with two drop-downs, <code>duo</code> or
+          <code>glab duo cli</code>, and <b>Ask before tools</b> or <b>Auto-approve tools</b>
+          (<code>--dangerously-skip-permissions</code>), then <b>New Session</b>, <b>Doctor</b> and your <b>quick
+          commands</b>. Each runs the CLI in a new Terminal tab in the project; Doctor then types <code>/doctor</code>
+          at its prompt, and a quick command its own, such as <code>/ab-testing</code>. <b>+</b> builds one: the command
+          first, then its button's name (<code>AB Testing</code>); Settings lists them to change, move or remove. A
+          command is typed only once the CLI has started a log of its own.</li>
+    </ul>
+    <h3>0.5.2</h3>
     <ul>
       <li>The Duo CLI session in the status bar always shows its <b>≈ $</b>: a step on the group's default model, on a
           model the log does not name, or on one with no known rate is priced as the <b>Group default model</b> set in
@@ -79,6 +89,8 @@
     ]]></change-notes>
 
     <depends>com.intellij.modules.platform</depends>
+    <!-- Usage's Duo CLI quick actions open a terminal tab; without the Terminal plugin they say so. -->
+    <depends optional="true" config-file="duowatchdog-terminal.xml">org.jetbrains.plugins.terminal</depends>
 
     <extensions defaultExtensionNs="com.intellij">
         <applicationConfigurable parentId="tools"
