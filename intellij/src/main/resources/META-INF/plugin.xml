@@ -10,7 +10,14 @@
     ]]></description>
 
     <change-notes><![CDATA[
-    <h3>What's new in 0.5.0</h3>
+    <h3>What's new in 0.5.1</h3>
+    <ul>
+      <li>The session of the interactive Duo CLI (9.30) counts its <b>round trips</b>, one per prompt, and shows even
+          before its first tool call.</li>
+      <li>A session on the group's default model says <b>Group default</b>.</li>
+      <li>A project in WSL has its Duo CLI runs followed once, not twice.</li>
+    </ul>
+    <h3>0.5.0</h3>
     <ul>
       <li><b>The Duo CLI session, live</b>: while <code>duo</code> runs a session, a small status bar item beside the
           credits shows how long it has run, its round trips (prompts sent), steps (model calls) and ≈ credits, each

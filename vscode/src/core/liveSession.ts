@@ -6,15 +6,19 @@ import { number } from './view';
 /**
  * The Duo CLI session in progress, from the log of the CLI's run, read line by line as the log grows: the agent's
  * steps (model calls), the prompts sent (round trips), the model, and ≈ credits, each step at its model's rate per
- * call. Three kinds of line are looked at, and of them only the time, the session and one field:
+ * call. These lines are looked at, and of them only the time, the session and one field:
  * - `[DuoWorkflowNodeExecutor][<session>] [requestID: <id>] Action received`: a step, counted once per session and
  *   request, as the Sessions view counts them;
- * - `[RunController] Executing workflow: {"type": "SEND_PROMPT", …}`: a round trip, counted; the prompt itself is not
- *   read;
- * - `[ModelResolverService] Using user-selected model: "<identifier>"`: the model of the steps after it.
+ * - `[DuoWorkflowNodeExecutor][<session>] Running workflow`: a round trip, one per prompt, as the interactive CLI
+ *   (9.30) logs it;
+ * - `[RunController] Executing workflow: {"type": "SEND_PROMPT", …}`: a round trip in a log with no `Running workflow`
+ *   line, as the headless `duo run` and older CLIs log it, never both, since a headless run may write each once; the
+ *   prompt itself is not read;
+ * - `[ModelResolverService] Using user-selected model: "<identifier>"`, or `Resolved user-selected model ref "…" is a
+ *   "use the feature default" sentinel`, the group's default: the model of the steps after it.
  * Each is known by its tag coming before any quote or brace, so a prompt or code that quotes one is not taken for it.
- * No more than the start of a line is looked at, and only counts, session numbers and the model are kept. A prompt
- * names no session: it goes to the session of the next step. Each run of the CLI writes a log of its own, so a session
+ * No more than the start of a line is looked at, and only counts, session numbers and the model are kept. A
+ * `SEND_PROMPT` names no session: it goes to the session of the next step. Each run of the CLI writes a log of its own, so a session
  * resumed from an earlier run counts what this run did. A port of LiveSession in the plugin's core.
  */
 
@@ -29,16 +33,21 @@ export const QUIET_MS = 60_000;
 /** The line's time, to the second and its milliseconds, then anything but a quote or a brace up to the tag. */
 const TIME = String.raw`^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:[:.](\d{3}))?\S*\s[^{"]*?`;
 const STEP = new RegExp(TIME + String.raw`\[DuoWorkflowNodeExecutor\]\[(\d{1,15})\]\s*\[requestID:\s*([^\]\s]+)\s*\]\s*Action received`);
+const RUNNING = new RegExp(TIME + String.raw`\[DuoWorkflowNodeExecutor\]\[(\d{1,15})\]\s*Running workflow\b`);
 const PROMPT = new RegExp(TIME + String.raw`\[RunController\]\s*Executing workflow:\s*\{\s*"type"\s*:\s*"SEND_PROMPT"`);
 const MODEL = new RegExp(TIME + String.raw`\[ModelResolverService\]\s*Using user-selected model:\s*"([\w.:@/-]{1,80})"`);
+const DEFAULT_MODEL = new RegExp(TIME + String.raw`\[ModelResolverService\]\s*Resolved user-selected model ref\s*"[\w.:@/-]{1,120}"\s*is a\s*"use the feature default" sentinel`);
+
+/** The model when the CLI logs none chosen but the group's default for the feature. */
+export const GROUP_DEFAULT = 'group default';
 
 /** What the meter shows. */
 export interface Meter {
-    /** The session's number, as the Duo CLI shows it; null before its first step. */
+    /** The session's number, as the Duo CLI shows it; null before the log names it. */
     session: number | null;
     steps: number;
     roundTrips: number;
-    /** The model's GitLab identifier as last logged, such as claude_opus_5; null when none was. */
+    /** The model's GitLab identifier as last logged, such as claude_opus_5, or GROUP_DEFAULT; null when none was. */
     model: string | null;
     /** ≈ credits: each step at its model's rate per call; null when a model is not in the table. */
     credits: number | null;
@@ -69,10 +78,14 @@ export interface Run {
     meter: Meter | null;
 }
 
-/** One session's steps, by the model in use at each ("" before any), its round trips, and when it started. */
+/**
+ * One session's steps, by the model in use at each ("" before any), its round trips by `Running workflow` and by
+ * SEND_PROMPT, and when it started.
+ */
 interface Tally {
     started: number | null;
     steps: number;
+    runs: number;
     roundTrips: number;
     byModel: Map<string, number>;
 }
@@ -84,9 +97,11 @@ export class LiveSession {
     private readonly sessions = new Map<number, Tally>();
     /** The session of the latest step. */
     private last: number | null = null;
-    /** Prompts sent since the latest step: the next step's session's; and when the first of them was. */
+    /** SEND_PROMPTs since the latest step: the next step's session's; and when the first of them was. */
     private waiting = 0;
     private waitingSince: number | null = null;
+    /** Whether the log has a `Running workflow` line: its round trips are those, not the SEND_PROMPTs. */
+    private running = false;
     /** The model as last logged, and the first one, for the steps before it. */
     private model: string | null = null;
     private firstModel: string | null = null;
@@ -104,14 +119,33 @@ export class LiveSession {
                 this.seen.add(m[3] + '/' + m[4]);
                 this.step(Number(m[3]), this.time(m));
             }
+        } else if (head.includes('Running workflow') && (m = RUNNING.exec(head)) != null) {
+            const session = Number(m[3]);
+            const t = this.tally(session);
+            t.started ??= this.waiting > 0 && this.waitingSince != null ? this.waitingSince : this.time(m);
+            t.runs++;
+            this.running = true;
+            this.last = session;
         } else if (head.includes('SEND_PROMPT') && (m = PROMPT.exec(head)) != null) {
             if (this.waiting++ === 0) {
                 this.waitingSince = this.time(m);
             }
         } else if (head.includes('user-selected model') && (m = MODEL.exec(head)) != null) {
-            this.model = m[3];
-            this.firstModel ??= this.model;
+            this.setModel(m[3]);
+        } else if (head.includes('use the feature default') && DEFAULT_MODEL.test(head)) {
+            this.setModel(GROUP_DEFAULT);
         }
+    }
+
+    private setModel(identifier: string): void {
+        this.model = identifier;
+        this.firstModel ??= identifier;
+    }
+
+    private tally(session: number): Tally {
+        const t = this.sessions.get(session) ?? { started: null, steps: 0, runs: 0, roundTrips: 0, byModel: new Map<string, number>() };
+        this.sessions.set(session, t);
+        return t;
     }
 
     private time(m: RegExpExecArray): number | null {
@@ -119,18 +153,17 @@ export class LiveSession {
     }
 
     private step(session: number, at: number | null): void {
-        const t = this.sessions.get(session) ?? { started: null, steps: 0, roundTrips: 0, byModel: new Map<string, number>() };
+        const t = this.tally(session);
         t.started ??= this.waiting > 0 && this.waitingSince != null ? this.waitingSince : at;
         t.steps++;
         t.roundTrips += this.waiting;
         const model = this.model ?? '';
         t.byModel.set(model, (t.byModel.get(model) ?? 0) + 1);
-        this.sessions.set(session, t);
         this.waiting = 0;
         this.last = session;
     }
 
-    /** The session of the latest step, with the prompts sent since; null while the log has neither. */
+    /** The session of the latest step or round trip, with the prompts sent since; null while the log has neither. */
     meter(): Meter | null {
         if (this.last == null && this.waiting === 0) {
             return null;
@@ -149,8 +182,8 @@ export class LiveSession {
             credits = null;
         }
         return {
-            session: this.last, steps: t?.steps ?? 0, roundTrips: (t?.roundTrips ?? 0) + this.waiting, model: this.model,
-            credits, started: this.last == null ? this.waitingSince : t?.started ?? null,
+            session: this.last, steps: t?.steps ?? 0,
+            roundTrips: this.running ? t?.runs ?? 0 : (t?.roundTrips ?? 0) + this.waiting, model: this.model, credits, started: this.last == null ? this.waitingSince : t?.started ?? null,
         };
     }
 }
@@ -188,7 +221,12 @@ export function roundTripsText(trips: number): string {
 
 /** "Opus 5 · 42 steps · 5 round trips". */
 export function liveWhat(m: Meter): string {
-    return (m.model != null ? modelName(m.model) + ' · ' : '') + stepsText(m.steps) + ' · ' + roundTripsText(m.roundTrips);
+    return (m.model != null ? liveModelName(m.model) + ' · ' : '') + stepsText(m.steps) + ' · ' + roundTripsText(m.roundTrips);
+}
+
+/** "Opus 5", or "Group default" when the CLI uses the group's default model. */
+export function liveModelName(model: string): string {
+    return model === GROUP_DEFAULT ? 'Group default' : modelName(model);
 }
 
 /** "≈ 38.2 credits", or why there is no estimate. */
@@ -196,7 +234,9 @@ export function liveCredits(m: Meter): string {
     if (m.credits != null) {
         return '≈ ' + number(m.credits) + ' credits';
     }
-    return m.model == null ? 'No ≈ credits: the log names no model' : 'No ≈ credits: no rate known for ' + m.model;
+    return m.model == null ? 'No ≈ credits: the log names no model'
+        : m.model === GROUP_DEFAULT ? "No ≈ credits: the group's default model, which the log does not name"
+            : 'No ≈ credits: no rate known for ' + m.model;
 }
 
 /** How the estimate is made, and what it is not. */

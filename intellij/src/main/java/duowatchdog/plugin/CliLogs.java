@@ -42,7 +42,10 @@ final class CliLogs {
         return Path.of(PathManager.getSystemPath(), "duo-watchdog", "cli-logs.json");
     }
 
-    /** Where the CLI writes its logs, of the places it may: the temporary folders here and in WSL. */
+    /**
+     * Where the CLI writes its logs, of the places it may: the temporary folders here and in WSL, each distribution's
+     * once, through \\wsl.localhost\ when it answers, else \\wsl$\: both reach the same folder.
+     */
     static List<Path> folders() {
         Set<Path> folders = new LinkedHashSet<>();
         folders.add(Path.of(System.getProperty("java.io.tmpdir"), DuoCliLogs.FOLDER));
@@ -50,8 +53,9 @@ final class CliLogs {
             for (Project p : ProjectManager.getInstance().getOpenProjects()) {
                 String distro = Glab.wslDistro(p.getBasePath());
                 if (distro != null) {
-                    folders.add(Path.of("\\\\wsl.localhost\\" + distro + "\\tmp\\" + DuoCliLogs.FOLDER));
-                    folders.add(Path.of("\\\\wsl$\\" + distro + "\\tmp\\" + DuoCliLogs.FOLDER));
+                    Path local = Path.of("\\\\wsl.localhost\\" + distro + "\\tmp\\" + DuoCliLogs.FOLDER);
+                    folders.add(Files.isDirectory(local) ? local
+                            : Path.of("\\\\wsl$\\" + distro + "\\tmp\\" + DuoCliLogs.FOLDER));
                 }
             }
         } else {

@@ -43,6 +43,72 @@ class LiveSessionTest {
         return live;
     }
 
+    /**
+     * As the interactive CLI 9.30 writes it: the group's default model, then two prompts with a tool call each and a
+     * third answered without one. No SEND_PROMPT line; checkpoints, which are no model calls; a prompt in the line that
+     * runs it.
+     */
+    private static final String INTERACTIVE = """
+            2026-11-05T09:00:00:000 [info]: [ModelResolverService] Resolved user-selected model ref "__default__duo_agent_platform_agentic_chat" is a "use the feature default" sentinel; the feature's default model is used
+            2026-11-05T09:00:05:000 [debug]: [DuoWorkflowNodeExecutor][10301001] Running workflow {"goal": "%s"}
+            2026-11-05T09:00:05:100 [debug]: Creating websocket connection...
+            2026-11-05T09:00:05:300 [debug]: [DuoWorkflowNodeExecutor][10301001] startRequest written to stream
+            2026-11-05T09:00:07:000 [debug]: [DuoWorkflowNodeExecutor][10301001] Received new checkpoint
+            2026-11-05T09:00:09:500 [debug]: [DuoWorkflowNodeExecutor][10301001] [requestID: r1] Action received: {"requestID":"r1"
+            2026-11-05T09:00:10:000 [debug]: [DuoWorkflowNodeExecutor][10301001] Received new checkpoint
+            2026-11-05T09:00:12:000 [debug]: [GitLabBackend] Workflow turn ended
+            2026-11-05T09:01:00:000 [debug]: [DuoWorkflowNodeExecutor][10301001] Running workflow {"goal": "and %s"}
+            2026-11-05T09:01:00:100 [debug]: Creating websocket connection...
+            2026-11-05T09:01:03:000 [debug]: [DuoWorkflowNodeExecutor][10301001] [requestID: r2] Action received: {"requestID":"r2"
+            2026-11-05T09:01:04:000 [debug]: [DuoWorkflowNodeExecutor][10301001] Received new checkpoint
+            2026-11-05T09:01:06:000 [debug]: [GitLabBackend] Workflow turn ended
+            2026-11-05T09:02:00:000 [debug]: [DuoWorkflowNodeExecutor][10301001] Running workflow {"goal": "thanks"}
+            2026-11-05T09:02:02:000 [debug]: [DuoWorkflowNodeExecutor][10301001] Received new checkpoint
+            2026-11-05T09:02:03:000 [debug]: [GitLabBackend] Workflow turn ended
+            """.formatted(SECRET, SECRET);
+
+    @Test
+    void countsTheRoundTripsOfAnInteractiveSession() {
+        LiveSession live = new LiveSession(UTC);
+        INTERACTIVE.lines().limit(8).forEach(live::line);
+        assertEquals(new LiveSession.Meter(10301001L, 1, 1, LiveSession.GROUP_DEFAULT, null,
+                Instant.parse("2026-11-05T09:00:05Z")), live.meter(), "one Running workflow a prompt; checkpoints no steps");
+
+        INTERACTIVE.lines().skip(8).forEach(live::line);
+        LiveSession.Meter m = live.meter();
+        assertEquals(2, m.steps());
+        assertEquals(3, m.roundTrips(), "a reply without a tool call is a round trip too");
+        assertEquals("Group default · 2 steps · 3 round trips", LiveSession.what(m));
+        assertEquals("No ≈ credits: the group's default model, which the log does not name", LiveSession.credits(m));
+        LiveSession.Run run = new LiveSession.Run(NAME, Instant.parse("2026-11-05T09:02:03Z").toEpochMilli(), m);
+        for (String shown : List.of(m.toString(), LiveSession.barText(run, Instant.parse("2026-11-05T09:02:10Z")),
+                LiveSession.tooltipHtml(run, Instant.parse("2026-11-05T09:02:10Z"), UTC, 20))) {
+            assertFalse(shown.contains("sk-live") || shown.contains("billing") || shown.contains("__default__"), shown);
+        }
+    }
+
+    @Test
+    void aReplyWithoutAToolCallShowsTheSession() {
+        LiveSession live = new LiveSession(UTC);
+        live.line("2026-11-05T09:00:05:000 [debug]: [DuoWorkflowNodeExecutor][10301001] Running workflow");
+        assertEquals(new LiveSession.Meter(10301001L, 0, 1, null, null, Instant.parse("2026-11-05T09:00:05Z")),
+                live.meter());
+    }
+
+    @Test
+    void aHeadlessRunWritingBothCountsItsPromptOnce() {
+        LiveSession.Meter m = read("""
+                2026-11-04T10:00:02:100 [info]: [ModelResolverService] Using user-selected model: "claude_sonnet_5_5"
+                2026-11-04T10:00:05:000 [debug]: [RunController] Executing workflow: {"type": "SEND_PROMPT", "goal": "x"}
+                2026-11-04T10:00:05:200 [debug]: [DuoWorkflowNodeExecutor][7] Running workflow
+                2026-11-04T10:00:09:000 [debug]: [DuoWorkflowNodeExecutor][7] [requestID: a] Action received: {}
+                """).meter();
+
+        assertEquals(1, m.roundTrips());
+        assertEquals("claude_sonnet_5_5", m.model(), "the model line of the headless CLI is still read");
+        assertEquals(Instant.parse("2026-11-04T10:00:05Z"), m.started(), "from its prompt");
+    }
+
     @Test
     void countsStepsRoundTripsAndTheModel() {
         LiveSession.Meter m = read(LOG).meter();

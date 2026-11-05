@@ -103,8 +103,13 @@ public final class LiveMeter implements Disposable {
             long now = System.currentTimeMillis();
             List<LiveSession.Run> found = new ArrayList<>();
             Set<Path> followed = new HashSet<>();
+            Set<String> names = new HashSet<>();
             for (Path folder : CliLogs.folders()) {
                 for (Path log : newest(folder)) {
+                    // The same log reached another way, as a WSL folder can be: followed once.
+                    if (!names.add(log.getFileName().toString())) {
+                        continue;
+                    }
                     long modified = Files.getLastModifiedTime(log).toMillis();
                     if (now - modified > ACTIVE.toMillis()) {
                         continue;

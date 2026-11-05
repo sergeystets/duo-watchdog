@@ -18,18 +18,22 @@ import java.util.regex.Pattern;
 /**
  * The Duo CLI session in progress, from the log of the CLI's run, read line by line as the log grows: the agent's
  * steps (model calls), the prompts sent (round trips), the model, and ≈ credits, each step at its model's rate per
- * call ({@link ModelCredits}). Three kinds of line are looked at, and of them only the time, the session and one field:
+ * call ({@link ModelCredits}). These lines are looked at, and of them only the time, the session and one field:
  * <ul>
  *   <li>{@code [DuoWorkflowNodeExecutor][<session>] [requestID: <id>] Action received}: a step, counted once per
  *       session and request, as {@link DuoCliLogs} counts them;</li>
- *   <li>{@code [RunController] Executing workflow: {"type": "SEND_PROMPT", …}}: a round trip, counted; the prompt
- *       itself is not read;</li>
- *   <li>{@code [ModelResolverService] Using user-selected model: "<identifier>"}: the model of the steps after it.</li>
+ *   <li>{@code [DuoWorkflowNodeExecutor][<session>] Running workflow}: a round trip, one per prompt, as the
+ *       interactive CLI (9.30) logs it;</li>
+ *   <li>{@code [RunController] Executing workflow: {"type": "SEND_PROMPT", …}}: a round trip in a log with no
+ *       {@code Running workflow} line, as the headless {@code duo run} and older CLIs log it, never both, since a
+ *       headless run may write each once; the prompt itself is not read;</li>
+ *   <li>{@code [ModelResolverService] Using user-selected model: "<identifier>"}, or {@code Resolved user-selected
+ *       model ref "…" is a "use the feature default" sentinel}, the group's default: the model of the steps after it.</li>
  * </ul>
  * Each is known by its tag coming before any quote or brace, so a prompt or code that quotes one is not taken for it.
- * No more than the start of a line is looked at, and only counts, session numbers and the model are kept. A prompt
- * names no session: it goes to the session of the next step. Each run of the CLI writes a log of its own, so a session
- * resumed from an earlier run counts what this run did.
+ * No more than the start of a line is looked at, and only counts, session numbers and the model are kept. A
+ * {@code SEND_PROMPT} names no session: it goes to the session of the next step. Each run of the CLI writes a log of
+ * its own, so a session resumed from an earlier run counts what this run did.
  */
 public final class LiveSession {
 
@@ -40,10 +44,17 @@ public final class LiveSession {
     private static final String TIME = "^(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2})(?:[:.](\\d{3}))?\\S*\\s[^{\"]*?";
     private static final Pattern STEP = Pattern.compile(
             TIME + "\\[DuoWorkflowNodeExecutor]\\[(\\d{1,18})]\\s*\\[requestID:\\s*([^\\]\\s]+)\\s*]\\s*Action received");
+    private static final Pattern RUNNING = Pattern.compile(
+            TIME + "\\[DuoWorkflowNodeExecutor]\\[(\\d{1,18})]\\s*Running workflow\\b");
     private static final Pattern PROMPT = Pattern.compile(
             TIME + "\\[RunController]\\s*Executing workflow:\\s*\\{\\s*\"type\"\\s*:\\s*\"SEND_PROMPT\"");
     private static final Pattern MODEL = Pattern.compile(
             TIME + "\\[ModelResolverService]\\s*Using user-selected model:\\s*\"([\\w.:@/-]{1,80})\"");
+    private static final Pattern DEFAULT_MODEL = Pattern.compile(TIME + "\\[ModelResolverService]\\s*Resolved "
+            + "user-selected model ref\\s*\"[\\w.:@/-]{1,120}\"\\s*is a\\s*\"use the feature default\" sentinel");
+
+    /** The model when the CLI logs none chosen but the group's default for the feature. */
+    public static final String GROUP_DEFAULT = "group default";
 
     /** The round trips per session recommended at most, unless the settings say otherwise. */
     public static final int RECOMMENDED_ROUND_TRIPS = 20;
@@ -57,17 +68,23 @@ public final class LiveSession {
     private final Map<Long, Tally> sessions = new HashMap<>();
     /** The session of the latest step. */
     private Long last;
-    /** Prompts sent since the latest step: the next step's session's; and when the first of them was. */
+    /** {@code SEND_PROMPT}s since the latest step: the next step's session's; and when the first of them was. */
     private int waiting;
     private Instant waitingSince;
+    /** Whether the log has a {@code Running workflow} line: its round trips are those, not the {@code SEND_PROMPT}s. */
+    private boolean running;
     /** The model as last logged, and the first one, for the steps before it. */
     private String model;
     private String firstModel;
 
-    /** One session's steps, by the model in use at each ("" before any), its round trips, and when it started. */
+    /**
+     * One session's steps, by the model in use at each ("" before any), its round trips by {@code Running workflow}
+     * and by {@code SEND_PROMPT}, and when it started.
+     */
     private static final class Tally {
         Instant started;
         int steps;
+        int runs;
         int roundTrips;
         final Map<String, Integer> byModel = new HashMap<>();
     }
@@ -75,8 +92,9 @@ public final class LiveSession {
     /**
      * What the meter shows.
      *
-     * @param session the session's number, as the Duo CLI shows it; null before its first step
-     * @param model   the model's GitLab identifier as last logged, such as {@code claude_opus_5}; null when none was
+     * @param session the session's number, as the Duo CLI shows it; null before the log names it
+     * @param model   the model's GitLab identifier as last logged, such as {@code claude_opus_5}, or
+     *                {@link #GROUP_DEFAULT}; null when none was
      * @param credits ≈ credits: each step at its model's rate per call; null when a model is not in the table
      * @param started its first prompt or step in this run; null when the log's time does not read
      */
@@ -105,15 +123,30 @@ public final class LiveSession {
             if (seen.add(m.group(3) + "/" + m.group(4))) {
                 step(Long.parseLong(m.group(3)), time(m));
             }
+        } else if (head.contains("Running workflow") && (m = RUNNING.matcher(head)).find()) {
+            long session = Long.parseLong(m.group(3));
+            Tally t = sessions.computeIfAbsent(session, id -> new Tally());
+            if (t.started == null) {
+                t.started = waiting > 0 && waitingSince != null ? waitingSince : time(m);
+            }
+            t.runs++;
+            running = true;
+            last = session;
         } else if (head.contains("SEND_PROMPT") && (m = PROMPT.matcher(head)).find()) {
             if (waiting++ == 0) {
                 waitingSince = time(m);
             }
         } else if (head.contains("user-selected model") && (m = MODEL.matcher(head)).find()) {
-            model = m.group(3);
-            if (firstModel == null) {
-                firstModel = model;
-            }
+            model(m.group(3));
+        } else if (head.contains("use the feature default") && DEFAULT_MODEL.matcher(head).find()) {
+            model(GROUP_DEFAULT);
+        }
+    }
+
+    private void model(String identifier) {
+        model = identifier;
+        if (firstModel == null) {
+            firstModel = model;
         }
     }
 
@@ -138,7 +171,7 @@ public final class LiveSession {
         last = session;
     }
 
-    /** The session of the latest step, with the prompts sent since; null while the log has neither. */
+    /** The session of the latest step or round trip, with the prompts sent since; null while the log has neither. */
     public Meter meter() {
         if (last == null && waiting == 0) {
             return null;
@@ -156,7 +189,8 @@ public final class LiveSession {
         if (t.steps == 0 && ModelCredits.perCall(model) == null) {
             credits = null;
         }
-        return new Meter(last, t.steps, t.roundTrips + waiting, model, credits, last == null ? waitingSince : t.started);
+        return new Meter(last, t.steps, running ? t.runs : t.roundTrips + waiting, model, credits,
+                last == null ? waitingSince : t.started);
     }
 
     /**
@@ -198,7 +232,12 @@ public final class LiveSession {
 
     /** "Opus 5 · 42 steps · 5 round trips". */
     public static String what(Meter m) {
-        return (m.model() != null ? ModelCredits.name(m.model()) + " · " : "") + steps(m.steps()) + " · " + roundTrips(m.roundTrips());
+        return (m.model() != null ? modelName(m.model()) + " · " : "") + steps(m.steps()) + " · " + roundTrips(m.roundTrips());
+    }
+
+    /** "Opus 5", or "Group default" when the CLI uses the group's default model. */
+    public static String modelName(String model) {
+        return GROUP_DEFAULT.equals(model) ? "Group default" : ModelCredits.name(model);
     }
 
     /** "≈ 38.2 credits", or why there is no estimate. */
@@ -207,6 +246,7 @@ public final class LiveSession {
             return "≈ " + CreditsView.number(m.credits()) + " credits";
         }
         return m.model() == null ? "No ≈ credits: the log names no model"
+                : GROUP_DEFAULT.equals(m.model()) ? "No ≈ credits: the group's default model, which the log does not name"
                 : "No ≈ credits: no rate known for " + m.model();
     }
 
