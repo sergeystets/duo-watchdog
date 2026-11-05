@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { dashboardModel, level, step } from '../core/dashboard';
+import { zoneText } from '../core/dates';
 import { Snapshots } from '../core/report';
 import { AT, report, TODAY } from './fixtures';
 
@@ -24,7 +25,10 @@ test('gridlines step by 1, 2 or 5 times a power of ten', () => {
 test('the dashboard reads as in the mockup', () => {
     const m = dashboardModel(Snapshots.ok(report(21.5, false), AT), 300, PERCENTS, TODAY, ' acme ');
 
-    assert.equal(m.byline, '@alice · acme · Updated 14:05');
+    assert.equal(m.byline, '@alice · acme · Updated today 14:05 ' + zoneText(-AT.getTimezoneOffset()), "on this machine's clock");
+    const late = Snapshots.ok(report(21.5, false), new Date('2026-10-18T11:05:00Z'));
+    assert.equal(dashboardModel(late, 300, PERCENTS, '2026-10-19', 'acme', () => 0).byline,
+        '@alice · acme · Updated yesterday 11:05 UTC');
     assert.equal(m.error, null);
     assert.equal(m.notConfigured, null);
     const r = m.report!;

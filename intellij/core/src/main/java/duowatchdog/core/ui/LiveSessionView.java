@@ -6,6 +6,7 @@ import javax.swing.BorderFactory;
 import javax.swing.JPanel;
 import java.awt.BorderLayout;
 import java.awt.Font;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
@@ -34,14 +35,15 @@ public final class LiveSessionView extends Page {
 
     /**
      * @param meter the session now, or null for none
+     * @param today today in the zone
      * @param zone  the zone to say its start in
      * @param limit the recommended round trips per session; 0 for none
      */
-    public void show(LiveSession.Meter meter, ZoneId zone, int limit) {
+    public void show(LiveSession.Meter meter, LocalDate today, ZoneId zone, int limit) {
         clear();
         setVisible(meter != null);
         if (meter != null) {
-            place(new Box(meter, zone, limit), 0);
+            place(new Box(meter, today, zone, limit), 0);
         }
         revalidate();
         repaint();
@@ -49,7 +51,7 @@ public final class LiveSessionView extends Page {
 
     private final class Box extends Card {
 
-        Box(LiveSession.Meter m, ZoneId zone, int limit) {
+        Box(LiveSession.Meter m, LocalDate today, ZoneId zone, int limit) {
             super(theme);
             JPanel top = new JPanel(new BorderLayout(theme.px(8), 0));
             top.setOpaque(false);
@@ -67,7 +69,7 @@ public final class LiveSessionView extends Page {
             body.add(m.credits() != null ? label(LiveSession.credits(m), 17, Font.BOLD, Tone.TEXT)
                     : text(LiveSession.credits(m), 12, Tone.SECONDARY));
             List<String> when = new ArrayList<>();
-            String started = LiveSession.startedAt(m, zone);
+            String started = LiveSession.startedAt(m, today, zone);
             if (started != null) {
                 when.add(started);
             }

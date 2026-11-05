@@ -10,7 +10,13 @@
     ]]></description>
 
     <change-notes><![CDATA[
-    <h3>What's new in 0.5.2</h3>
+    <h3>What's new in 0.5.3</h3>
+    <ul>
+      <li>Every time shown says its day and its zone, on this computer's clock: <i>Updated today 11:45 UTC+2</i>, and
+          the Duo CLI session's <i>Started today 10:00 UTC+2, 34m 17s, quiet since today 10:34 UTC+2</i>, with
+          <i>yesterday</i> or the date for an older one.</li>
+    </ul>
+    <h3>0.5.2</h3>
     <ul>
       <li>The Duo CLI session in the status bar always shows its <b>≈ $</b>: a step on the group's default model, on a
           model the log does not name, or on one with no known rate is priced as the <b>Group default model</b> set in

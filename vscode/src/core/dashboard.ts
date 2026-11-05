@@ -1,4 +1,4 @@
-import { addDays, daysBetween, dayOfMonth, IsoDate, time } from './dates';
+import { addDays, clockText, daysBetween, dayOfMonth, IsoDate, LOCAL_ZONE, ZoneOffset } from './dates';
 import { BillingPeriod } from './period';
 import { CreditsReport, FlowUsage, Snapshot, spentOn } from './report';
 import { capName, day, monthText, number, periodText } from './view';
@@ -8,7 +8,7 @@ import { capName, day, monthText, number, periodText } from './view';
  * meter, the Left, Forecast, Pace and Spent today tiles, the month's daily bars, the per-feature bars, and the notes.
  */
 export interface DashboardModel {
-    /** "@alice · acme · Updated 14:05". */
+    /** "@alice · acme · Updated today 14:05 UTC+2". */
     byline: string;
     /** "Last refresh failed: …", or null. */
     error: string | null;
@@ -100,8 +100,12 @@ export function step(max: number): number {
     return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * power;
 }
 
+/**
+ * @param today today on the zone's clock
+ * @param zone  the clock the update time is told on
+ */
 export function dashboardModel(snapshot: Snapshot, limit: number, percents: number[], today: IsoDate,
-                               group: string): DashboardModel {
+                               group: string, zone: ZoneOffset = LOCAL_ZONE): DashboardModel {
     const report = snapshot.report;
     const parts: string[] = [];
     if (report != null && report.username != null) {
@@ -111,7 +115,7 @@ export function dashboardModel(snapshot: Snapshot, limit: number, percents: numb
         parts.push(group.trim());
     }
     if (snapshot.fetchedAt != null) {
-        parts.push('Updated ' + time(snapshot.fetchedAt));
+        parts.push('Updated ' + clockText(snapshot.fetchedAt, today, zone));
     }
     return {
         byline: parts.join(' · '),

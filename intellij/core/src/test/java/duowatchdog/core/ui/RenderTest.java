@@ -143,22 +143,23 @@ class RenderTest {
      */
     @Test
     void theSessionNowShowsItsStepsAndCredits() throws IOException {
+        java.time.LocalDate nov4 = java.time.LocalDate.of(2026, 11, 4);
         LiveSessionView light = new LiveSessionView(Theme.light(FONT));
         light.show(new duowatchdog.core.LiveSession.Meter(10208239L, 42, 17, "claude_opus_5", 42 * 0.909, null,
-                Instant.parse("2026-11-04T09:48:00Z")), java.time.ZoneId.of("UTC"), 20);
+                Instant.parse("2026-11-04T09:48:00Z")), nov4, java.time.ZoneId.of("UTC"), 20);
         assertTrue(light.isVisible());
         save("session-now-light", light, 470);
 
         LiveSessionView dark = new LiveSessionView(Theme.dark(FONT));
-        dark.show(new duowatchdog.core.LiveSession.Meter(null, 0, 1, "gpt_7_mini", null, null, null), java.time.ZoneId.of("UTC"), 0);
+        dark.show(new duowatchdog.core.LiveSession.Meter(null, 0, 1, "gpt_7_mini", null, null, null), nov4, java.time.ZoneId.of("UTC"), 0);
         save("session-now-dark-unpriced", dark, 470);
 
         LiveSessionView groupDefault = new LiveSessionView(Theme.light(FONT));
         groupDefault.show(new duowatchdog.core.LiveSession.Meter(10301001L, 2, 0, duowatchdog.core.LiveSession.GROUP_DEFAULT,
-                1.0, "Sonnet 4.5", Instant.parse("2026-11-04T09:48:00Z")), java.time.ZoneId.of("UTC"), 20);
+                1.0, "Sonnet 4.5", Instant.parse("2026-11-04T09:48:00Z")), nov4, java.time.ZoneId.of("UTC"), 20);
         save("session-now-group-default", groupDefault, 470);
 
-        dark.show(null, java.time.ZoneId.of("UTC"), 20);
+        dark.show(null, nov4, java.time.ZoneId.of("UTC"), 20);
         assertTrue(!dark.isVisible() && dark.getComponentCount() == 0);
     }
 

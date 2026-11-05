@@ -17,7 +17,7 @@ GitLab Credits usage for the current billing period, forecast where the month wi
 ![Java](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-VS_Code_extension-3178C6?logo=typescript&logoColor=white)
 ![GitLab](https://img.shields.io/badge/GitLab-Duo-FC6D26?logo=gitlab&logoColor=white)
-![Version](https://img.shields.io/badge/version-0.5.2-blue)
+![Version](https://img.shields.io/badge/version-0.5.3-blue)
 
 </div>
 
@@ -31,6 +31,9 @@ GitLab Credits usage for the current billing period, forecast where the month wi
 
 ## What's new in 0.5.0
 
+- **0.5.3**: every time shown says its day and its zone, on your computer's clock: `Updated today 11:45 UTC+2`, and
+  the session's `Started today 10:00 UTC+2, 34m 17s, quiet since today 10:34 UTC+2`, with `yesterday` or the date for
+  an older one.
 - **0.5.2**: the Duo CLI session always shows its **≈ $**: a session on the group's default model, whose log does not
   name the model, is priced as the **Group default model** in Settings (Sonnet 4.5 unless you pick another).
 - **0.5.1**: the session of the interactive Duo CLI (9.30) counts its **round trips**, one per prompt, and shows even
@@ -112,7 +115,7 @@ hidden when no session runs.
 
 <img align="right" src="docs/images/dashboard-warning.png" alt="Dashboard in the warning state" width="300">
 
-- A toolbar with **Refresh** and **Settings**, plus `@user · group · Updated HH:mm`
+- A toolbar with **Refresh** and **Settings**, plus `@user · group · Updated today 14:05 UTC+2`
 - The headline: credits used, an **Active** / **Blocked** status and the period with the current day
 - A usage bar with a dashed forecast marker and ticks at each alert threshold
 - Tiles for **Left**, **Forecast**, **Pace** (credits per day) and **Spent today**: four abreast in a wide tool window,
@@ -481,7 +484,7 @@ Or the IDE's own way:
 
 1. [Build the plugin](#building-from-source), or get `duo-watchdog-<version>.zip` from a teammate.
 2. In the IDE, open *Settings → Plugins → ⚙ → Install Plugin from Disk…*
-3. Select `intellij/build/distributions/duo-watchdog-0.5.2.zip` and restart if the IDE asks you to.
+3. Select `intellij/build/distributions/duo-watchdog-0.5.3.zip` and restart if the IDE asks you to.
 
 **Compatibility:** IntelliJ IDEA and any other JetBrains IDE from **2024.3** onward. This holds whichever IDE version the plugin was built against.
 
@@ -572,7 +575,7 @@ VS Code extension (`:vscode`, which runs its npm build). Open the root folder in
 
 ```bash
 ./gradlew test            # all tests: the plugin's core and the VS Code extension
-./gradlew buildPlugin     # → intellij/build/distributions/duo-watchdog-0.5.2.zip
+./gradlew buildPlugin     # → intellij/build/distributions/duo-watchdog-0.5.3.zip
 ./gradlew runIde          # launch a sandbox IDE with the plugin installed
 ```
 
@@ -689,11 +692,11 @@ because the path contains spaces:
 **5. Find the result:**
 
 ```powershell
-dir intellij\build\distributions    # → duo-watchdog-0.5.2.zip
+dir intellij\build\distributions    # → duo-watchdog-0.5.3.zip
 ```
 
 Then follow [Installation](#installation): *Settings → Plugins → ⚙ → Install Plugin from Disk…* and pick
-`intellij\build\distributions\duo-watchdog-0.5.2.zip`.
+`intellij\build\distributions\duo-watchdog-0.5.3.zip`.
 
 **Optional:** run the tests or try the plugin in a sandbox IDE:
 
@@ -771,7 +774,7 @@ The VS Code extension builds with npm (Node.js 20+), from the root through Gradl
 
 ```bash
 ./gradlew :vscode:test               # 144 tests, no VS Code needed         (npm ci && npm test)
-./gradlew :vscode:packageExtension   # → vscode/duo-watchdog-0.5.2.vsix      (npm run package)
+./gradlew :vscode:packageExtension   # → vscode/duo-watchdog-0.5.3.vsix      (npm run package)
 ./gradlew :vscode:installExtension   # into VS Code; -PcodePath=codium for another CLI
 ```
 

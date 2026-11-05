@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { addDays, parseDate, plusMonths } from '../core/dates';
+import { addDays, clockText, dayIn, parseDate, plusMonths, zoneText } from '../core/dates';
 import { BillingPeriod } from '../core/period';
 import { Snapshots } from '../core/report';
 import { day, monthText, number, periodText, statusText, tooltipLines } from '../core/view';
@@ -83,4 +83,21 @@ test('dates step like Java LocalDate', () => {
     assert.equal(parseDate('2026-10-01T00:00:00Z'), '2026-10-01');
     assert.equal(parseDate('2026-02-30'), null);
     assert.equal(parseDate('soon'), null);
+});
+
+test('a time says its day and its zone, as the plugin says them', () => {
+    const kyiv = () => 120;
+    const at = new Date('2026-11-05T08:34:00Z');
+    assert.equal(clockText(at, '2026-11-05', kyiv), 'today 10:34 UTC+2');
+    assert.equal(clockText(new Date('2026-11-04T21:50:00Z'), '2026-11-05', kyiv), 'yesterday 23:50 UTC+2');
+    assert.equal(clockText(new Date('2026-11-04T22:10:00Z'), '2026-11-05', kyiv), 'today 00:10 UTC+2',
+        "the zone's day, not UTC's");
+    assert.equal(clockText(new Date('2026-11-03T08:00:00Z'), '2026-11-05', kyiv), 'Nov 3, 10:00 UTC+2');
+    assert.equal(clockText(new Date('2025-12-31T08:00:00Z'), '2026-01-02', kyiv), 'Dec 31, 2025, 10:00 UTC+2');
+    assert.equal(clockText(at, '2026-11-05', () => 0), 'today 08:34 UTC');
+    assert.equal(clockText(at, '2026-11-05', () => 330), 'today 14:04 UTC+5:30');
+    assert.equal(clockText(at, '2026-11-05', () => -180), 'today 05:34 UTC-3');
+    assert.equal(dayIn(new Date('2026-11-04T22:10:00Z'), kyiv), '2026-11-05');
+    assert.deepEqual([zoneText(0), zoneText(-0), zoneText(180), zoneText(-570), zoneText(345)],
+        ['UTC', 'UTC', 'UTC+3', 'UTC-9:30', 'UTC+5:45']);
 });

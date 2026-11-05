@@ -11,8 +11,8 @@ import {
 import { ASSUMED_MODEL, assumedModel, modelName, MODELS, perCall } from '../core/modelCredits';
 
 const NAME = 'duo-cli-log-2026-11-04T09-59-58-dana-projects-notes-service.log';
-/** "10:00" in UTC. */
-const CLOCK = (ms: number) => new Date(ms).toISOString().slice(11, 16);
+/** Times told in UTC. */
+const UTC = () => 0;
 
 /** Never to be kept: in a prompt, and in a prompt that quotes the lines the meter counts. */
 const SECRET = 'rotate the key sk-live-0000 in billing.yml';
@@ -81,14 +81,14 @@ test('counts the round trips of an interactive session', () => {
     const run: Run = { log: NAME, modified: Date.parse('2026-11-05T09:02:03Z'), meter: m };
     const now = Date.parse('2026-11-05T09:02:10Z');
     assert.equal(liveBarText(run, now), '2m 5s · 3 round trips · 2 steps · ≈ $1');
-    assert.deepEqual(liveTooltip(run, now, 20, CLOCK).lines.slice(1, 3), ["≈ 1 credits, an estimate: steps × the model's rate per call",
+    assert.deepEqual(liveTooltip(run, now, 20, UTC).lines.slice(1, 3), ["≈ 1 credits, an estimate: steps × the model's rate per call",
         'Group default taken as Sonnet 4.5 (0.5 credits a step), as set in Settings']);
-    assert.ok(liveCard(m, 20, CLOCK)!.priced);
+    assert.ok(liveCard(m, 20, now, UTC)!.priced);
     assert.ok(liveBasis(m).startsWith('Group default taken as Sonnet 4.5 (0.5 credits a step), as set in Settings. An estimate'));
     assert.equal(live.meter('Opus 5')!.credits, 2 * 0.909, 'the group default model set in the settings');
     assert.equal(live.meter('Opus 5')!.assumed, 'Opus 5');
-    for (const shown of [JSON.stringify(m), liveBarText(run, now), JSON.stringify(liveTooltip(run, now, 20, CLOCK)),
-        JSON.stringify(liveCard(m, 20, CLOCK))]) {
+    for (const shown of [JSON.stringify(m), liveBarText(run, now), JSON.stringify(liveTooltip(run, now, 20, UTC)),
+        JSON.stringify(liveCard(m, 20, now, UTC))]) {
         assert.ok(!shown.includes('sk-live') && !shown.includes('billing') && !shown.includes('__default__'), shown);
     }
 });
@@ -131,7 +131,7 @@ test('keeps nothing of a prompt', () => {
     const run: Run = { log: NAME, modified: Date.parse('2026-11-04T10:01:04Z'), meter: m };
     const now = Date.parse('2026-11-04T10:01:10Z');
     for (const shown of [JSON.stringify(m), liveWhat(m), liveCredits(m), liveBasis(m), liveBarText(run, now),
-        JSON.stringify(liveTooltip(run, now, 20, CLOCK)), JSON.stringify(liveCard(m, 20, CLOCK))]) {
+        JSON.stringify(liveTooltip(run, now, 20, UTC)), JSON.stringify(liveCard(m, 20, now, UTC))]) {
         assert.ok(!shown.includes('sk-live') && !shown.includes('billing'), shown);
     }
 });
@@ -173,7 +173,7 @@ test('an unknown model is priced as the group default model', () => {
     assert.deepEqual([none!.credits, none!.assumed], [null, null], 'a model with no rate to take');
     assert.equal(liveBarText({ ...run, meter: none }, Date.parse('2026-11-04T10:00:31Z')), '30s · 1 round trip · 1 step');
     assert.equal(liveCredits(none!), 'No ≈ credits: no rate known for gpt_7_mini');
-    assert.equal(liveCard(none, 20, CLOCK)!.priced, false);
+    assert.equal(liveCard(none, 20, Date.parse('2026-11-04T10:00:31Z'), UTC)!.priced, false);
 });
 
 test('a log that names no model is priced as the group default model', () => {
@@ -273,15 +273,22 @@ test('says the session in the status bar with its run time', () => {
 
     assert.equal(liveBarText(run, now), '1m 5s · 2 round trips · 3 steps · ≈ $2.7',
         'running from its first prompt to now, while its log is written to');
-    assert.deepEqual(liveTooltip(run, now, 20, CLOCK), {
+    assert.deepEqual(liveTooltip(run, now, 20, UTC), {
         title: 'Duo CLI, now — session 10208239',
         lines: ['Opus 5 · 3 steps · 2 round trips', "≈ 2.7 credits, an estimate: steps × the model's rate per call",
-            'Started 10:00, running 1m 5s', '2 of 20 recommended round trips'],
+            'Started today 10:00 UTC, running 1m 5s', '2 of 20 recommended round trips'],
     });
 
     const later = Date.parse('2026-11-04T10:30:00Z');
     assert.equal(runTime(run, later), 59_000, 'a quiet log stops the clock at its last line');
-    assert.equal(liveStarted(run, later, CLOCK), 'Started 10:00, 59s, quiet since 10:01');
+    assert.equal(liveStarted(run, later, UTC), 'Started today 10:00 UTC, 59s, quiet since today 10:01 UTC');
+    assert.equal(liveStarted(run, Date.parse('2026-11-05T00:10:00Z'), UTC),
+        'Started yesterday 10:00 UTC, 59s, quiet since yesterday 10:01 UTC', 'left open past midnight');
+    assert.equal(liveStarted(run, Date.parse('2026-11-04T23:10:00Z'), () => 120),
+        'Started yesterday 12:00 UTC+2, 59s, quiet since yesterday 12:01 UTC+2', "past midnight on the zone's clock");
+    assert.equal(liveStarted(run, Date.parse('2026-11-07T09:00:00Z'), UTC),
+        'Started Nov 4, 10:00 UTC, 59s, quiet since Nov 4, 10:01 UTC');
+    assert.equal(liveCard(m, 20, now, () => 120)!.when, 'Started today 12:00 UTC+2 · 2 of 20 recommended round trips');
 });
 
 test('colours the round trips against the recommended most', () => {

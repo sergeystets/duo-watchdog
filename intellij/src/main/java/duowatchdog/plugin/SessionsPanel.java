@@ -196,7 +196,8 @@ final class SessionsPanel extends SimpleToolWindowPanel implements Disposable {
 
     /** The Duo CLI session now, with the round trips recommended at most. */
     private void showLive(Project project) {
-        live.show(LiveMeter.getInstance().meter(project), ZoneId.systemDefault(),
+        ZoneId zone = ZoneId.systemDefault();
+        live.show(LiveMeter.getInstance().meter(project), LocalDate.now(zone), zone,
                 CreditsSettings.getInstance().getState().roundTripLimit);
     }
 
