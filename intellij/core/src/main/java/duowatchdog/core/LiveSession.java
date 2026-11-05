@@ -1,5 +1,6 @@
 package duowatchdog.core;
 
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -32,8 +33,9 @@ import java.util.regex.Pattern;
  * </ul>
  * Each is known by its tag coming before any quote or brace, so a prompt or code that quotes one is not taken for it.
  * No more than the start of a line is looked at, and only counts, session numbers and the model are kept. A
- * {@code SEND_PROMPT} names no session: it goes to the session of the next step. Each run of the CLI writes a log of
- * its own, so a session resumed from an earlier run counts what this run did.
+ * {@code SEND_PROMPT} names no session: it goes to the session of the next step. A step on a model the log does not
+ * name, or one with no rate in the table, is priced as the group's default model set in the settings. Each run of the
+ * CLI writes a log of its own, so a session resumed from an earlier run counts what this run did.
  */
 public final class LiveSession {
 
@@ -95,10 +97,14 @@ public final class LiveSession {
      * @param session the session's number, as the Duo CLI shows it; null before the log names it
      * @param model   the model's GitLab identifier as last logged, such as {@code claude_opus_5}, or
      *                {@link #GROUP_DEFAULT}; null when none was
-     * @param credits ≈ credits: each step at its model's rate per call; null when a model is not in the table
+     * @param credits ≈ credits: each step at its model's rate per call, or at the assumed model's when its own has no
+     *                rate in the table; null when neither has one
+     * @param assumed the model steps were priced as for want of a rate of their own, such as "Sonnet 4.5"; null when
+     *                none were
      * @param started its first prompt or step in this run; null when the log's time does not read
      */
-    public record Meter(Long session, int steps, int roundTrips, String model, Double credits, Instant started) {
+    public record Meter(Long session, int steps, int roundTrips, String model, Double credits, String assumed,
+                        Instant started) {
     }
 
     /** One run of the CLI that is still writing its log: the log's name, when it was last written, and its meter. */
@@ -171,26 +177,33 @@ public final class LiveSession {
         last = session;
     }
 
-    /** The session of the latest step or round trip, with the prompts sent since; null while the log has neither. */
+    /** As {@link #meter(String)}, with steps that have no rate priced as {@link ModelCredits#ASSUMED}. */
     public Meter meter() {
+        return meter(ModelCredits.ASSUMED);
+    }
+
+    /**
+     * The session of the latest step or round trip, with the prompts sent since; null while the log has neither.
+     *
+     * @param assumed the model, as the table names it, that a step is priced as when its own has no rate: the group's
+     *                default
+     */
+    public Meter meter(String assumed) {
         if (last == null && waiting == 0) {
             return null;
         }
         Tally t = last == null ? new Tally() : sessions.get(last);
-        Double credits = 0.0;
+        double credits = 0;
+        boolean assuming = t.steps == 0 && ModelCredits.perCall(model) == null;
+        Double fallback = ModelCredits.perCall(assumed);
         for (Map.Entry<String, Integer> e : t.byModel.entrySet()) {
             Double rate = ModelCredits.perCall(e.getKey().isEmpty() ? firstModel : e.getKey());
-            if (rate == null) {
-                credits = null;
-                break;
-            }
-            credits += rate * e.getValue();
+            assuming |= rate == null;
+            credits += (rate != null ? rate : fallback != null ? fallback : 0) * e.getValue();
         }
-        if (t.steps == 0 && ModelCredits.perCall(model) == null) {
-            credits = null;
-        }
-        return new Meter(last, t.steps, running ? t.runs : t.roundTrips + waiting, model, credits,
-                last == null ? waitingSince : t.started);
+        boolean priced = !assuming || fallback != null;
+        return new Meter(last, t.steps, running ? t.runs : t.roundTrips + waiting, model, priced ? credits : null,
+                assuming && priced ? ModelCredits.name(assumed) : null, last == null ? waitingSince : t.started);
     }
 
     /**
@@ -250,10 +263,32 @@ public final class LiveSession {
                 : "No ≈ credits: no rate known for " + m.model();
     }
 
+    /**
+     * "Group default taken as Sonnet 4.5 (0.5 credits a step), as set in Settings": why steps are priced as another
+     * model; null when none are.
+     */
+    public static String assumption(Meter m) {
+        if (m.assumed() == null) {
+            return null;
+        }
+        String as = "taken as " + m.assumed() + " (" + rate(m.assumed()) + " credits a step), as set in Settings";
+        return GROUP_DEFAULT.equals(m.model()) ? "Group default " + as
+                : m.model() == null ? "No model in the log: " + as
+                : ModelCredits.perCall(m.model()) == null ? "No rate known for " + m.model() + ": " + as
+                : "Steps of a model without a known rate " + as;
+    }
+
+    /** A model's credits per call as the VS Code extension writes them: 0.5, 0.3125, 1. */
+    private static String rate(String model) {
+        return BigDecimal.valueOf(ModelCredits.perCall(model)).stripTrailingZeros().toPlainString();
+    }
+
     /** How the estimate is made, and what it is not. */
     public static String basis(Meter m) {
         Double rate = ModelCredits.perCall(m.model());
-        return "An estimate, updated as the session runs: GitLab bills each model call at its model's rate"
+        String assumption = assumption(m);
+        return (assumption != null ? assumption + ". " : "")
+                + "An estimate, updated as the session runs: GitLab bills each model call at its model's rate"
                 + (rate != null ? " (" + ModelCredits.name(m.model()) + ": " + rate + " credits)" : "")
                 + ", and a step is a model call the Duo CLI logged. GitLab's own credits come per day and feature, hours"
                 + " later. Tokens are not shown: GitLab bills per call, not per token.";
@@ -325,6 +360,7 @@ public final class LiveSession {
         return "<html><b>Duo CLI, now</b>" + (m.session() != null ? " — session " + m.session() : " — a new session")
                 + "<br>" + CreditsView.escape(what(m))
                 + "<br>" + CreditsView.escape(credits(m)) + (m.credits() != null ? ", an estimate: steps × the model's rate per call" : "")
+                + (m.assumed() != null ? "<br>" + CreditsView.escape(assumption(m)) : "")
                 + (started != null ? "<br>" + started : "")
                 + (limited != null ? "<br>" + (level(m, limit) == Level.NORMAL ? limited : "<b>" + limited + "</b>") : "")
                 + "<br>Click for the Sessions tab.</html>";

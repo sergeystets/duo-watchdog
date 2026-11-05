@@ -16,8 +16,9 @@ export class LiveLog {
         this.session = new LiveSession(clock);
     }
 
-    meter(): Meter | null {
-        return this.session.meter();
+    /** @param assumed the model a step is priced as when its own has no rate: the group's default */
+    meter(assumed?: string): Meter | null {
+        return this.session.meter(assumed);
     }
 
     /** Reads what the log gained since the last read; a log made again under the same name from its start. */

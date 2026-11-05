@@ -17,7 +17,7 @@ GitLab Credits usage for the current billing period, forecast where the month wi
 ![Java](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-VS_Code_extension-3178C6?logo=typescript&logoColor=white)
 ![GitLab](https://img.shields.io/badge/GitLab-Duo-FC6D26?logo=gitlab&logoColor=white)
-![Version](https://img.shields.io/badge/version-0.5.1-blue)
+![Version](https://img.shields.io/badge/version-0.5.2-blue)
 
 </div>
 
@@ -31,6 +31,8 @@ GitLab Credits usage for the current billing period, forecast where the month wi
 
 ## What's new in 0.5.0
 
+- **0.5.2**: the Duo CLI session always shows its **≈ $**: a session on the group's default model, whose log does not
+  name the model, is priced as the **Group default model** in Settings (Sonnet 4.5 unless you pick another).
 - **0.5.1**: the session of the interactive Duo CLI (9.30) counts its **round trips**, one per prompt, and shows even
   before its first tool call; a session on the group's default model says **Group default**; a project in WSL has its
   Duo CLI runs followed once, not twice.
@@ -196,7 +198,7 @@ model calls and are not counted):
 | `[DuoWorkflowNodeExecutor][<session>] Running workflow` | a **round trip**, one per prompt, as the interactive CLI (9.30) logs it |
 | `[RunController] Executing workflow: {"type": "SEND_PROMPT", …}` | a **round trip** in a log with no `Running workflow` line, as the headless `duo run` and older CLIs log it (never both); the prompt is not read on or kept |
 | `[ModelResolverService] Using user-selected model: "<identifier>"` | the **model** of the steps after it |
-| `[ModelResolverService] Resolved user-selected model ref "…" is a "use the feature default" sentinel` | the group's default model, shown as **Group default**, with no ≈ credits since the log does not name it |
+| `[ModelResolverService] Resolved user-selected model ref "…" is a "use the feature default" sentinel` | the group's default model, shown as **Group default** and priced as the **Group default model** in Settings, since the log does not name it |
 
 A `SEND_PROMPT` names no session, so it counts toward the session of the next step; the session's run time starts at
 its first prompt (else its first step), by the CLI machine's clock. A session resumed from an earlier run
@@ -216,7 +218,9 @@ model's credits per call, from GitLab's Credits page (checked 2026-11-04), kept 
 | Opus 5, Opus 4.6, 4.7, 4.8 | 0.909 |
 | Fable 5, Fable 5.1 | 1.667 |
 
-For a model not in the table, or a log that names none, the meter shows the steps and round trips without credits.
+A step on the group's default model, on a model not in the table, or in a log that names none is priced as the
+**Group default model** set in Settings: Sonnet 4.5 (0.5 credits a call) unless you pick another, so the status bar
+always shows its `≈ $`. The tooltip and Sessions say so: `Group default taken as Sonnet 4.5 (0.5 credits a step)`.
 **Tokens are not shown**: GitLab bills each model call at its model's rate, not per token, and the Duo CLI logs no
 token counts. It is an estimate: a step is a model call the CLI logged, and GitLab's own figures are the ones it
 bills.
@@ -477,7 +481,7 @@ Or the IDE's own way:
 
 1. [Build the plugin](#building-from-source), or get `duo-watchdog-<version>.zip` from a teammate.
 2. In the IDE, open *Settings → Plugins → ⚙ → Install Plugin from Disk…*
-3. Select `intellij/build/distributions/duo-watchdog-0.5.1.zip` and restart if the IDE asks you to.
+3. Select `intellij/build/distributions/duo-watchdog-0.5.2.zip` and restart if the IDE asks you to.
 
 **Compatibility:** IntelliJ IDEA and any other JetBrains IDE from **2024.3** onward. This holds whichever IDE version the plugin was built against.
 
@@ -518,6 +522,7 @@ Shared by every account:
 | **Alert when the month-end forecast passes the limit** | Turns the forecast alert on or off |
 | **Refresh every … minutes** | Polling interval. Default: `15`. GitLab's data can lag a few minutes behind actual use. |
 | **Duo CLI, at most … round trips per session** | The prompts recommended at most in one Duo CLI session. Default: `20`; `0` for no colour. The session in the status bar and in Sessions turns amber from 80% of it, red at it. |
+| **Group default model** | The model your group's default is, for the ≈ $ of a Duo CLI session on it: the CLI's log does not name it. Default: `Sonnet 4.5`. Also prices a step whose log names no model, or one with no known rate. |
 | **Rotate tokens a week before they expire** | On by default. See [Token rotation](#token-rotation). |
 
 The box under the token field shows the token's state:
@@ -552,6 +557,7 @@ group, limit and last alert, to that account.
 | `duoWatchdog.refreshMinutes` | `15` | Polling interval in minutes |
 | `duoWatchdog.rotateTokens` | `true` | Rotate each account's token a week before it expires: see [Token rotation](#token-rotation) |
 | `duoWatchdog.roundTripLimit` | `20` | Round trips recommended at most per Duo CLI session; amber from 80%, red at it; `0` for no colour |
+| `duoWatchdog.groupDefaultModel` | `"Sonnet 4.5"` | The model your group's default is: prices a Duo CLI step on it, on a model the log does not name, or on one with no known rate |
 
 `duoWatchdog.groupPath` and `duoWatchdog.limit` are deprecated: each account has its own now. They are read once,
 when the token saved by 0.3.0 moves to its account. Tokens are kept in VS Code's secret storage, one per account.
@@ -566,7 +572,7 @@ VS Code extension (`:vscode`, which runs its npm build). Open the root folder in
 
 ```bash
 ./gradlew test            # all tests: the plugin's core and the VS Code extension
-./gradlew buildPlugin     # → intellij/build/distributions/duo-watchdog-0.5.1.zip
+./gradlew buildPlugin     # → intellij/build/distributions/duo-watchdog-0.5.2.zip
 ./gradlew runIde          # launch a sandbox IDE with the plugin installed
 ```
 
@@ -683,11 +689,11 @@ because the path contains spaces:
 **5. Find the result:**
 
 ```powershell
-dir intellij\build\distributions    # → duo-watchdog-0.5.1.zip
+dir intellij\build\distributions    # → duo-watchdog-0.5.2.zip
 ```
 
 Then follow [Installation](#installation): *Settings → Plugins → ⚙ → Install Plugin from Disk…* and pick
-`intellij\build\distributions\duo-watchdog-0.5.1.zip`.
+`intellij\build\distributions\duo-watchdog-0.5.2.zip`.
 
 **Optional:** run the tests or try the plugin in a sandbox IDE:
 
@@ -764,8 +770,8 @@ Running `./gradlew test` also renders every dashboard state to PNG (in `intellij
 The VS Code extension builds with npm (Node.js 20+), from the root through Gradle or in `vscode/` directly:
 
 ```bash
-./gradlew :vscode:test               # 120 tests, no VS Code needed         (npm ci && npm test)
-./gradlew :vscode:packageExtension   # → vscode/duo-watchdog-0.5.1.vsix      (npm run package)
+./gradlew :vscode:test               # 144 tests, no VS Code needed         (npm ci && npm test)
+./gradlew :vscode:packageExtension   # → vscode/duo-watchdog-0.5.2.vsix      (npm run package)
 ./gradlew :vscode:installExtension   # into VS Code; -PcodePath=codium for another CLI
 ```
 

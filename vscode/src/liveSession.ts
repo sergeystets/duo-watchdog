@@ -7,6 +7,7 @@ import { LiveLog } from './core/liveLog';
 import { Meter, pickRun, Run } from './core/liveSession';
 import { firstFolder } from './duoCliLogs';
 import { log } from './log';
+import { settings } from './settings';
 
 const POLL_MS = 2000;
 /** A log not written to for this long is of a run that ended, or that has waited for its user long enough. */
@@ -19,7 +20,8 @@ const NEWEST = 5;
  * on the machine the extension runs on (and, on Windows, in the workspace's WSL distributions), are looked at, and the
  * lines a log gained since are read. It is a poll rather than a file watcher: a folder in WSL, reached over \\wsl$,
  * does not report its changes. The CLI appends each line to its log as it logs it, so a step shows within the two
- * seconds. Of a line only its first characters are kept for reading (LiveLog); nothing of it is logged or stored.
+ * seconds. Of a line only its first characters are kept for reading (LiveLog); nothing of it is logged or stored. A
+ * step on a model the log does not name or price is priced as the group's default model in the settings, read each poll.
  */
 export class LiveSessionWatcher implements vscode.Disposable {
 
@@ -71,6 +73,7 @@ export class LiveSessionWatcher implements vscode.Disposable {
                 ? (vscode.workspace.workspaceFolders ?? []).map(f => wslDistro(f.uri.fsPath)).filter((d): d is string => d != null)
                 : [];
             const found: Run[] = [];
+            const assumed = settings().groupDefaultModel;
             const followed = new Set<string>();
             for (const folder of logFolders(process.platform, os.tmpdir(), distros)) {
                 const dir = await firstFolder(folder.paths);
@@ -89,7 +92,7 @@ export class LiveSessionWatcher implements vscode.Disposable {
                         this.tails.set(file, tail);
                         await tail.read(file);
                         followed.add(file);
-                        found.push({ log: name, modified: stat.mtimeMs, meter: tail.meter() });
+                        found.push({ log: name, modified: stat.mtimeMs, meter: tail.meter(assumed) });
                     } catch {
                         // Gone, or not readable: not followed.
                     }

@@ -29,6 +29,11 @@ public final class LiveLog {
         return session.meter();
     }
 
+    /** @param assumed the model a step is priced as when its own has no rate: the group's default */
+    public LiveSession.Meter meter(String assumed) {
+        return session.meter(assumed);
+    }
+
     /** Reads what the log gained since the last read; a log made again under the same name from its start. */
     public void read(Path log) throws IOException {
         long size = Files.size(log);

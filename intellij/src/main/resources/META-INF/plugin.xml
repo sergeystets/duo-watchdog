@@ -10,7 +10,13 @@
     ]]></description>
 
     <change-notes><![CDATA[
-    <h3>What's new in 0.5.1</h3>
+    <h3>What's new in 0.5.2</h3>
+    <ul>
+      <li>The Duo CLI session in the status bar always shows its <b>≈ $</b>: a step on the group's default model, on a
+          model the log does not name, or on one with no known rate is priced as the <b>Group default model</b> set in
+          Settings (Sonnet 4.5 unless you pick another). The tooltip and the Sessions tab say which model it takes.</li>
+    </ul>
+    <h3>0.5.1</h3>
     <ul>
       <li>The session of the interactive Duo CLI (9.30) counts its <b>round trips</b>, one per prompt, and shows even
           before its first tool call.</li>

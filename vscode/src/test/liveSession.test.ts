@@ -5,10 +5,10 @@ import * as path from 'node:path';
 import { test } from 'node:test';
 import { LiveLog } from '../core/liveLog';
 import {
-    durationText, folderKey, GROUP_DEFAULT, HEAD, liveBarText, liveBasis, liveCard, liveCredits, liveLevel, liveStarted,
-    liveTooltip, liveWhat, limitText, LiveSession, Meter, pickRun, Run, runTime, UTC_CLOCK,
+    durationText, folderKey, GROUP_DEFAULT, HEAD, liveAssumption, liveBarText, liveBasis, liveCard, liveCredits, liveLevel,
+    liveStarted, liveTooltip, liveWhat, limitText, LiveSession, Meter, pickRun, Run, runTime, UTC_CLOCK,
 } from '../core/liveSession';
-import { modelName, perCall } from '../core/modelCredits';
+import { ASSUMED_MODEL, assumedModel, modelName, MODELS, perCall } from '../core/modelCredits';
 
 const NAME = 'duo-cli-log-2026-11-04T09-59-58-dana-projects-notes-service.log';
 /** "10:00" in UTC. */
@@ -68,7 +68,7 @@ test('counts the round trips of an interactive session', () => {
     const live = new LiveSession(UTC_CLOCK);
     lines.slice(0, 8).forEach(line => live.line(line));
     assert.deepEqual(live.meter(), {
-        session: 10301001, steps: 1, roundTrips: 1, model: GROUP_DEFAULT, credits: null,
+        session: 10301001, steps: 1, roundTrips: 1, model: GROUP_DEFAULT, credits: 0.5, assumed: 'Sonnet 4.5',
         started: Date.parse('2026-11-05T09:00:05Z'),
     }, 'one Running workflow a prompt; checkpoints no steps');
 
@@ -76,9 +76,17 @@ test('counts the round trips of an interactive session', () => {
     const m = live.meter()!;
     assert.deepEqual([m.steps, m.roundTrips], [2, 3], 'a reply without a tool call is a round trip too');
     assert.equal(liveWhat(m), 'Group default · 2 steps · 3 round trips');
-    assert.equal(liveCredits(m), "No ≈ credits: the group's default model, which the log does not name");
+    assert.equal(liveCredits(m), '≈ 1 credits', "each step at the group's default model taken as Sonnet 4.5");
+    assert.equal(liveAssumption(m), 'Group default taken as Sonnet 4.5 (0.5 credits a step), as set in Settings');
     const run: Run = { log: NAME, modified: Date.parse('2026-11-05T09:02:03Z'), meter: m };
     const now = Date.parse('2026-11-05T09:02:10Z');
+    assert.equal(liveBarText(run, now), '2m 5s · 3 round trips · 2 steps · ≈ $1');
+    assert.deepEqual(liveTooltip(run, now, 20, CLOCK).lines.slice(1, 3), ["≈ 1 credits, an estimate: steps × the model's rate per call",
+        'Group default taken as Sonnet 4.5 (0.5 credits a step), as set in Settings']);
+    assert.ok(liveCard(m, 20, CLOCK)!.priced);
+    assert.ok(liveBasis(m).startsWith('Group default taken as Sonnet 4.5 (0.5 credits a step), as set in Settings. An estimate'));
+    assert.equal(live.meter('Opus 5')!.credits, 2 * 0.909, 'the group default model set in the settings');
+    assert.equal(live.meter('Opus 5')!.assumed, 'Opus 5');
     for (const shown of [JSON.stringify(m), liveBarText(run, now), JSON.stringify(liveTooltip(run, now, 20, CLOCK)),
         JSON.stringify(liveCard(m, 20, CLOCK))]) {
         assert.ok(!shown.includes('sk-live') && !shown.includes('billing') && !shown.includes('__default__'), shown);
@@ -89,7 +97,8 @@ test('a reply without a tool call shows the session', () => {
     const live = new LiveSession(UTC_CLOCK);
     live.line('2026-11-05T09:00:05:000 [debug]: [DuoWorkflowNodeExecutor][10301001] Running workflow');
     assert.deepEqual(live.meter(), {
-        session: 10301001, steps: 0, roundTrips: 1, model: null, credits: null, started: Date.parse('2026-11-05T09:00:05Z'),
+        session: 10301001, steps: 0, roundTrips: 1, model: null, credits: 0, assumed: 'Sonnet 4.5',
+        started: Date.parse('2026-11-05T09:00:05Z'),
     });
 });
 
@@ -112,6 +121,8 @@ test('counts steps, round trips and the model', () => {
     assert.equal(m.roundTrips, 2);
     assert.equal(m.model, 'claude_opus_5', 'a prompt quoting a model line does not change the model');
     assert.ok(Math.abs(m.credits! - 3 * 0.909) < 1e-9);
+    assert.equal(m.assumed, null, 'every step at its own model\'s rate');
+    assert.equal(liveAssumption(m), null);
     assert.equal(m.started, Date.parse('2026-11-04T10:00:05Z'), 'from its first prompt');
 });
 
@@ -147,16 +158,52 @@ test("prices each step at its model's rate", () => {
     assert.ok(Math.abs(m.credits! - (2 * 0.3125 + 0.125)) < 1e-9, 'the step before the first model line at that model');
 });
 
-test('an unknown model gives steps and round trips but no credits', () => {
-    const m = read(`2026-11-04T10:00:00:000 [info]: [ModelResolverService] Using user-selected model: "gpt_7_mini"
+test('an unknown model is priced as the group default model', () => {
+    const live = read(`2026-11-04T10:00:00:000 [info]: [ModelResolverService] Using user-selected model: "gpt_7_mini"
 2026-11-04T10:00:01:000 [debug]: [RunController] Executing workflow: {"type": "SEND_PROMPT", "goal": "x"}
-2026-11-04T10:00:02:000 [debug]: [DuoWorkflowNodeExecutor][1] [requestID: a] Action received: {}`).meter()!;
+2026-11-04T10:00:02:000 [debug]: [DuoWorkflowNodeExecutor][1] [requestID: a] Action received: {}`);
+    const m = live.meter()!;
 
-    assert.deepEqual([m.steps, m.roundTrips, m.credits], [1, 1, null]);
+    assert.deepEqual([m.steps, m.roundTrips, m.credits, m.assumed], [1, 1, 0.5, 'Sonnet 4.5']);
     const run: Run = { log: NAME, modified: Date.parse('2026-11-04T10:00:02Z'), meter: m };
-    assert.equal(liveBarText(run, Date.parse('2026-11-04T10:00:31Z')), '30s · 1 round trip · 1 step');
-    assert.equal(liveCredits(m), 'No ≈ credits: no rate known for gpt_7_mini');
-    assert.equal(liveCard(m, 20, CLOCK)!.priced, false);
+    assert.equal(liveBarText(run, Date.parse('2026-11-04T10:00:31Z')), '30s · 1 round trip · 1 step · ≈ $0.5');
+    assert.equal(liveAssumption(m), 'No rate known for gpt_7_mini: taken as Sonnet 4.5 (0.5 credits a step), as set in Settings');
+
+    const none = live.meter('Sonnet 9');
+    assert.deepEqual([none!.credits, none!.assumed], [null, null], 'a model with no rate to take');
+    assert.equal(liveBarText({ ...run, meter: none }, Date.parse('2026-11-04T10:00:31Z')), '30s · 1 round trip · 1 step');
+    assert.equal(liveCredits(none!), 'No ≈ credits: no rate known for gpt_7_mini');
+    assert.equal(liveCard(none, 20, CLOCK)!.priced, false);
+});
+
+test('a log that names no model is priced as the group default model', () => {
+    const m = read(`2026-11-04T10:00:00:000 [debug]: [DuoWorkflowNodeExecutor][1] [requestID: a] Action received: {}
+2026-11-04T10:00:01:000 [debug]: [DuoWorkflowNodeExecutor][1] [requestID: b] Action received: {}`).meter('Fable 5.1')!;
+
+    assert.deepEqual([m.model, m.credits, m.assumed], [null, 2 * 1.667, 'Fable 5.1']);
+    assert.equal(liveAssumption(m), 'No model in the log: taken as Fable 5.1 (1.667 credits a step), as set in Settings');
+});
+
+test('only the steps of a model with no rate are priced as the group default model', () => {
+    const m = read(`2026-11-04T10:00:00:000 [info]: [ModelResolverService] Resolved user-selected model ref "__default__x" is a "use the feature default" sentinel
+2026-11-04T10:00:01:000 [debug]: [DuoWorkflowNodeExecutor][1] [requestID: a] Action received: {}
+2026-11-04T10:00:02:000 [info]: [ModelResolverService] Using user-selected model: "claude_opus_5"
+2026-11-04T10:00:03:000 [debug]: [DuoWorkflowNodeExecutor][1] [requestID: b] Action received: {}`).meter()!;
+
+    assert.ok(Math.abs(m.credits! - (0.5 + 0.909)) < 1e-9);
+    assert.equal(liveAssumption(m), 'Steps of a model without a known rate taken as Sonnet 4.5 (0.5 credits a step), as set in Settings');
+});
+
+test('the group default model setting lists the models in the table', async () => {
+    const manifest = JSON.parse(await fs.readFile(path.join(__dirname, '..', '..', 'package.json'), 'utf8'));
+    const setting = manifest.contributes.configuration.properties['duoWatchdog.groupDefaultModel'];
+    assert.deepEqual(setting.enum, MODELS);
+    assert.deepEqual(setting.enumDescriptions, MODELS.map(m => perCall(m) + ' credits a call'));
+    assert.equal(setting.default, ASSUMED_MODEL);
+    assert.equal(perCall(ASSUMED_MODEL), 0.5);
+    assert.equal(assumedModel('Opus 5'), 'Opus 5');
+    assert.equal(assumedModel('claude_opus_5'), ASSUMED_MODEL, 'as the table names it');
+    assert.equal(assumedModel(undefined), ASSUMED_MODEL);
 });
 
 test('shows nothing before a step or a prompt', () => {
@@ -186,8 +233,8 @@ test('names the models and knows their rates', () => {
 });
 
 test("picks the run in the workspace's folder, else the last written", () => {
-    const a: Meter = { session: 1, steps: 1, roundTrips: 1, model: null, credits: null, started: null };
-    const b: Meter = { session: 2, steps: 2, roundTrips: 1, model: null, credits: null, started: null };
+    const a: Meter = { session: 1, steps: 1, roundTrips: 1, model: null, credits: null, assumed: null, started: null };
+    const b: Meter = { session: 2, steps: 2, roundTrips: 1, model: null, credits: null, assumed: null, started: null };
     const runs: Run[] = [
         { log: 'duo-cli-log-2026-11-04T09-00-00-dana-projects-sync-worker.log', modified: 2000, meter: a },
         { log: 'duo-cli-log-2026-11-04T08-00-00-dana-projects-notes-service.log', modified: 1000, meter: b },
@@ -203,7 +250,7 @@ test("picks the run in the workspace's folder, else the last written", () => {
 });
 
 test('a run with nothing counted yet does not hide a session still going', () => {
-    const a: Meter = { session: 1, steps: 4, roundTrips: 2, model: null, credits: null, started: null };
+    const a: Meter = { session: 1, steps: 4, roundTrips: 2, model: null, credits: null, assumed: null, started: null };
     const sameFolder: Run[] = [
         { log: 'duo-cli-log-2026-11-04T10-30-00-dana-projects-notes-service.log', modified: 3000, meter: null },
         { log: 'duo-cli-log-2026-11-04T10-00-00-dana-projects-notes-service.log', modified: 2000, meter: a },
@@ -238,7 +285,7 @@ test('says the session in the status bar with its run time', () => {
 });
 
 test('colours the round trips against the recommended most', () => {
-    const trips = (roundTrips: number): Meter => ({ session: 1, steps: roundTrips, roundTrips, model: null, credits: null, started: null });
+    const trips = (roundTrips: number): Meter => ({ session: 1, steps: roundTrips, roundTrips, model: null, credits: null, assumed: null, started: null });
     assert.equal(liveLevel(trips(15), 20), 'normal');
     assert.equal(liveLevel(trips(16), 20), 'near', 'from 80 %');
     assert.equal(liveLevel(trips(20), 20), 'over');
@@ -264,7 +311,7 @@ test('reads what the log gains as it grows', async () => {
 
         await live.read(file);
         const started = Date.parse('2026-11-04T10:00:01Z');
-        assert.deepEqual(live.meter(), { session: 7, steps: 1, roundTrips: 1, model: 'claude_sonnet_5_5', credits: 0.3125, started },
+        assert.deepEqual(live.meter(), { session: 7, steps: 1, roundTrips: 1, model: 'claude_sonnet_5_5', credits: 0.3125, assumed: null, started },
             'a line not yet ended waits');
 
         await fs.appendFile(file, second.slice(50));
@@ -273,13 +320,13 @@ test('reads what the log gains as it grows', async () => {
 
         await fs.appendFile(file, prompt + 'y'.repeat(1_000_000) + '"}\n' + step(7, 'c'));
         await live.read(file);
-        assert.deepEqual(live.meter(), { session: 7, steps: 3, roundTrips: 2, model: 'claude_sonnet_5_5', credits: 3 * 0.3125, started },
+        assert.deepEqual(live.meter(), { session: 7, steps: 3, roundTrips: 2, model: 'claude_sonnet_5_5', credits: 3 * 0.3125, assumed: null, started },
             'a long prompt is one round trip');
 
         await fs.writeFile(file, step(9, 'a'));
         await live.read(file);
-        assert.deepEqual(live.meter(), { session: 9, steps: 1, roundTrips: 0, model: null, credits: null, started: Date.parse('2026-11-04T10:00:02Z') },
-            'a log made again is read from its start');
+        assert.deepEqual(live.meter(), { session: 9, steps: 1, roundTrips: 0, model: null, credits: 0.5, assumed: 'Sonnet 4.5',
+            started: Date.parse('2026-11-04T10:00:02Z') }, 'a log made again is read from its start');
     } finally {
         await fs.rm(dir, { recursive: true, force: true });
     }

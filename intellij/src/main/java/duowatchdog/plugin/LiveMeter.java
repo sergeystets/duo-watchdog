@@ -8,6 +8,7 @@ import com.intellij.util.concurrency.AppExecutorUtil;
 import com.intellij.util.messages.Topic;
 import duowatchdog.core.LiveLog;
 import duowatchdog.core.LiveSession;
+import duowatchdog.core.ModelCredits;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
@@ -31,7 +32,8 @@ import java.util.concurrent.TimeUnit;
  * The Duo CLI session in progress, for the status bar and the Sessions tab. Every two seconds the CLI's newest logs,
  * here and in the open projects' WSL distributions, are looked at, and the lines a log gained since are read
  * ({@link LiveLog}). It is a poll rather than a file watcher: a folder in WSL, reached over \\wsl$, does not report
- * its changes. The CLI appends each line to its log as it logs it, so a step shows within the two seconds.
+ * its changes. The CLI appends each line to its log as it logs it, so a step shows within the two seconds. A step on
+ * a model the log does not name or price is priced as the group's default model in the settings, read each poll.
  */
 @Service(Service.Level.APP)
 public final class LiveMeter implements Disposable {
@@ -102,6 +104,7 @@ public final class LiveMeter implements Disposable {
         try {
             long now = System.currentTimeMillis();
             List<LiveSession.Run> found = new ArrayList<>();
+            String assumed = ModelCredits.assumed(CreditsSettings.getInstance().getState().groupDefaultModel);
             Set<Path> followed = new HashSet<>();
             Set<String> names = new HashSet<>();
             for (Path folder : CliLogs.folders()) {
@@ -117,7 +120,7 @@ public final class LiveMeter implements Disposable {
                     LiveLog tail = tails.computeIfAbsent(log, p -> new LiveLog(ZoneId.systemDefault()));
                     tail.read(log);
                     followed.add(log);
-                    found.add(new LiveSession.Run(log.getFileName().toString(), modified, tail.meter()));
+                    found.add(new LiveSession.Run(log.getFileName().toString(), modified, tail.meter(assumed)));
                 }
             }
             tails.keySet().retainAll(followed);

@@ -2,7 +2,7 @@
   "name": "duo-watchdog",
   "displayName": "Duo Watchdog",
   "description": "Watches your own GitLab Credits (GitLab Duo) for each of your GitLab accounts: used, left, the month-end forecast, usage by day and by feature, a year of statistics, with alerts before you hit your limit.",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "publisher": "local",
   "license": "MIT",
   "repository": {
@@ -185,6 +185,45 @@
           "scope": "application",
           "order": 7,
           "markdownDescription": "The round trips (prompts you send) recommended at most in one Duo CLI session. The session in the status bar and in Sessions turns amber from 80% of it and red at it; `0` for no colour."
+        },
+        "duoWatchdog.groupDefaultModel": {
+          "type": "string",
+          "default": "Sonnet 4.5",
+          "enum": [
+            "Haiku 5.5",
+            "Haiku 4.5",
+            "Sonnet 5",
+            "Sonnet 5.5",
+            "Sonnet 4.5",
+            "Sonnet 4.6",
+            "Opus 5.5",
+            "Opus 4.5",
+            "Opus 4.6",
+            "Opus 4.7",
+            "Opus 4.8",
+            "Opus 5",
+            "Fable 5",
+            "Fable 5.1"
+          ],
+          "enumDescriptions": [
+            "0.125 credits a call",
+            "0.149 credits a call",
+            "0.3125 credits a call",
+            "0.3125 credits a call",
+            "0.5 credits a call",
+            "0.5 credits a call",
+            "0.741 credits a call",
+            "0.833 credits a call",
+            "0.909 credits a call",
+            "0.909 credits a call",
+            "0.909 credits a call",
+            "0.909 credits a call",
+            "1.667 credits a call",
+            "1.667 credits a call"
+          ],
+          "scope": "application",
+          "order": 8,
+          "markdownDescription": "The model your group's default is, for the `≈ $` of a Duo CLI session on it: the CLI's log says only that it uses the group's default, not which model. Also used for a step whose log names no model, or one with no known rate. GitLab bills each call at its model's rate, so this sets the price of each such step."
         }
       }
     }
