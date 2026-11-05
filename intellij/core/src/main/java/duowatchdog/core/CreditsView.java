@@ -3,6 +3,7 @@ package duowatchdog.core;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
@@ -12,7 +13,7 @@ import java.util.Locale;
 /** The words and numbers the plugin shows: the status bar text, its tooltip, and the dashboard's dates. */
 public final class CreditsView {
 
-    private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+    private static final DateTimeFormatter CLOCK = DateTimeFormatter.ofPattern("HH:mm");
     private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("MMM d", Locale.ENGLISH);
     private static final DateTimeFormatter MONTH_DAY = DateTimeFormatter.ofPattern("MMMM d", Locale.ENGLISH);
     private static final DateTimeFormatter MONTH = DateTimeFormatter.ofPattern("MMMM", Locale.ENGLISH);
@@ -71,7 +72,7 @@ public final class CreditsView {
             if (r.blocked()) {
                 html.append("<br><b>Blocked</b> by ").append(capName(r.blockedBy()));
             }
-            html.append("<br><i>Updated ").append(TIME.format(s.fetchedAt().atZone(zone))).append("</i>")
+            html.append("<br><i>Updated ").append(clockText(s.fetchedAt(), today, zone)).append("</i>")
                     .append("<br>$ = credits at GitLab's $1 list price");
             if (s.error() != null) {
                 html.append("<br>Last refresh failed: ").append(escape(s.error()));
@@ -134,7 +135,7 @@ public final class CreditsView {
             }
         }
         if (updated != null) {
-            html.append("<br><br><i>Updated ").append(TIME.format(updated.atZone(zone))).append("</i>")
+            html.append("<br><br><i>Updated ").append(clockText(updated, today, zone)).append("</i>")
                     .append("<br>$ = credits at GitLab's $1 list price");
         }
         return html.append("<br>Click for details.</html>").toString();
@@ -162,6 +163,31 @@ public final class CreditsView {
     public static String moment(Instant at, ZoneId zone, LocalDate today) {
         ZonedDateTime local = at.atZone(zone);
         return (local.getYear() == today.getYear() ? MOMENT : MOMENT_YEAR).format(local);
+    }
+
+    /**
+     * "today 14:05 UTC+2", "yesterday 23:50 UTC+2", "Nov 3, 10:00 UTC+2" or "Dec 31, 2025, 10:00 UTC+2": a moment on
+     * the zone's clock, its day told against today's, and the zone named, as clockText in the VS Code extension says it.
+     *
+     * @param today today in that zone
+     */
+    public static String clockText(Instant at, LocalDate today, ZoneId zone) {
+        ZonedDateTime local = at.atZone(zone);
+        long days = ChronoUnit.DAYS.between(local.toLocalDate(), today);
+        String day = days == 0 ? "today" : days == 1 ? "yesterday"
+                : (local.getYear() == today.getYear() ? DAY : DATE).format(local) + ",";
+        return day + " " + CLOCK.format(local) + " " + zoneText(local.getOffset());
+    }
+
+    /** "UTC+2", "UTC+5:30", "UTC-3", or "UTC": a zone by its offset, which reads the same in the VS Code extension. */
+    public static String zoneText(ZoneOffset offset) {
+        int seconds = offset.getTotalSeconds();
+        if (seconds == 0) {
+            return "UTC";
+        }
+        int minutes = Math.abs(seconds) / 60;
+        return "UTC" + (seconds < 0 ? "-" : "+") + minutes / 60
+                + (minutes % 60 == 0 ? "" : String.format(Locale.ROOT, ":%02d", minutes % 60));
     }
 
     /**

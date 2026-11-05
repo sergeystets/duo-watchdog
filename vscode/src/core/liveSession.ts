@@ -1,4 +1,4 @@
-import { time } from './dates';
+import { clockText, dayIn, IsoDate, LOCAL_ZONE, ZoneOffset } from './dates';
 import { logFolder } from './duoCliLogs';
 import { ASSUMED_MODEL, modelName, perCall } from './modelCredits';
 import { number } from './view';
@@ -307,22 +307,26 @@ export function liveBarText(run: Run, now: number): string {
         + (m.credits != null && m.steps > 0 ? ' · ≈ $' + number(m.credits) : '');
 }
 
-/** "10:00" on this machine's clock. */
-const LOCAL_TIME = (ms: number) => time(new Date(ms));
-
-/** "Started 10:00"; null when its start is not known. */
-export function startedAt(m: Meter, clock: (ms: number) => string = LOCAL_TIME): string | null {
-    return m.started != null ? 'Started ' + clock(m.started) : null;
+/**
+ * "Started today 10:00 UTC+2"; null when its start is not known.
+ * @param today today in the zone
+ */
+export function startedAt(m: Meter, today: IsoDate, zone: ZoneOffset = LOCAL_ZONE): string | null {
+    return m.started != null ? 'Started ' + clockText(new Date(m.started), today, zone) : null;
 }
 
-/** "Started 10:00, running 12m 4s", or "…, 12m 4s, quiet since 10:12"; null when its start is not known. */
-export function liveStarted(run: Run, now: number, clock: (ms: number) => string = LOCAL_TIME): string | null {
+/**
+ * "Started today 10:00 UTC+2, running 12m 4s", or "…, 12m 4s, quiet since today 10:12 UTC+2", each time on the zone's
+ * clock with its day; null when its start is not known.
+ */
+export function liveStarted(run: Run, now: number, zone: ZoneOffset = LOCAL_ZONE): string | null {
     const ran = runTime(run, now);
     if (ran == null || run.meter == null) {
         return null;
     }
-    return startedAt(run.meter, clock) + (now - run.modified <= QUIET_MS ? ', running ' + durationText(ran)
-        : ', ' + durationText(ran) + ', quiet since ' + clock(run.modified));
+    const today = dayIn(new Date(now), zone);
+    return startedAt(run.meter, today, zone) + (now - run.modified <= QUIET_MS ? ', running ' + durationText(ran)
+        : ', ' + durationText(ran) + ', quiet since ' + clockText(new Date(run.modified), today, zone));
 }
 
 /** "5 of 20 recommended round trips"; null when there is no limit. */
@@ -332,14 +336,14 @@ export function limitText(m: Meter, limit: number): string | null {
 
 /** The status bar tooltip on the session: a title and its lines. */
 export function liveTooltip(run: Run, now: number, limit: number,
-                            clock: (ms: number) => string = LOCAL_TIME): { title: string; lines: string[] } {
+                            zone: ZoneOffset = LOCAL_ZONE): { title: string; lines: string[] } {
     const m = run.meter!;
     const lines = [liveWhat(m), liveCredits(m) + (m.credits != null ? ', an estimate: steps × the model\'s rate per call' : '')];
     const assumption = liveAssumption(m);
     if (assumption != null) {
         lines.push(assumption);
     }
-    const started = liveStarted(run, now, clock);
+    const started = liveStarted(run, now, zone);
     if (started != null) {
         lines.push(started);
     }
@@ -357,18 +361,19 @@ export interface LiveCard {
     credits: string;
     /** Whether there is an estimate, shown large; else the line says why not. */
     priced: boolean;
-    /** "Started 10:00 · 17 of 20 recommended round trips", in the level's colour; null for neither. */
+    /** "Started today 10:00 UTC+2 · 17 of 20 recommended round trips", in the level's colour; null for neither. */
     when: string | null;
     level: LiveLevel;
     basis: string;
 }
 
 /** @param limit the recommended round trips per session; 0 for none */
-export function liveCard(m: Meter | null, limit: number, clock: (ms: number) => string = LOCAL_TIME): LiveCard | null {
+export function liveCard(m: Meter | null, limit: number, now: number = Date.now(),
+                         zone: ZoneOffset = LOCAL_ZONE): LiveCard | null {
     if (m == null) {
         return null;
     }
-    const when = [startedAt(m, clock), limitText(m, limit)].filter((x): x is string => x != null);
+    const when = [startedAt(m, dayIn(new Date(now), zone), zone), limitText(m, limit)].filter((x): x is string => x != null);
     return {
         session: m.session, what: liveWhat(m), credits: liveCredits(m), priced: m.credits != null,
         when: when.length > 0 ? when.join(' · ') : null, level: liveLevel(m, limit), basis: liveBasis(m),

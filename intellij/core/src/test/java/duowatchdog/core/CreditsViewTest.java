@@ -109,6 +109,32 @@ class CreditsViewTest {
     }
 
     @Test
+    void aTimeSaysItsDayAndItsZoneAsTheExtensionSaysThem() {
+        ZoneId kyiv = ZoneId.of("Europe/Kyiv");
+        LocalDate nov5 = LocalDate.of(2026, 11, 5);
+        Instant at = Instant.parse("2026-11-05T08:34:00Z");
+        assertEquals("today 10:34 UTC+2", CreditsView.clockText(at, nov5, kyiv));
+        assertEquals("yesterday 23:50 UTC+2", CreditsView.clockText(Instant.parse("2026-11-04T21:50:00Z"), nov5, kyiv));
+        assertEquals("today 00:10 UTC+2", CreditsView.clockText(Instant.parse("2026-11-04T22:10:00Z"), nov5, kyiv),
+                "the zone's day, not UTC's");
+        assertEquals("Nov 3, 10:00 UTC+2", CreditsView.clockText(Instant.parse("2026-11-03T08:00:00Z"), nov5, kyiv));
+        assertEquals("Dec 31, 2025, 10:00 UTC+2",
+                CreditsView.clockText(Instant.parse("2025-12-31T08:00:00Z"), LocalDate.of(2026, 1, 2), kyiv));
+        assertEquals("today 11:00 UTC+3", CreditsView.clockText(Instant.parse("2026-07-01T08:00:00Z"),
+                LocalDate.of(2026, 7, 1), kyiv), "summer time");
+        assertEquals("today 08:34 UTC", CreditsView.clockText(at, nov5, ZoneId.of("UTC")));
+        assertEquals("today 14:04 UTC+5:30", CreditsView.clockText(at, nov5, ZoneId.of("Asia/Kolkata")));
+        assertEquals("today 05:34 UTC-3", CreditsView.clockText(at, nov5, ZoneId.of("America/Sao_Paulo")));
+        assertEquals("UTC-9:30", CreditsView.zoneText(ZoneOffset.ofHoursMinutes(-9, -30)));
+        assertEquals("UTC+5:45", CreditsView.zoneText(ZoneOffset.ofHoursMinutes(5, 45)));
+
+        String tip = CreditsView.tooltipHtml(Snapshot.ok(report(42, false), AT), 100, TODAY, ZoneOffset.UTC);
+        assertTrue(tip.contains("<i>Updated today 14:05 UTC</i>"), tip);
+        String next = CreditsView.tooltipHtml(Snapshot.ok(report(42, false), AT), 100, TODAY.plusDays(1), kyiv);
+        assertTrue(next.contains("<i>Updated yesterday 17:05 UTC+3</i>"), next);
+    }
+
+    @Test
     void saysWhenTheTokenWasSavedAndWhenItExpires() {
         ZoneId kyiv = ZoneId.of("Europe/Kyiv");
         assertEquals("Oct 1, 14:38 EEST", CreditsView.moment(Instant.parse("2026-10-01T11:38:00Z"), kyiv, TODAY));

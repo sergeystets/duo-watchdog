@@ -41,17 +41,14 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The tool window: Refresh, Settings and the account it shows, with "@user · group · Updated HH:mm", over the
- * dashboard.
+ * The tool window: Refresh, Settings and the account it shows, with "@user · group · Updated today 14:05 UTC+2",
+ * over the dashboard.
  */
 final class CreditsPanel extends SimpleToolWindowPanel implements Disposable {
-
-    private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm");
 
     private final Dashboard dashboard;
     /** Whose credits, in which group, and when: the IDE shows header actions only on hover, so this is no header action. */
@@ -108,7 +105,8 @@ final class CreditsPanel extends SimpleToolWindowPanel implements Disposable {
             }
         }
         if (snapshot.fetchedAt() != null) {
-            parts.add("Updated " + TIME.format(snapshot.fetchedAt().atZone(ZoneId.systemDefault())));
+            ZoneId zone = ZoneId.systemDefault();
+            parts.add("Updated " + CreditsView.clockText(snapshot.fetchedAt(), LocalDate.now(zone), zone));
         }
         byline.setText(String.join(" · ", parts));
     }

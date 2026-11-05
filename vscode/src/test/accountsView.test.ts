@@ -6,8 +6,9 @@ import {
     cliOffText, cliOnText, duoNote, expiryText, GLAB_FOLLOWS, glabCaption, glabNote, glabNowText, othersNeedAttention,
     rejectedText, rotatedText, rotateRefusedText, tooltipModel,
 } from '../core/accountsView';
+import { zoneText } from '../core/dates';
 import { Snapshots } from '../core/report';
-import { account, state, TODAY } from './fixtures';
+import { account, AT, state, TODAY } from './fixtures';
 
 const PERCENTS = [80, 95];
 
@@ -83,7 +84,8 @@ test('the tooltip lists every account, the selected one in full', () => {
     assert.deepEqual(tip.blocks[2].lines, ['Token expired on Oct 15: credits unknown']);
     assert.deepEqual(tip.blocks[3].lines, ['No token']);
     assert.deepEqual(tip.blocks[4].lines, ['Not tracked: the token has no ai_features scope']);
-    assert.deepEqual(tip.footer, ["Updated 14:05 · $ = credits at GitLab's $1 list price", 'Click for details.']);
+    assert.deepEqual(tip.footer, ['Updated today 14:05 ' + zoneText(-AT.getTimezoneOffset()) + " · $ = credits at GitLab's $1 list price",
+        'Click for details.']);
 
     const one = tooltipModel([acme], acme.id, Snapshots.notConfigured(), PERCENTS, TODAY);
     assert.equal(one.attention, null);
