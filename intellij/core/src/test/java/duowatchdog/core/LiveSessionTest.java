@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
 
@@ -311,11 +312,19 @@ class LiveSessionTest {
         String tooltip = LiveSession.tooltipHtml(run, now, UTC, 20);
         assertTrue(tooltip.startsWith("<html><b>Duo CLI, now</b> — session 10208239<br>Opus 5 · 3 steps · 2 round trips"
                 + "<br>≈ 2.7 credits, an estimate"), tooltip);
-        assertTrue(tooltip.contains("<br>Started 10:00, running 1m 5s<br>2 of 20 recommended round trips<br>"), tooltip);
+        assertTrue(tooltip.contains("<br>Started today 10:00 UTC, running 1m 5s<br>2 of 20 recommended round trips<br>"), tooltip);
 
         Instant later = Instant.parse("2026-11-04T10:30:00Z");
         assertEquals(Duration.ofSeconds(59), LiveSession.runTime(run, later), "a quiet log stops the clock at its last line");
-        assertEquals("Started 10:00, 59s, quiet since 10:01", LiveSession.started(run, later, UTC));
+        assertEquals("Started today 10:00 UTC, 59s, quiet since today 10:01 UTC", LiveSession.started(run, later, UTC));
+        assertEquals("Started yesterday 10:00 UTC, 59s, quiet since yesterday 10:01 UTC",
+                LiveSession.started(run, Instant.parse("2026-11-05T00:10:00Z"), UTC), "left open past midnight");
+        ZoneId kyiv = ZoneId.of("Europe/Kyiv");
+        assertEquals("Started yesterday 12:00 UTC+2, 59s, quiet since yesterday 12:01 UTC+2",
+                LiveSession.started(run, Instant.parse("2026-11-04T23:10:00Z"), kyiv), "past midnight on the zone's clock");
+        assertEquals("Started Nov 4, 10:00 UTC, 59s, quiet since Nov 4, 10:01 UTC",
+                LiveSession.started(run, Instant.parse("2026-11-07T09:00:00Z"), UTC));
+        assertEquals("Started today 12:00 UTC+2", LiveSession.startedAt(m, LocalDate.of(2026, 11, 4), kyiv));
     }
 
     @Test

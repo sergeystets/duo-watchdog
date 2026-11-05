@@ -12,6 +12,12 @@
   Command…**, **Add a Duo CLI Quick Command…** and **Edit Duo CLI Quick Commands…**. New settings: `duoWatchdog.cli`,
   `duoWatchdog.cliMode`, `duoWatchdog.quickCommands`.
 
+## 0.5.3
+
+- Every time shown says its day and its zone, on this machine's clock: the dashboard's and the tooltip's
+  `Updated today 11:45 UTC+2`, and the Duo CLI session's `Started today 10:00 UTC+2, 34m 17s, quiet since today 10:34
+  UTC+2`, with `yesterday`, or the date for an older one. The zone is its offset from UTC, as the plugin says it.
+
 ## 0.5.2
 
 - The Duo CLI session in the status bar always shows its **≈ $**: a step on the group's default model, on a model the

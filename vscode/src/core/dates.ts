@@ -75,3 +75,39 @@ export function dateTime(at: Date): string {
 export function time(at: Date): string {
     return `${pad(at.getHours())}:${pad(at.getMinutes())}`;
 }
+
+/** Minutes a zone's clock is ahead of UTC at a moment: 120 in Kyiv in winter, 180 in summer. */
+export type ZoneOffset = (at: Date) => number;
+
+/** This machine's zone. */
+export const LOCAL_ZONE: ZoneOffset = at => -at.getTimezoneOffset();
+
+/** The day a moment falls on in a zone. */
+export function dayIn(at: Date, zone: ZoneOffset = LOCAL_ZONE): IsoDate {
+    return iso(at.getTime() + zone(at) * 60_000);
+}
+
+/** "UTC+2", "UTC+5:30", "UTC-3", or "UTC": a zone by its offset in minutes, worded as the plugin words it. */
+export function zoneText(minutes: number): string {
+    if (minutes === 0) {
+        return 'UTC';
+    }
+    const m = Math.abs(minutes);
+    return 'UTC' + (minutes < 0 ? '-' : '+') + Math.floor(m / 60) + (m % 60 === 0 ? '' : ':' + pad(m % 60));
+}
+
+/**
+ * "today 14:05 UTC+2", "yesterday 23:50 UTC+2", "Nov 3, 10:00 UTC+2", or "Dec 31, 2025, 10:00 UTC+2": a moment on a
+ * zone's clock, its day told against today's, and the zone named, as the plugin's CreditsView.clockText says it.
+ * @param today today in that zone
+ */
+export function clockText(at: Date, today: IsoDate, zone: ZoneOffset = LOCAL_ZONE): string {
+    const offset = zone(at);
+    const local = new Date(at.getTime() + offset * 60_000);
+    const day = iso(local.getTime());
+    const days = daysBetween(day, today);
+    const date = days === 0 ? 'today' : days === 1 ? 'yesterday'
+        : MONTHS[local.getUTCMonth()].slice(0, 3) + ' ' + local.getUTCDate()
+        + (day.slice(0, 4) === today.slice(0, 4) ? '' : ', ' + local.getUTCFullYear()) + ',';
+    return date + ' ' + pad(local.getUTCHours()) + ':' + pad(local.getUTCMinutes()) + ' ' + zoneText(offset);
+}

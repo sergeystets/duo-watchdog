@@ -38,6 +38,9 @@ GitLab Credits usage for the current billing period, forecast where the month wi
 
 ## What's new in 0.5.0
 
+- **0.5.3**: every time shown says its day and its zone, on your computer's clock: `Updated today 11:45 UTC+2`, and
+  the session's `Started today 10:00 UTC+2, 34m 17s, quiet since today 10:34 UTC+2`, with `yesterday` or the date for
+  an older one.
 - **0.5.2**: the Duo CLI session always shows its **≈ $**: a session on the group's default model, whose log does not
   name the model, is priced as the **Group default model** in Settings (Sonnet 4.5 unless you pick another).
 - **0.5.1**: the session of the interactive Duo CLI (9.30) counts its **round trips**, one per prompt, and shows even
@@ -120,7 +123,7 @@ hidden when no session runs.
 
 <img align="right" src="docs/images/dashboard-warning.png" alt="Dashboard in the warning state" width="300">
 
-- A toolbar with **Refresh** and **Settings**, plus `@user · group · Updated HH:mm`
+- A toolbar with **Refresh** and **Settings**, plus `@user · group · Updated today 14:05 UTC+2`
 - A **Duo CLI** row under it: the CLI and the tool approval to start it with, **New Session**, **Doctor** and your
   quick commands, and **+** to add one (see [Duo CLI quick actions](#duo-cli-quick-actions))
 - The headline: credits used, an **Active** / **Blocked** status and the period with the current day
@@ -814,7 +817,7 @@ Running `./gradlew test` also renders every dashboard state to PNG (in `intellij
 The VS Code extension builds with npm (Node.js 20+), from the root through Gradle or in `vscode/` directly:
 
 ```bash
-./gradlew :vscode:test               # 153 tests, no VS Code needed         (npm ci && npm test)
+./gradlew :vscode:test               # 154 tests, no VS Code needed         (npm ci && npm test)
 ./gradlew :vscode:packageExtension   # → vscode/duo-watchdog-0.6.0.vsix      (npm run package)
 ./gradlew :vscode:installExtension   # into VS Code; -PcodePath=codium for another CLI
 ```

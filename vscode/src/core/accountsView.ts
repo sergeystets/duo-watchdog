@@ -5,7 +5,7 @@ import {
 } from './accounts';
 import { Alert } from './alert';
 import { DashboardModel, dashboardModel } from './dashboard';
-import { addDays, IsoDate, time } from './dates';
+import { addDays, clockText, IsoDate, LOCAL_ZONE, ZoneOffset } from './dates';
 import { Snapshot, Snapshots } from './report';
 import { day, number, statusText, tooltipLines, usedLine } from './view';
 
@@ -197,7 +197,7 @@ export interface TooltipModel {
  * in a line or two: used and left, or why there are no numbers, and what needs the user.
  */
 export function tooltipModel(states: AccountState[], selectedId: string | null, setup: Snapshot, percents: number[],
-                             today: IsoDate): TooltipModel {
+                             today: IsoDate, zone: ZoneOffset = LOCAL_ZONE): TooltipModel {
     if (states.length === 0) {
         const lines = setup.status === 'notConfigured'
             ? ['Add a token with Duo Watchdog: Add or Replace a Token. GitLab says whose it is.']
@@ -231,7 +231,7 @@ export function tooltipModel(states: AccountState[], selectedId: string | null, 
         }
         blocks.push({ title: accountLabel(state.account) + (selected ? ' (in the status bar)' : ''), lines });
     }
-    const footer = [(updated != null ? 'Updated ' + time(updated) + ' · ' : '') + "$ = credits at GitLab's $1 list price",
+    const footer = [(updated != null ? 'Updated ' + clockText(updated, today, zone) + ' · ' : '') + "$ = credits at GitLab's $1 list price",
         'Click for details.'];
     return {
         attention: others === 0 ? null : others + (others === 1 ? ' other account needs' : ' other accounts need') + ' attention',

@@ -3,9 +3,9 @@ package duowatchdog.core;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -62,7 +62,6 @@ public final class LiveSession {
     public static final int RECOMMENDED_ROUND_TRIPS = 20;
     /** A log that has gone this long without a line is a run waiting for its user, or one that ended. */
     public static final Duration QUIET = Duration.ofMinutes(1);
-    private static final DateTimeFormatter CLOCK = DateTimeFormatter.ofPattern("HH:mm");
 
     /** The zone of the machine the CLI runs on, which its log's times are in. */
     private final ZoneId zone;
@@ -330,7 +329,10 @@ public final class LiveSession {
                 + (m.credits() != null && m.steps() > 0 ? " · ≈ $" + CreditsView.number(m.credits()) : "");
     }
 
-    /** "Started 10:00, running 12m 4s", or "…, 12m 4s, quiet since 10:12"; null when its start is not known. */
+    /**
+     * "Started today 10:00 UTC+2, running 12m 4s", or "…, 12m 4s, quiet since today 10:12 UTC+2", each time on the
+     * zone's clock with its day; null when its start is not known.
+     */
     public static String started(Run run, Instant now, ZoneId zone) {
         Duration ran = runTime(run, now);
         if (ran == null) {
@@ -338,13 +340,18 @@ public final class LiveSession {
         }
         Instant written = Instant.ofEpochMilli(run.modified());
         boolean running = Duration.between(written, now).compareTo(QUIET) <= 0;
-        return startedAt(run.meter(), zone) + (running ? ", running " + duration(ran)
-                : ", " + duration(ran) + ", quiet since " + CLOCK.format(written.atZone(zone)));
+        LocalDate today = now.atZone(zone).toLocalDate();
+        return startedAt(run.meter(), today, zone) + (running ? ", running " + duration(ran)
+                : ", " + duration(ran) + ", quiet since " + CreditsView.clockText(written, today, zone));
     }
 
-    /** "Started 10:00"; null when its start is not known. */
-    public static String startedAt(Meter m, ZoneId zone) {
-        return m.started() != null ? "Started " + CLOCK.format(m.started().atZone(zone)) : null;
+    /**
+     * "Started today 10:00 UTC+2"; null when its start is not known.
+     *
+     * @param today today in the zone
+     */
+    public static String startedAt(Meter m, LocalDate today, ZoneId zone) {
+        return m.started() != null ? "Started " + CreditsView.clockText(m.started(), today, zone) : null;
     }
 
     /** "5 of 20 recommended round trips"; null when there is no limit. */
