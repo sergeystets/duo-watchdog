@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { DEFAULT_LIMIT, OldSettings } from './core/accounts';
 import { DEFAULT_PERCENTS, percentsOrDefault } from './core/alert';
+import { Cli, cliModeOrDefault, CliMode, cliOrDefault, QuickCommand, quickCommandsOrNone } from './core/cliLaunch';
 import { RECOMMENDED_ROUND_TRIPS } from './core/liveSession';
 import { ASSUMED_MODEL, assumedModel } from './core/modelCredits';
 
@@ -27,6 +28,12 @@ export interface Settings {
     roundTripLimit: number;
     /** The model a Duo CLI step is priced as when the log names none or one with no known rate: the group's default. */
     groupDefaultModel: string;
+    /** How Usage's quick actions start the Duo CLI: `duo`, or `glab duo cli`. */
+    cli: Cli;
+    /** Whether the Duo CLI they start asks before each tool, or runs them all with --dangerously-skip-permissions. */
+    cliMode: CliMode;
+    /** Quick commands of your own: a button each, that types its command at the Duo CLI's prompt. */
+    quickCommands: QuickCommand[];
 }
 
 export function settings(): Settings {
@@ -41,6 +48,9 @@ export function settings(): Settings {
         rotateTokens: c.get<boolean>('rotateTokens', true),
         roundTripLimit: Math.max(0, c.get<number>('roundTripLimit', RECOMMENDED_ROUND_TRIPS)),
         groupDefaultModel: assumedModel(c.get<string>('groupDefaultModel', ASSUMED_MODEL)),
+        cli: cliOrDefault(c.get<string>('cli')),
+        cliMode: cliModeOrDefault(c.get<string>('cliMode')),
+        quickCommands: quickCommandsOrNone(c.get<unknown>('quickCommands')),
     };
 }
 

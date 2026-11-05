@@ -2,7 +2,7 @@
   "name": "duo-watchdog",
   "displayName": "Duo Watchdog",
   "description": "Watches your own GitLab Credits (GitLab Duo) for each of your GitLab accounts: used, left, the month-end forecast, usage by day and by feature, a year of statistics, with alerts before you hit your limit.",
-  "version": "0.5.3",
+  "version": "0.6.0",
   "publisher": "local",
   "license": "MIT",
   "repository": {
@@ -60,6 +60,33 @@
       {
         "command": "duoWatchdog.sessions",
         "title": "Sessions",
+        "category": "Duo Watchdog"
+      },
+      {
+        "command": "duoWatchdog.cliSession",
+        "title": "New Duo CLI Session",
+        "category": "Duo Watchdog",
+        "icon": "$(terminal)"
+      },
+      {
+        "command": "duoWatchdog.cliDoctor",
+        "title": "Duo CLI Doctor",
+        "category": "Duo Watchdog"
+      },
+      {
+        "command": "duoWatchdog.runQuickCommand",
+        "title": "Run a Duo CLI Quick Command…",
+        "category": "Duo Watchdog"
+      },
+      {
+        "command": "duoWatchdog.addQuickCommand",
+        "title": "Add a Duo CLI Quick Command…",
+        "category": "Duo Watchdog",
+        "icon": "$(add)"
+      },
+      {
+        "command": "duoWatchdog.editQuickCommands",
+        "title": "Edit Duo CLI Quick Commands…",
         "category": "Duo Watchdog"
       },
       {
@@ -224,6 +251,64 @@
           "scope": "application",
           "order": 8,
           "markdownDescription": "The model your group's default is, for the `≈ $` of a Duo CLI session on it: the CLI's log says only that it uses the group's default, not which model. Also used for a step whose log names no model, or one with no known rate. GitLab bills each call at its model's rate, so this sets the price of each such step."
+        },
+        "duoWatchdog.cli": {
+          "type": "string",
+          "default": "duo",
+          "enum": [
+            "duo",
+            "glab duo cli"
+          ],
+          "enumDescriptions": [
+            "The Duo CLI on its own",
+            "The Duo CLI through the GitLab CLI, which hands it its arguments"
+          ],
+          "scope": "application",
+          "order": 9,
+          "markdownDescription": "How New session, Doctor and A/B testing on Usage start the Duo CLI in a new terminal. Also set from the drop-down there."
+        },
+        "duoWatchdog.cliMode": {
+          "type": "string",
+          "default": "ask",
+          "enum": [
+            "ask",
+            "autoApprove"
+          ],
+          "enumDescriptions": [
+            "The CLI asks before it runs each tool",
+            "The CLI runs every tool without asking: --dangerously-skip-permissions"
+          ],
+          "scope": "application",
+          "order": 10,
+          "markdownDescription": "Whether the Duo CLI that Usage's quick actions start asks before each tool, or runs them all without asking (`--dangerously-skip-permissions`). Also set from the drop-down there. Only your user settings count, never a workspace's."
+        },
+        "duoWatchdog.quickCommands": {
+          "type": "array",
+          "default": [],
+          "maxItems": 12,
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "maxLength": 40,
+                "description": "The button's name on Usage, such as AB Testing"
+              },
+              "command": {
+                "type": "string",
+                "maxLength": 200,
+                "description": "What it types at the Duo CLI's prompt once the CLI has started, such as /ab-testing"
+              }
+            },
+            "required": [
+              "name",
+              "command"
+            ],
+            "additionalProperties": false
+          },
+          "scope": "application",
+          "order": 11,
+          "markdownDescription": "Quick commands of your own on Usage: a button each that starts the Duo CLI in a new terminal, then types its command at the CLI's prompt, such as `{ \"name\": \"AB Testing\", \"command\": \"/ab-testing\" }`. **+ Add command** on Usage builds one for you; **Edit…** changes, moves or removes them."
         }
       }
     }

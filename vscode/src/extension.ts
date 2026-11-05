@@ -1,7 +1,9 @@
 import * as vscode from 'vscode';
 import { AccountStore, TOKEN_PREFIX } from './accounts';
+import { addQuickCommand, editQuickCommands, launchCli, runQuickCommand } from './cliLaunch';
 import { Commands } from './commands';
 import { parsePercents } from './core/alert';
+import { DOCTOR } from './core/cliLaunch';
 import { DashboardView } from './dashboardView';
 import { DuoCliLogScanner } from './duoCliLogs';
 import { SessionsService } from './sessions';
@@ -61,6 +63,9 @@ export function activate(context: vscode.ExtensionContext): void {
                 warnAboutPercents();
                 service.reschedule();
             }
+            if (['cli', 'cliMode', 'quickCommands'].some(key => e.affectsConfiguration(SECTION + '.' + key))) {
+                dashboard.update();
+            }
             if (e.affectsConfiguration(SECTION + '.roundTripLimit')) {
                 liveBar.update(live.run());
                 dashboard.liveChanged();
@@ -79,6 +84,11 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.commands.registerCommand('duoWatchdog.whatsNew', () => showWhatsNew(context.extensionUri)),
         vscode.commands.registerCommand('duoWatchdog.copyDiagnostics', () => copyDiagnostics(context, store, service, logs, live)),
         vscode.commands.registerCommand('duoWatchdog.sessions', () => dashboard.show('sessions')),
+        vscode.commands.registerCommand('duoWatchdog.cliSession', () => launchCli(live, null, null)),
+        vscode.commands.registerCommand('duoWatchdog.cliDoctor', () => launchCli(live, DOCTOR, 'Doctor')),
+        vscode.commands.registerCommand('duoWatchdog.runQuickCommand', () => runQuickCommand(live)),
+        vscode.commands.registerCommand('duoWatchdog.addQuickCommand', () => addQuickCommand()),
+        vscode.commands.registerCommand('duoWatchdog.editQuickCommands', () => editQuickCommands()),
         vscode.commands.registerCommand('duoWatchdog.showLog', () => log.show()),
         vscode.commands.registerCommand('duoWatchdog.openDashboard',
             () => vscode.commands.executeCommand(DashboardView.ID + '.focus')),

@@ -1,5 +1,6 @@
 import { randomBytes } from 'crypto';
 import * as vscode from 'vscode';
+import { launchCli } from './cliLaunch';
 import { Commands } from './commands';
 import { accountsDashboard } from './core/accountsView';
 import { localToday } from './core/dates';
@@ -9,13 +10,14 @@ import { Scope, statisticsView, trackedStates } from './core/statistics';
 import { accountGroup } from './core/accounts';
 import { around, contains, dayOf, Range, Session, sessionId, utcToday } from './core/sessions';
 import { DEFAULT_KIND, RANGE_KINDS, RangeKind, rangeOf, sessionsView } from './core/sessionsView';
+import { CLI_MODES, CLIS, quickView } from './core/cliLaunch';
 import { liveCard } from './core/liveSession';
 import { HistoryCache } from './history';
 import { LiveSessionWatcher } from './liveSession';
 import { log } from './log';
 import { CreditsService } from './service';
 import { SessionsService } from './sessions';
-import { settings } from './settings';
+import { SECTION, settings } from './settings';
 
 /** The commands the page's buttons and links run. */
 const ACTIONS: Record<string, string> = {
@@ -25,6 +27,10 @@ const ACTIONS: Record<string, string> = {
     addToken: 'duoWatchdog.addToken',
     findGroup: 'duoWatchdog.findGroup',
     createToken: 'duoWatchdog.createToken',
+    cliSession: 'duoWatchdog.cliSession',
+    cliDoctor: 'duoWatchdog.cliDoctor',
+    addQuickCommand: 'duoWatchdog.addQuickCommand',
+    editQuickCommands: 'duoWatchdog.editQuickCommands',
 };
 
 export type Tab = 'usage' | 'statistics' | 'sessions';
@@ -156,6 +162,15 @@ export class DashboardView implements vscode.WebviewViewProvider {
             } else if (message.type === 'scope' && (message.scope === 'account' || message.scope === 'all')) {
                 this.scope = message.scope;
                 this.update();
+            } else if (message.type === 'cli' && CLIS.includes(message.cli as never)) {
+                void vscode.workspace.getConfiguration(SECTION).update('cli', message.cli, vscode.ConfigurationTarget.Global);
+            } else if (message.type === 'cliMode' && CLI_MODES.includes(message.mode as never)) {
+                void vscode.workspace.getConfiguration(SECTION).update('cliMode', message.mode, vscode.ConfigurationTarget.Global);
+            } else if (message.type === 'quickCommand' && typeof message.index === 'number') {
+                const quick = settings().quickCommands[message.index];
+                if (quick != null) {
+                    void launchCli(this.live, quick.command, quick.name);
+                }
             } else if (message.type === 'select' && typeof message.id === 'string') {
                 void this.commands.pick(message.id);
             } else if (message.type === 'replaceToken') {
@@ -203,8 +218,10 @@ export class DashboardView implements vscode.WebviewViewProvider {
             sessions = sessionsView(this.sessionsKind, range, selected.problem != null,
                 this.sessions.entry(selected.account, range), accountGroup(selected.account), this.focused, this.sessionsMessage);
         }
-        const live = this.tab === 'sessions' ? liveCard(this.live.meter(), settings().roundTripLimit) : null;
-        const model = { ...usage, tab: this.tab, statistics, sessions, live };
+        const s = settings();
+        const live = this.tab === 'sessions' ? liveCard(this.live.meter(), s.roundTripLimit) : null;
+        const quick = this.tab === 'usage' ? quickView(s.cli, s.cliMode, s.quickCommands) : null;
+        const model = { ...usage, tab: this.tab, statistics, sessions, live, quick };
         void this.view.webview.postMessage({ type: 'model', model });
     }
 

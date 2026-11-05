@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.0
+
+- **Duo CLI quick actions on Usage**: two drop-downs, `duo` or `glab duo cli`, and **Ask before tools** or
+  **Auto-approve tools** (`--dangerously-skip-permissions`), then **New session**, **Doctor** and your **quick
+  commands**. Each runs the CLI in a new terminal in the workspace; Doctor then types `/doctor` at its prompt, and a
+  quick command its own command, such as `/ab-testing`. **+ Add command** builds one: the command first, then its
+  button's name, made from the command for you to change (`AB Testing`); **Edit…** changes, moves or removes them. A
+  command is typed only once the CLI has started a log of its own, so a CLI that did not start never gets it typed
+  into the shell. Also commands: **Duo Watchdog: New Duo CLI Session**, **Duo CLI Doctor**, **Run a Duo CLI Quick
+  Command…**, **Add a Duo CLI Quick Command…** and **Edit Duo CLI Quick Commands…**. New settings: `duoWatchdog.cli`,
+  `duoWatchdog.cliMode`, `duoWatchdog.quickCommands`.
+
 ## 0.5.3
 
 - Every time shown says its day and its zone, on this machine's clock: the dashboard's and the tooltip's

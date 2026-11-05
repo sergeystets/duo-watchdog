@@ -83,6 +83,13 @@ public final class LiveMeter implements Disposable {
         return run != null ? run.meter() : null;
     }
 
+    /** The CLI's logs written to in the last half hour, as of the last poll. */
+    public Set<String> logs() {
+        Set<String> names = new HashSet<>();
+        runs.forEach(r -> names.add(r.log()));
+        return names;
+    }
+
     /** For Copy Diagnostics: the runs followed now, in counts. */
     String describe() {
         List<LiveSession.Run> now = runs;

@@ -2,6 +2,7 @@ import { promises as fs } from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { newLog } from './core/cliLaunch';
 import { isLog, logFolders, wslDistro } from './core/duoCliLogs';
 import { LiveLog } from './core/liveLog';
 import { Meter, pickRun, Run } from './core/liveSession';
@@ -50,6 +51,33 @@ export class LiveSessionWatcher implements vscode.Disposable {
     /** The session to show, as run() picks it; null for none. */
     meter(): Meter | null {
         return this.run()?.meter ?? null;
+    }
+
+    /** The CLI's logs written to in the last half hour, as of the last poll. */
+    logs(): string[] {
+        return this.runs.map(r => r.log);
+    }
+
+    /** The first log not in `before` that a poll finds: a run started since; null when none comes within `ms`. */
+    waitForNewLog(before: ReadonlySet<string>, ms: number): Promise<string | null> {
+        const found = newLog(before, this.logs());
+        if (found != null) {
+            return Promise.resolve(found);
+        }
+        return new Promise(resolve => {
+            const done = (name: string | null) => {
+                listener.dispose();
+                clearTimeout(timer);
+                resolve(name);
+            };
+            const listener = this.onDidChange(() => {
+                const name = newLog(before, this.logs());
+                if (name != null) {
+                    done(name);
+                }
+            });
+            const timer = setTimeout(() => done(null), ms);
+        });
     }
 
     /** For Copy Diagnostics: the runs followed now, in counts. */
