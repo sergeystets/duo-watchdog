@@ -18,12 +18,12 @@ import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.ThrowableComputable;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.ui.CollectionListModel;
+import com.intellij.ui.ColoredListCellRenderer;
 import com.intellij.ui.ColoredTableCellRenderer;
 import com.intellij.ui.DocumentAdapter;
 import com.intellij.ui.JBColor;
 import com.intellij.ui.JBIntSpinner;
 import com.intellij.ui.SearchTextField;
-import com.intellij.ui.SimpleListCellRenderer;
 import com.intellij.ui.SimpleTextAttributes;
 import com.intellij.ui.TitledSeparator;
 import com.intellij.ui.ToolbarDecorator;
@@ -61,8 +61,10 @@ import org.jetbrains.annotations.Nullable;
 import javax.swing.ButtonGroup;
 import javax.swing.JButton;
 import javax.swing.JComponent;
+import javax.swing.JList;
 import javax.swing.JPanel;
 import javax.swing.JTable;
+import javax.swing.ListCellRenderer;
 import javax.swing.ListSelectionModel;
 import javax.swing.event.DocumentEvent;
 import javax.swing.table.AbstractTableModel;
@@ -282,9 +284,9 @@ public final class CreditsConfigurable implements Configurable {
         roundTripRow.add(perSession);
         groupDefaultModel = new ComboBox<>(ModelCredits.MODELS.toArray(String[]::new));
         groupDefaultModel.setRenderer(
-                SimpleListCellRenderer.create("", m -> m + "  ·  " + ModelCredits.perCall(m) + " credits a call"));
+                textRenderer(m -> m + "  ·  " + ModelCredits.perCall(m) + " credits a call"));
         JBList<CliLaunch.QuickCommand> quickList = new JBList<>(quickCommands);
-        quickList.setCellRenderer(SimpleListCellRenderer.create("", c -> c.name() + "  ·  " + c.command()));
+        quickList.setCellRenderer(textRenderer(c -> c.name() + "  ·  " + c.command()));
         quickList.getEmptyText().setText("None yet: + adds one, such as /ab-testing");
         quickList.setVisibleRowCount(4);
         quickCommandsList = ToolbarDecorator.createDecorator(quickList)
@@ -1253,5 +1255,16 @@ public final class CreditsConfigurable implements Configurable {
 
     private static String plain(double value) {
         return value == Math.rint(value) ? String.valueOf((long) value) : String.valueOf(value);
+    }
+
+    /** A list or drop-down row that is one line of text. */
+    private static <T> ListCellRenderer<T> textRenderer(java.util.function.Function<T, String> text) {
+        return new ColoredListCellRenderer<>() {
+            @Override
+            protected void customizeCellRenderer(@NotNull JList<? extends T> list, T value, int index,
+                                                 boolean selected, boolean hasFocus) {
+                append(value == null ? "" : text.apply(value));
+            }
+        };
     }
 }

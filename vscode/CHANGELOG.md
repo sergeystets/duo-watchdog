@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.7.3
+
+- **Ready for JetBrains Marketplace**: the plugin's id is now `io.github.sergeystets.duowatchdog` (it was
+  `local.duo-watchdog`), and there is a second build of it for the Marketplace, without updates of its own, since
+  there the IDE updates it. The build in the releases here keeps its updates.
+- **From 0.7.2 or older**, take this version with Duo Watchdog's own **Update** (the notice, or the dashboard's
+  toolbar) or with the installer: both put it in place of the old one, and your accounts and settings stay. The IDE's
+  own **Update** button in *Settings → Plugins* does not offer a plugin under another id.
+- The plugin no longer calls what JetBrains keeps internal to the IDE or has marked for removal. Where your tokens
+  are kept is now named as the macOS Keychain, the Windows Credential Manager, or on Linux the IDE's password store.
+- No changes to the VS Code extension.
+
 ## 0.7.2
 
 - **IntelliJ IDEA offers the update itself**: a newer release shows **Update** on Duo Watchdog's page in

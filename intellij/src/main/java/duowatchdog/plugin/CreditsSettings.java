@@ -3,8 +3,6 @@ package duowatchdog.plugin;
 import com.intellij.credentialStore.CredentialAttributes;
 import com.intellij.credentialStore.CredentialAttributesKt;
 import com.intellij.credentialStore.Credentials;
-import com.intellij.credentialStore.PasswordSafeSettings;
-import com.intellij.credentialStore.ProviderType;
 import com.intellij.ide.passwordSafe.PasswordSafe;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.components.PersistentStateComponent;
@@ -276,19 +274,16 @@ public final class CreditsSettings implements PersistentStateComponent<CreditsSe
         return new CredentialAttributes(CredentialAttributesKt.generateServiceName("Duo Watchdog", "token"));
     }
 
-    /** Where the tokens are kept, as the IDE's password safe is set: "the macOS Keychain", "KeePass", … */
+    /**
+     * Where the tokens are kept, as far as the IDE says in its public API: only whether its password safe keeps them
+     * in memory. Otherwise the store the IDE uses unless told otherwise in Settings | Passwords: the system's own on
+     * macOS and Windows; on Linux the keyring or the IDE's KeePass database, so neither is named.
+     */
     static String storeName() {
-        try {
-            ProviderType type = ApplicationManager.getApplication().getService(PasswordSafeSettings.class).getProviderType();
-            return switch (type) {
-                case MEMORY_ONLY -> "memory, until the IDE restarts";
-                case KEEPASS -> "the IDE's KeePass database";
-                default -> SystemInfo.isMac ? "the macOS Keychain"
-                        : SystemInfo.isWindows ? "the Windows Credential Manager" : "the system keyring";
-            };
-        } catch (RuntimeException | LinkageError e) {
-            // An IDE that moved the class: the plain name is still true.
-            return "the IDE password safe";
+        if (PasswordSafe.getInstance().isMemoryOnly()) {
+            return "memory, until the IDE restarts";
         }
+        return SystemInfo.isMac ? "the macOS Keychain"
+                : SystemInfo.isWindows ? "the Windows Credential Manager" : "the IDE's password store";
     }
 }

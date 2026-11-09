@@ -18,7 +18,7 @@ GitLab Credits usage for the current billing period, forecast where the month wi
 ![Java](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-VS_Code_extension-3178C6?logo=typescript&logoColor=white)
 ![GitLab](https://img.shields.io/badge/GitLab-Duo-FC6D26?logo=gitlab&logoColor=white)
-![Version](https://img.shields.io/badge/version-0.7.2-blue)
+![Version](https://img.shields.io/badge/version-0.7.3-blue)
 
 </div>
 
@@ -29,6 +29,15 @@ GitLab Credits usage for the current billing period, forecast where the month wi
 </p>
 
 ---
+
+## What's new in 0.7.3
+
+- **Ready for JetBrains Marketplace**: the plugin's id is now `io.github.sergeystets.duowatchdog`, and a second
+  build of it, for the Marketplace, has no updates of its own, since there the IDE updates it. See
+  [Updates](#updates).
+- **From 0.7.2 or older**, take this version with Duo Watchdog's own **Update** or with the installer; the IDE's own
+  **Update** button does not offer a plugin under another id.
+- The plugin no longer calls what JetBrains keeps internal to the IDE or has marked for removal.
 
 ## What's new in 0.7.2
 
@@ -109,6 +118,7 @@ GitLab Credits usage for the current billing period, forecast where the month wi
 
 ## Contents
 
+- [What's new in 0.7.3](#whats-new-in-073)
 - [What's new in 0.7.2](#whats-new-in-072)
 - [What's new in 0.7.1](#whats-new-in-071)
 - [What's new in 0.7.0](#whats-new-in-070)
@@ -453,8 +463,8 @@ repositories (*Settings → Plugins → ⚙ → Manage Plugin Repositories…*).
 plugin from the Marketplace: **Update** on its page in *Settings → Plugins*, with `0.7.2 → 0.7.3` beside it, and in
 the IDE's own *Check for Updates*. Turning the daily check off takes the address out again.
 
-**The plugin's id is `io.github.sergeystets.duowatchdog`** after 0.7.2, which had `local.duo-watchdog`. From 0.7.2
-or older, take the next version with Duo Watchdog's own **Update** (the notice, or the dashboard's toolbar) or with
+**The plugin's id is `io.github.sergeystets.duowatchdog`** from 0.7.3 on; 0.7.2 had `local.duo-watchdog`. From 0.7.2
+or older, take 0.7.3 with Duo Watchdog's own **Update** (the notice, or the dashboard's toolbar) or with
 the installer: both put it in place of the old one, and your accounts and settings stay. The IDE's own **Update**
 button does not offer a plugin under another id.
 
@@ -567,9 +577,9 @@ so nothing wraps.
 
 ```
    (docs/images/logo.ascii: the doberman, with "D U O   W A T C H D O G", the subtitle and
-    "Installer, version 0.7.2" beside it)
+    "Installer, version 0.7.3" beside it)
 
-Installing the ready-made files of release v0.7.2 from GitHub; nothing is built.
+Installing the ready-made files of release v0.7.3 from GitHub; nothing is built.
 Looking for IntelliJ IDEA and VS Code...
 
 Found on this computer:
@@ -581,7 +591,7 @@ Found on this computer:
 
   [2] IntelliJ IDEA 2026.2.0.1
       C:\Program Files\JetBrains\IntelliJ IDEA 2026.2
-      Duo Watchdog 0.4.0 is installed; 0.7.2 is available.
+      Duo Watchdog 0.4.0 is installed; 0.7.3 is available.
       It is running now; you'll be asked to close it before installing.
 
 Where should Duo Watchdog go?
@@ -593,13 +603,13 @@ Where should Duo Watchdog go?
     Forget a folder you added...
     Exit without installing
 
-Plan, from release v0.7.2 on GitHub:
-  - IntelliJ IDEA 2026.2.0.1: update Duo Watchdog 0.4.0 -> 0.7.2 (you'll be asked to close it first)
-  - VS Code 1.130.0: install Duo Watchdog 0.7.2
+Plan, from release v0.7.3 on GitHub:
+  - IntelliJ IDEA 2026.2.0.1: update Duo Watchdog 0.4.0 -> 0.7.3 (you'll be asked to close it first)
+  - VS Code 1.130.0: install Duo Watchdog 0.7.3
 Continue? [Y/n]
 
 Installing (3 steps)
-  ✓ Downloading Duo Watchdog 0.7.2 from GitHub  0:01
+  ✓ Downloading Duo Watchdog 0.7.3 from GitHub  0:01
   ⠼ Installing the plugin into IntelliJ IDEA 2026.2.0.1  0:00
     ████████████████████████░░░░░░░░░░░░░░░░  60%  step 2 of 3
 ```
@@ -632,7 +642,7 @@ Or the IDE's own way:
 
 1. [Build the plugin](#building-from-source), or download `duo-watchdog-<version>.zip` from the release.
 2. In the IDE, open *Settings → Plugins → ⚙ → Install Plugin from Disk…*
-3. Select `intellij/build/distributions/duo-watchdog-0.7.2.zip` and restart if the IDE asks you to.
+3. Select `intellij/build/distributions/duo-watchdog-0.7.3.zip` and restart if the IDE asks you to.
 
 Once installed, Duo Watchdog updates itself from GitHub's releases: see [Updates](#updates).
 
@@ -731,7 +741,7 @@ VS Code extension (`:vscode`, which runs its npm build). Open the root folder in
 
 ```bash
 ./gradlew test            # all tests: the plugin's core and the VS Code extension
-./gradlew buildPlugin     # → intellij/build/distributions/duo-watchdog-0.7.2.zip
+./gradlew buildPlugin     # → intellij/build/distributions/duo-watchdog-0.7.3.zip
 ./gradlew runIde          # launch a sandbox IDE with the plugin installed
 ```
 
@@ -848,11 +858,11 @@ because the path contains spaces:
 **5. Find the result:**
 
 ```powershell
-dir intellij\build\distributions    # → duo-watchdog-0.7.2.zip
+dir intellij\build\distributions    # → duo-watchdog-0.7.3.zip
 ```
 
 Then follow [Installation](#installation): *Settings → Plugins → ⚙ → Install Plugin from Disk…* and pick
-`intellij\build\distributions\duo-watchdog-0.7.2.zip`.
+`intellij\build\distributions\duo-watchdog-0.7.3.zip`.
 
 **Optional:** run the tests or try the plugin in a sandbox IDE:
 
@@ -934,7 +944,7 @@ The VS Code extension builds with npm (Node.js 20+), from the root through Gradl
 
 ```bash
 ./gradlew :vscode:test               # 160 tests, no VS Code needed         (npm ci && npm test)
-./gradlew :vscode:packageExtension   # → vscode/duo-watchdog-0.7.2.vsix      (npm run package)
+./gradlew :vscode:packageExtension   # → vscode/duo-watchdog-0.7.3.vsix      (npm run package)
 ./gradlew :vscode:installExtension   # into VS Code; -PcodePath=codium for another CLI
 ```
 
