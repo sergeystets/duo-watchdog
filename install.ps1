@@ -1,15 +1,26 @@
 # Installs or updates Duo Watchdog in IntelliJ IDEA and VS Code on this machine, asking where.
 #
-#   install.bat              pick from the IntelliJ IDEA and VS Code installs found
-#   install.bat "<folder>"   offer that IntelliJ IDEA or VS Code too, e.g. one in an unusual place
+#   install.bat                the latest release from GitHub, ready-made: nothing is built
+#   install.bat "<folder>"     offer that IntelliJ IDEA or VS Code too, e.g. one in an unusual place
+#   install.bat -FromSource    build this clone instead: the plugin with gradlew installPlugin (JDK 17+), the
+#                              extension packaged from vscode\ (Node.js 20+)
 #
-# IntelliJ IDEA gets the plugin built by gradlew installPlugin (needs JDK 17+), VS Code the extension
-# packaged from vscode\ (needs Node.js 20+). Runs on the Windows PowerShell 5.1 that Windows 10 and 11 ship.
-param([string]$Folder)
+# Without a clone, in PowerShell:
+#   iwr -useb https://raw.githubusercontent.com/sergeystets/duo-watchdog/main/install.ps1 -OutFile $env:TEMP\dw.ps1
+#   powershell -NoProfile -ExecutionPolicy Bypass -File $env:TEMP\dw.ps1
+# Runs on the Windows PowerShell 5.1 that Windows 10 and 11 ship, with nothing else needed for the release.
+param([string]$Folder, [switch]$FromSource)
 
 # No $ErrorActionPreference = 'Stop': on PowerShell 5.1 it turns any stderr of code, npm or gradlew into a
 # terminating error. Each call is checked by its result instead.
 Set-Location $PSScriptRoot
+$Repository = 'sergeystets/duo-watchdog'
+# A clone has the sources beside the script. Run on its own, the script installs the release and needs nothing else.
+$Clone = (Test-Path (Join-Path $PSScriptRoot 'intellij\build.gradle.kts')) -and (Test-Path (Join-Path $PSScriptRoot 'gradlew.bat'))
+# GitHub takes TLS 1.2 only, which Windows PowerShell 5.1 may not offer unless asked; its progress bars slow
+# downloads down many times over.
+try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch { }
+$ProgressPreference = 'SilentlyContinue'
 
 function Say([string]$Text = '') { Write-Host $Text }
 function Bold([string]$Text) { Write-Host $Text -ForegroundColor White }
@@ -46,9 +57,111 @@ function Limit-Text([string]$Text, [int]$Width) {
 # The text cut or padded to $Width columns, so it covers what the line held before.
 function Format-Line([string]$Text, [int]$Width) { (Limit-Text $Text $Width).PadRight([Math]::Max($Width, 10)) }
 
-$PluginVersion = (Select-String -Path intellij\build.gradle.kts -Pattern '^version = "(.*)"$').Matches[0].Groups[1].Value
-$ExtensionVersion = ''
-if (Test-Path vscode\package.json) { $ExtensionVersion = (Get-Content -Raw vscode\package.json | ConvertFrom-Json).version }
+if ($FromSource -and -not $Clone) {
+    Say '-FromSource builds a clone of the repository, and this script is not in one. Either:'
+    Say "  git clone https://github.com/$Repository.git, then duo-watchdog\install.bat -FromSource"
+    Say 'or leave -FromSource out to install the latest release, which needs no build.'
+    exit 1
+}
+
+# --- Where the files come from ---------------------------------------------------------------------------
+
+$WebHeaders = @{ 'User-Agent' = 'duo-watchdog-installer' }
+
+# A file of the release: its address, its size (0 when not known) and its SHA-256 (empty when GitHub gives none).
+function New-ReleaseFile([string]$Url, [long]$Size, [string]$Sha) {
+    [pscustomobject]@{ Url = $Url; Size = $Size; Sha = ($Sha -replace '^sha256:', '').ToLower() }
+}
+
+# The latest release and its two files, from GitHub's API. When the API turns it down (it limits how often an
+# address may ask), the release page's redirect names the tag and the files go by their usual names, unchecked.
+function Find-Release {
+    $tag = ''
+    $zip = $null
+    $vsix = $null
+    $release = $null
+    try {
+        $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repository/releases/latest" -UseBasicParsing `
+            -Headers ($WebHeaders + @{ 'Accept' = 'application/vnd.github+json' }) -TimeoutSec 30 -ErrorAction Stop
+    } catch { }
+    if ($release) {
+        $tag = [string]$release.tag_name
+        foreach ($asset in @($release.assets)) {
+            $url = [string]$asset.browser_download_url
+            if (-not $url.StartsWith("https://github.com/$Repository/releases/download/")) { continue }
+            $file = New-ReleaseFile $url ([long]$asset.size) ([string]$asset.digest)
+            if ($asset.name -like 'duo-watchdog-*.zip') { $zip = $file }
+            elseif ($asset.name -like 'duo-watchdog-*.vsix') { $vsix = $file }
+        }
+    } else {
+        try {
+            $page = Invoke-WebRequest -Uri "https://github.com/$Repository/releases/latest" -Method Head -UseBasicParsing `
+                -Headers $WebHeaders -TimeoutSec 30 -ErrorAction Stop
+            # Windows PowerShell 5.1 says where the redirects ended in ResponseUri, PowerShell 7 in RequestMessage.
+            $final = $page.BaseResponse.ResponseUri
+            if (-not $final) { $final = $page.BaseResponse.RequestMessage.RequestUri }
+            if ("$final" -match '/releases/tag/([^/?#]+)$') { $tag = $Matches[1] }
+        } catch { }
+    }
+    $version = $tag -replace '^v', ''
+    if ($version -notmatch '^\d[0-9A-Za-z.+-]*$') { return $null }
+    $download = "https://github.com/$Repository/releases/download/$tag"
+    if (-not $release) {
+        $zip = New-ReleaseFile "$download/duo-watchdog-$version.zip" 0 ''
+        $vsix = New-ReleaseFile "$download/duo-watchdog-$version.vsix" 0 ''
+    }
+    [pscustomobject]@{ Tag = $tag; Version = $version; Zip = $zip; Vsix = $vsix }
+}
+
+# Downloads a file of the release to $Path and checks it against the release: its size and SHA-256, when known.
+# Throws why it is not the file.
+function Save-ReleaseFile($File, [string]$Path) {
+    Write-Output "Downloading $($File.Url)"
+    Invoke-WebRequest -Uri $File.Url -OutFile $Path -UseBasicParsing -Headers $WebHeaders -TimeoutSec 120 -ErrorAction Stop
+    $size = (Get-Item $Path).Length
+    if ($File.Size -gt 0 -and $size -ne $File.Size) { throw "It has $size bytes, but the release lists $($File.Size)." }
+    if (-not $File.Sha) {
+        Write-Output 'GitHub gave no SHA-256 for it, so only its size is checked.'
+        return
+    }
+    $actual = (Get-FileHash -Algorithm SHA256 -Path $Path).Hash.ToLower()
+    if ($actual -ne $File.Sha) { throw "Its SHA-256 is $actual, but the release lists $($File.Sha)." }
+    Write-Output "SHA-256 matches the release: $actual"
+}
+
+# Throws unless the zip is this plugin of this version, everything in its duo-watchdog folder.
+function Test-PluginZip([string]$Path, [string]$Version) {
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $archive = [IO.Compression.ZipFile]::OpenRead($Path)
+    try { $names = @($archive.Entries | ForEach-Object { $_.FullName -replace '\\', '/' }) } finally { $archive.Dispose() }
+    if ($names -notcontains "duo-watchdog/lib/duo-watchdog-$Version.jar") {
+        throw "The zip has no duo-watchdog/lib/duo-watchdog-$Version.jar, so it is not this plugin."
+    }
+    if ($names | Where-Object { -not $_.StartsWith('duo-watchdog/') -or $_ -match '(^|/)\.\.(/|$)' }) {
+        throw 'The zip holds files outside its duo-watchdog folder.'
+    }
+}
+
+$Release = $null
+if ($FromSource) {
+    $PluginVersion = (Select-String -Path intellij\build.gradle.kts -Pattern '^version = "(.*)"$').Matches[0].Groups[1].Value
+    $ExtensionVersion = ''
+    if (Test-Path vscode\package.json) { $ExtensionVersion = (Get-Content -Raw vscode\package.json | ConvertFrom-Json).version }
+    $SourceLine = 'Building Duo Watchdog from this clone (-FromSource).'
+    $SourceText = 'built from this clone'
+} else {
+    $Release = Find-Release
+    if (-not $Release) {
+        Say "Could not find Duo Watchdog's latest release on GitHub (https://github.com/$Repository/releases)."
+        Say 'Check the connection or the proxy, and run again.'
+        if ($Clone) { Say 'Or build this clone instead: install.bat -FromSource' }
+        exit 1
+    }
+    $PluginVersion = $Release.Version
+    $ExtensionVersion = $Release.Version
+    $SourceLine = "Installing the ready-made files of release $($Release.Tag) from GitHub; nothing is built."
+    $SourceText = "from release $($Release.Tag) on GitHub"
+}
 
 # --- IntelliJ IDEA ---------------------------------------------------------------------------------------
 
@@ -266,9 +379,21 @@ function Show-All {
     if (-not ($hasIdea -and $hasCode)) { Say }
 }
 
+# The drawing: the clone's, or else the one of the release it installs; without it, the title shows alone.
+$LogoPath = Join-Path $PSScriptRoot 'docs\images\logo.ascii'
+$LogoDownloaded = $false
+if (-not $Clone) {
+    $LogoPath = Join-Path ([IO.Path]::GetTempPath()) "duo-watchdog-logo-$PID.txt"
+    try {
+        Invoke-WebRequest -Uri "https://raw.githubusercontent.com/$Repository/$($Release.Tag)/docs/images/logo.ascii" `
+            -OutFile $LogoPath -UseBasicParsing -Headers $WebHeaders -TimeoutSec 15 -ErrorAction Stop
+        $LogoDownloaded = $true
+    } catch { }
+}
+
 # The logo without the margin all its lines share and without blank lines above and below it.
 function Get-Logo {
-    $lines = @(Get-Content "$PSScriptRoot/docs/images/logo.ascii" -ErrorAction SilentlyContinue | ForEach-Object { $_.TrimEnd() })
+    $lines = @(Get-Content $LogoPath -ErrorAction SilentlyContinue | ForEach-Object { $_.TrimEnd() })
     $drawn = @(for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i]) { $i } })
     if ($drawn.Count -eq 0) { return @() }
     $margin = ($lines[$drawn] | ForEach-Object { $_.Length - $_.TrimStart().Length } | Measure-Object -Minimum).Minimum
@@ -324,6 +449,12 @@ function Show-Banner([string]$Version) {
 }
 
 if ($PluginVersion -eq $ExtensionVersion) { Show-Banner $PluginVersion } else { Show-Banner "$PluginVersion (VS Code $ExtensionVersion)" }
+if ($LogoDownloaded) { Remove-Item -Force $LogoPath -ErrorAction SilentlyContinue }
+Say $SourceLine
+if ($Clone -and -not $FromSource) {
+    $cloneVersion = (Select-String -Path intellij\build.gradle.kts -Pattern '^version = "(.*)"$').Matches[0].Groups[1].Value
+    if ($cloneVersion -ne $Release.Version) { Say "This clone is at $cloneVersion; install.bat -FromSource builds that instead." }
+}
 Say 'Looking for IntelliJ IDEA and VS Code...'
 
 foreach ($place in Get-Remembered) {
@@ -462,23 +593,23 @@ while ($Chosen.Count -eq 0) {
 }
 $Selected = $Chosen | ForEach-Object { $Targets[$_] }
 
-# --- Check the tools before building ---------------------------------------------------------------------
+# --- Check the tools for a build ------------------------------------------------------------------------
 
-if (($Selected | Where-Object Kind -eq 'idea') -and -not $env:JAVA_HOME -and -not (Get-Command java -ErrorAction SilentlyContinue)) {
+if ($FromSource -and ($Selected | Where-Object Kind -eq 'idea') -and -not $env:JAVA_HOME -and -not (Get-Command java -ErrorAction SilentlyContinue)) {
     Say 'IntelliJ IDEA needs a JDK 17 or later to build the plugin, and none was found.'
     Say 'Install one with: winget install --id EclipseAdoptium.Temurin.21.JDK -e'
-    Say 'then open a new terminal and run install.bat again.'
+    Say 'then open a new terminal and run install.bat -FromSource again, or leave -FromSource out to install the release.'
     exit 1
 }
-if (($Selected | Where-Object Kind -eq 'code') -and ((Get-NodeMajor) -lt 20 -or -not (Get-Command npm -ErrorAction SilentlyContinue))) {
+if ($FromSource -and ($Selected | Where-Object Kind -eq 'code') -and ((Get-NodeMajor) -lt 20 -or -not (Get-Command npm -ErrorAction SilentlyContinue))) {
     Say 'VS Code needs Node.js 20 or later (with npm) to package the extension.'
     Say 'Install it with: winget install --id OpenJS.NodeJS.LTS -e'
-    Say 'then open a new terminal and run install.bat again.'
+    Say 'then open a new terminal and run install.bat -FromSource again, or leave -FromSource out to install the release.'
     exit 1
 }
 
 Say
-Say 'Plan:'
+Say "Plan, ${SourceText}:"
 foreach ($target in $Selected) {
     $note = ''
     if ($target.Kind -eq 'idea' -and (Test-IdeaRunning $target.Place)) { $note = " (you'll be asked to close it first)" }
@@ -503,12 +634,17 @@ foreach ($target in $Selected) {
     if ($skipped) { [void]$Results.Add("SKIPPED  $($target.Name): it was running.") } else { $Ideas += $target }
 }
 
-# Each step's share of the bar; building the plugin is most of the wait.
-$WPrepare = 10; $WBuild = 45; $WNpm = 20; $WPackage = 10; $WCode = 5
+# Each step's share of the bar: building the plugin is most of the wait, or else downloading the release.
+$WPrepare = 10; $WBuild = 45; $WNpm = 20; $WPackage = 10; $WCode = 5; $WDownload = 30; $WUnpack = 10
 $StepCount = 0
 $TotalWeight = 0
-if ($Ideas.Count -gt 0) { $StepCount += 1 + $Ideas.Count; $TotalWeight += $WPrepare + $WBuild * $Ideas.Count }
-if ($Codes.Count -gt 0) { $StepCount += 2 + $Codes.Count; $TotalWeight += $WNpm + $WPackage + $WCode * $Codes.Count }
+if ($FromSource) {
+    if ($Ideas.Count -gt 0) { $StepCount += 1 + $Ideas.Count; $TotalWeight += $WPrepare + $WBuild * $Ideas.Count }
+    if ($Codes.Count -gt 0) { $StepCount += 2 + $Codes.Count; $TotalWeight += $WNpm + $WPackage + $WCode * $Codes.Count }
+} elseif ($Ideas.Count + $Codes.Count -gt 0) {
+    $StepCount = 1 + $Ideas.Count + $Codes.Count
+    $TotalWeight = $WDownload + $WUnpack * $Ideas.Count + $WCode * $Codes.Count
+}
 $StepNumber = 0
 $DoneWeight = 0
 $GradleTasks = 0
@@ -612,6 +748,33 @@ function Invoke-Step([string]$Label, [string]$Kind, [int]$Weight, [int]$Tau, [st
     $false
 }
 
+# Runs a step here, in this PowerShell, with what it writes in a log; then marks it done, or failed with the end
+# of its log. A step fails by throwing. Returns whether it worked.
+function Invoke-InlineStep([string]$Label, [int]$Weight, [scriptblock]$Action) {
+    $script:StepNumber++
+    $script:StepLog = Join-Path $Work "step-$($script:StepNumber).log"
+    $started = Get-Date
+    if ($Live) { Show-Live $Label 'inline' $Weight 2 0 0 }
+    $worked = $true
+    try {
+        & $Action *>&1 | ForEach-Object { "$_" } | Out-File -FilePath $script:StepLog -Encoding utf8
+    } catch {
+        $worked = $false
+        "$_" | Out-File -FilePath $script:StepLog -Append -Encoding utf8
+    }
+    $elapsed = Format-Clock ([int]((Get-Date) - $started).TotalSeconds)
+    $script:DoneWeight += $Weight
+    if ($worked) {
+        Write-StepEnd $Label $OkMark Green $elapsed
+        return $true
+    }
+    $script:KeepLogs = $true
+    Write-StepEnd $Label 'x' Red "failed after $elapsed"
+    Get-Content $script:StepLog -Tail 20 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "      $_" -ForegroundColor DarkGray }
+    Say "      The whole output is in $($script:StepLog)"
+    $false
+}
+
 # A step that can't run because one before it failed.
 function Skip-Step([string]$Label, [int]$Weight, [string]$Why) {
     $script:StepNumber++
@@ -628,8 +791,56 @@ if ($StepCount -gt 0) {
         [Console]::CursorVisible = $false
     }
 }
+$ZipFile = Join-Path $Work "duo-watchdog-$PluginVersion.zip"
+$VsixFile = Join-Path $Work "duo-watchdog-$ExtensionVersion.vsix"
 try {
-    if ($Ideas.Count -gt 0) {
+    if (-not $FromSource -and $StepCount -gt 0) {
+        # The release's files that the chosen editors need, each checked against the release.
+        $downloaded = Invoke-InlineStep "Downloading Duo Watchdog $($Release.Version) from GitHub" $WDownload {
+            if ($Ideas.Count -gt 0) {
+                if (-not $Release.Zip) { throw "Release $($Release.Tag) has no duo-watchdog-$($Release.Version).zip." }
+                Save-ReleaseFile $Release.Zip $ZipFile
+                Test-PluginZip $ZipFile $Release.Version
+            }
+            if ($Codes.Count -gt 0) {
+                if (-not $Release.Vsix) { throw "Release $($Release.Tag) has no duo-watchdog-$($Release.Version).vsix." }
+                Save-ReleaseFile $Release.Vsix $VsixFile
+            }
+        }
+        foreach ($target in $Ideas) {
+            if (-not $downloaded) {
+                Skip-Step "Installing the plugin into $($target.Name)" $WUnpack 'the download failed'
+                [void]$Results.Add("FAILED   $($target.Name): the download failed, see its output above.")
+                continue
+            }
+            # Where Install Plugin from Disk would put it, in place of an older Duo Watchdog, as gradlew installPlugin does.
+            $pluginsDir = Get-PluginsDir $target.Place
+            if (Invoke-InlineStep "Installing the plugin into $($target.Name)" $WUnpack {
+                    Write-Output "Unpacking into $pluginsDir"
+                    New-Item -ItemType Directory -Force $pluginsDir -ErrorAction Stop | Out-Null
+                    $old = Join-Path $pluginsDir 'duo-watchdog'
+                    if (Test-Path $old) { Remove-Item -Recurse -Force $old -ErrorAction Stop }
+                    Expand-Archive -Path $ZipFile -DestinationPath $pluginsDir -Force -ErrorAction Stop
+                }) {
+                [void]$Results.Add("OK       $($target.Name): Duo Watchdog $PluginVersion installed.")
+                [void]$Starts.Add($target)
+            } else {
+                [void]$Results.Add("FAILED   $($target.Name): the plugin didn't unpack, see its output above.")
+            }
+        }
+        foreach ($target in $Codes) {
+            if (-not $downloaded) {
+                Skip-Step "Installing the extension into $($target.Name)" $WCode 'the download failed'
+                [void]$Results.Add("FAILED   $($target.Name): the download failed, see its output above.")
+            } elseif (Invoke-Step "Installing the extension into $($target.Name)" 'code' $WCode 8 `
+                    "`"$($target.Place)`" --install-extension `"$VsixFile`" --force") {
+                [void]$Results.Add("OK       $($target.Name): Duo Watchdog $ExtensionVersion installed. In open windows run 'Developer: Reload Window'.")
+            } else {
+                [void]$Results.Add("FAILED   $($target.Name): '$($target.Place) --install-extension' failed.")
+            }
+        }
+    }
+    if ($FromSource -and $Ideas.Count -gt 0) {
         $gradle = "`"$PSScriptRoot\gradlew.bat`" :intellij:installPlugin --console=plain"
         # The dry run lists the tasks the build will run, so the bar can follow it task by task.
         if (Invoke-Step 'Preparing Gradle (the first run downloads Gradle and a JDK)' 'prepare' $WPrepare 20 `
@@ -651,7 +862,7 @@ try {
             }
         }
     }
-    if ($Codes.Count -gt 0) {
+    if ($FromSource -and $Codes.Count -gt 0) {
         $vscode = Join-Path $PSScriptRoot 'vscode'
         $vsix = Join-Path $vscode "duo-watchdog-$ExtensionVersion.vsix"
         $why = ''
@@ -694,5 +905,6 @@ foreach ($target in $Starts) {
     if (YesDefault "Start $($target.Name) now?") { Start-Process (Join-Path $target.Place 'bin\idea64.exe') }
 }
 if ($Results | Where-Object { $_ -like 'FAILED*' }) { exit 1 }
-Say 'Next: set your GitLab token. IntelliJ IDEA: Settings > Tools > Duo Watchdog.'
-Say "VS Code: Ctrl+Shift+P > 'Duo Watchdog: Set GitLab Token'."
+Say 'Next: add your GitLab token. IntelliJ IDEA: Settings > Tools > Duo Watchdog.'
+Say "VS Code: Ctrl+Shift+P > 'Duo Watchdog: Add or Replace a Token'."
+Say 'From here on, Duo Watchdog offers each new release itself.'

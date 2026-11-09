@@ -447,6 +447,9 @@ see [Publishing a release](#publishing-a-release).
 
 ### Building from source
 
+Only to build it yourself: installing needs none of this, since every release carries the plugin and the extension
+ready-made (see [Installation](#installation)).
+
 | Tool | Minimum version | Notes |
 |---|---|---|
 | JDK (to run Gradle) | **17** | Gradle 9.8 needs Java 17+. Any JDK 17, 21 or 25 works. |
@@ -458,19 +461,41 @@ see [Publishing a release](#publishing-a-release).
 
 ## Installation
 
+Every [release](https://github.com/sergeystets/duo-watchdog/releases) carries Duo Watchdog **ready-made**, the same
+files for Windows, macOS and Linux: `duo-watchdog-<version>.zip` for IntelliJ IDEA and `duo-watchdog-<version>.vsix`
+for VS Code. Installing builds nothing, so it needs no JDK, Node.js or Gradle, and no clone. Once installed,
+Duo Watchdog offers each new release itself and installs it from the editor: see [Updates](#updates).
+
 ### With the install script (recommended)
 
-Clone the repository and run the script for your OS. It installs Duo Watchdog for the first time, and also updates it later
-(run `git pull` first to get the latest version). From 0.7.0 on, Duo Watchdog also offers each new release itself and
-installs it from the editor: see [Updates](#updates).
+One line, no clone needed. It downloads the install script and runs it; the script installs the latest release.
+
+macOS / Linux (needs `curl` or `wget`, and `unzip` for IntelliJ IDEA, which most systems have):
 
 ```bash
-./install.sh                 # macOS / Linux
+bash <(curl -fsSL https://raw.githubusercontent.com/sergeystets/duo-watchdog/main/install.sh)
+```
+
+Windows, in PowerShell (needs nothing more than Windows 10 or 11 has):
+
+```powershell
+iwr -useb https://raw.githubusercontent.com/sergeystets/duo-watchdog/main/install.ps1 -OutFile $env:TEMP\dw.ps1; powershell -NoProfile -ExecutionPolicy Bypass -File $env:TEMP\dw.ps1
+```
+
+In a clone of the repository, the same scripts do the same, and can also build the clone instead:
+
+```bash
+./install.sh                 # macOS / Linux: the latest release, ready-made
+./install.sh --from-source   # build this clone (needs a JDK 17+ and Node.js 20+)
 ```
 
 ```bat
-install.bat                  :: Windows (or double-click it in Explorer)
+install.bat                  :: Windows (or double-click it in Explorer): the latest release, ready-made
+install.bat -FromSource      :: build this clone (needs a JDK 17+ and Node.js 20+)
 ```
+
+`curl … | bash` would not work: the script asks questions, and from a pipe its own lines would be the answers. It
+says so and stops; use `bash <(curl …)` as above.
 
 The script is interactive:
 
@@ -483,27 +508,32 @@ The script is interactive:
    A folder you add is **remembered** and listed again on the next run; *Forget a folder you added* drops it. The list
    is kept in `~/.config/duo-watchdog/folders` (macOS, Linux) or `%APPDATA%\duo-watchdog\folders.txt` (Windows).
    Without a terminal (answers from a pipe) the choices are numbered and it reads a number.
-3. It checks that the tools it needs are installed: a JDK 17+ for IntelliJ IDEA, Node.js 20+ for VS Code.
+3. It looks up the latest release on GitHub. With `--from-source` it builds instead, and checks for the tools that
+   takes: a JDK 17+ for IntelliJ IDEA, Node.js 20+ for VS Code.
 4. It shows the plan (install, update from one version to another, or reinstall) and asks you to confirm. If an
    IntelliJ IDEA it is about to update is running, it asks you to close it (or skip it) now, so nothing interrupts
    the install.
 5. It installs, one step a line, with a **progress bar** for the whole install under the step that is running.
-   **IntelliJ IDEA**: Gradle builds the plugin against that IDE and puts it into the IDE's plugins folder (replacing an
-   older Duo Watchdog); the bar follows Gradle task by task. **VS Code**: it packages the extension once and installs
-   it with `code --install-extension`; run *Developer: Reload Window* in open VS Code windows to load the new version.
-   The tools' own output goes to a log; a step that fails shows the end of it and where the whole log is.
+   **The release** (the default): it downloads the files the chosen editors need from GitHub and checks each against
+   the release, its size and SHA-256, and that the zip is this plugin of that version. Then **IntelliJ IDEA**: it
+   unpacks the plugin into the IDE's plugins folder, replacing an older Duo Watchdog. **VS Code**: it installs the
+   `.vsix` with `code --install-extension`; run *Developer: Reload Window* in open VS Code windows to load it.
+   With **`--from-source`**: Gradle builds the plugin against that IDE and puts it into its plugins folder, the bar
+   following Gradle task by task, and the extension is packaged once from `vscode/`. The output of each step goes to a
+   log; a step that fails shows the end of it and where the whole log is.
 6. It sums up and offers to start the IntelliJ IDEAs it installed into.
 
 The script greets you with the Duo Watchdog doberman and title from [`docs/images/logo.ascii`](docs/images/logo.ascii),
-printed as drawn; edit that file to change it. Any `version x.y.z` in it is replaced with the version being installed.
+printed as drawn (run without a clone, it fetches the drawing of the release it installs); edit that file to change it. Any `version x.y.z` in it is replaced with the version being installed.
 In a terminal narrower than the drawing (114 columns) it keeps the title on the right of the dog with the subtitle on two
 lines (about 80 columns); narrower still, the title goes under the dog, and below the dog's width only the title shows,
 so nothing wraps.
 
 ```
    (docs/images/logo.ascii: the doberman, with "D U O   W A T C H D O G", the subtitle and
-    "Installer, version 0.5.0" beside it)
+    "Installer, version 0.7.0" beside it)
 
+Installing the ready-made files of release v0.7.0 from GitHub; nothing is built.
 Looking for IntelliJ IDEA and VS Code...
 
 Found on this computer:
@@ -515,7 +545,7 @@ Found on this computer:
 
   [2] IntelliJ IDEA 2026.2.0.1
       C:\Program Files\JetBrains\IntelliJ IDEA 2026.2
-      Duo Watchdog 0.4.0 is installed; 0.5.0 is available.
+      Duo Watchdog 0.4.0 is installed; 0.7.0 is available.
       It is running now; you'll be asked to close it before installing.
 
 Where should Duo Watchdog go?
@@ -527,15 +557,15 @@ Where should Duo Watchdog go?
     Forget a folder you added...
     Exit without installing
 
-Plan:
-  - IntelliJ IDEA 2026.2.0.1: update Duo Watchdog 0.4.0 -> 0.5.0 (you'll be asked to close it first)
-  - VS Code 1.130.0: install Duo Watchdog 0.5.0
+Plan, from release v0.7.0 on GitHub:
+  - IntelliJ IDEA 2026.2.0.1: update Duo Watchdog 0.4.0 -> 0.7.0 (you'll be asked to close it first)
+  - VS Code 1.130.0: install Duo Watchdog 0.7.0
 Continue? [Y/n]
 
-Installing (5 steps)
-  ✓ Preparing Gradle (the first run downloads Gradle and a JDK)  0:12
-  ⠼ Building and installing the plugin into IntelliJ IDEA 2026.2.0.1 · compileJava  0:21
-    ██████████████░░░░░░░░░░░░░░░░░░░░░░░░░░  35%  step 2 of 5
+Installing (3 steps)
+  ✓ Downloading Duo Watchdog 0.7.0 from GitHub  0:01
+  ⠼ Installing the plugin into IntelliJ IDEA 2026.2.0.1  0:00
+    ████████████████████████░░░░░░░░░░░░░░░░  60%  step 2 of 3
 ```
 
 You can also pass the folder of an IntelliJ IDEA or VS Code that the script doesn't find on its own (it's remembered too):
@@ -545,8 +575,15 @@ For IntelliJ IDEA that's the folder with `product-info.json`; for VS Code, the f
 
 ### Without the script
 
-**IntelliJ IDEA**, in one command: build the plugin and put it into the plugins folder of the IDE it was compiled against.
-Close the IDE first:
+From the [latest release](https://github.com/sergeystets/duo-watchdog/releases/latest), nothing to build:
+
+- **IntelliJ IDEA**: download `duo-watchdog-<version>.zip`, then *Settings → Plugins → ⚙ → Install Plugin from
+  Disk…*, pick the zip, and restart.
+- **VS Code**: download `duo-watchdog-<version>.vsix`, then *Extensions → ⋯ → Install from VSIX…* (or
+  `code --install-extension duo-watchdog-<version>.vsix`), and reload the window.
+
+From a clone, **IntelliJ IDEA** in one command: build the plugin and put it into the plugins folder of the IDE it was
+compiled against. Close the IDE first:
 
 ```bash
 ./gradlew installPlugin                                      # the IDEA the build finds
@@ -557,7 +594,7 @@ Add `-PpluginsDir=...` if your IDE keeps its plugins somewhere else (`idea.plugi
 
 Or the IDE's own way:
 
-1. [Build the plugin](#building-from-source), or get `duo-watchdog-<version>.zip` from a teammate.
+1. [Build the plugin](#building-from-source), or download `duo-watchdog-<version>.zip` from the release.
 2. In the IDE, open *Settings → Plugins → ⚙ → Install Plugin from Disk…*
 3. Select `intellij/build/distributions/duo-watchdog-0.7.0.zip` and restart if the IDE asks you to.
 
@@ -847,8 +884,8 @@ duo-watchdog/
 │   └── media/                Dashboard script and styles, icons
 ├── docs/images/              Logo and screenshots for this README
 ├── release.sh                Builds both and publishes them as GitHub release v<version>, which they update from
-├── install.sh                Interactive installer for macOS / Linux
-└── install.bat               Interactive installer for Windows (runs install.ps1)
+├── install.sh                Interactive installer for macOS / Linux: the latest release, or --from-source
+└── install.bat               Interactive installer for Windows (runs install.ps1): the same, or -FromSource
 ```
 
 The UI components get their colors from the plugin as light/dark pairs, so they follow the IDE theme.
