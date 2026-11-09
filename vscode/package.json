@@ -2,7 +2,7 @@
   "name": "duo-watchdog",
   "displayName": "Duo Watchdog",
   "description": "Watches your own GitLab Credits (GitLab Duo) for each of your GitLab accounts: used, left, the month-end forecast, usage by day and by feature, a year of statistics, with alerts before you hit your limit.",
-  "version": "0.7.2",
+  "version": "0.7.3",
   "publisher": "local",
   "license": "MIT",
   "repository": {

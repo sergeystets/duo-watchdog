@@ -50,7 +50,19 @@
     <!-- An item between "github-only" comments is about the build for the releases on GitHub alone; the build for
          JetBrains Marketplace (-Pmarketplace) leaves it out of its notes (build.gradle.kts). -->
     <change-notes><![CDATA[
-    <h3>What's new in 0.7.2</h3>
+    <h3>What's new in 0.7.3</h3>
+    <ul>
+      <li>The plugin's id is now <code>io.github.sergeystets.duowatchdog</code>, for JetBrains Marketplace.</li>
+      <!--github-only-->
+      <li><b>From 0.7.2 or older</b>, take this version with Duo Watchdog's own <b>Update</b> (the notice, or the
+          tool window's toolbar) or with the installer: both put it in place of the old one, and your accounts and
+          settings stay. The IDE's own <b>Update</b> button does not offer a plugin under another id.</li>
+      <!--/github-only-->
+      <li>No more calls to what JetBrains keeps internal to the IDE or has marked for removal. Where your tokens are
+          kept is named as the macOS Keychain, the Windows Credential Manager, or on Linux the IDE's password
+          store.</li>
+    </ul>
+    <h3>0.7.2</h3>
     <ul>
       <!--github-only-->
       <li>The IDE itself offers each new release: <b>Update</b> on Duo Watchdog's page in <i>Settings | Plugins</i>,
