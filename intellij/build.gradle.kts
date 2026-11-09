@@ -39,7 +39,8 @@ fun findInstalledIdea(): String? {
 }
 
 // Compile against the IDEA already installed: -PideaPath=... (or IDEA_HOME) names it, otherwise the usual places are
-// searched. CI, which has none, names a version to download instead: -PideaVersion=2025.3.1.
+// searched. CI, which has none, fetches one and names its folder with -PideaPath; -PideaVersion=2025.3.1 has Gradle
+// download that version instead.
 val downloadedIdea: String? = providers.gradleProperty("ideaVersion").orNull
 val requestedIdea: String? = providers.gradleProperty("ideaPath").orElse(providers.environmentVariable("IDEA_HOME")).orNull
 val installedIdea: String? = when {
@@ -157,7 +158,7 @@ intellijPlatform {
     buildSearchableOptions = false
     // The oldest IntelliJ IDEA the plugin installs on (sinceBuild) and the newest released, checked by
     // ./gradlew verifyPlugin: a call to anything either of them lacks fails it. CI runs it before every release.
-    // -PverifyOldest / -PverifyNewest name others.
+    // -PverifyOldest / -PverifyNewest name others; CI's are VERIFY_OLDEST and VERIFY_NEWEST in checks.yml.
     pluginVerification {
         // What fails it: a call to something an IDE lacks, a broken plugin, a dependency it cannot find. Calls to
         // JetBrains' internal API (the staged update, the name of the password store) are reported, not failed:
@@ -168,10 +169,23 @@ intellijPlatform {
             FailureLevel.MISSING_DEPENDENCIES,
         )
         ides {
-            create(IntelliJPlatformType.IntellijIdeaCommunity, providers.gradleProperty("verifyOldest").getOrElse("2024.3.7"))
-            create(IntelliJPlatformType.IntellijIdea, providers.gradleProperty("verifyNewest").getOrElse("2026.3"))
+            // CI has both unpacked already (.github/scripts/fetch-ide.sh fetches them while the job sets up) and
+            // names their folders, separated by commas: -PverifyIdePaths=/ides/2024.3.7,/ides/2026.3.
+            val unpacked = providers.gradleProperty("verifyIdePaths").orNull
+            if (unpacked != null) {
+                unpacked.split(',').filter { it.isNotBlank() }.forEach { local(it.trim()) }
+            } else {
+                create(IntelliJPlatformType.IntellijIdeaCommunity, providers.gradleProperty("verifyOldest").getOrElse("2024.3.7"))
+                create(IntelliJPlatformType.IntellijIdea, providers.gradleProperty("verifyNewest").getOrElse("2026.3"))
+            }
         }
     }
+}
+
+// -PverifyOffline keeps the Plugin Verifier to the IDEs it is given, as CI does: it then skips downloading the
+// plugins that the IDE's own plugins could use (1.3 GB for 2026.3), which says nothing about this one.
+tasks.verifyPlugin {
+    if (providers.gradleProperty("verifyOffline").isPresent) offline = true
 }
 
 /** Unpacks the built plugin where Install Plugin from Disk would, replacing an older Duo Watchdog. */

@@ -917,12 +917,13 @@ still run.
 ### Checks and releases
 
 Every pull request and every push to `main` runs the same checks a release must pass
-([`.github/workflows/checks.yml`](.github/workflows/checks.yml)), on GitHub Actions:
+([`.github/workflows/checks.yml`](.github/workflows/checks.yml)), on GitHub Actions, side by side; a pull request
+runs only those for the parts it touches (the core, the plugin, the extension):
 
 | Check | What it proves |
 |---|---|
 | **Plugin core tests** | The JUnit tests, with every dashboard state painted headless (kept as the `ui-previews` artifact) |
-| **IntelliJ plugin, built and verified** | The plugin builds against IntelliJ IDEA 2025.3.1, its zip is the plugin and nothing else, and JetBrains' **Plugin Verifier** finds nothing it calls missing in the oldest IntelliJ IDEA it installs on (2024.3.7) or the newest (2026.3). `./gradlew verifyPlugin` runs the same here. |
+| **IntelliJ plugin, built and verified** | The plugin builds against IntelliJ IDEA 2025.3.1, its zip is the plugin and nothing else, and JetBrains' **Plugin Verifier** finds nothing it calls missing in the oldest IntelliJ IDEA it installs on (2024.3.7) or the newest (2026.3). `./gradlew verifyPlugin` runs the same here (`-PverifyOffline`, as CI does, to skip its downloads). |
 | **VS Code extension, tested in VS Code** | The unit tests, then the packaged `.vsix` in a real VS Code, the oldest it supports (1.74) and the current stable: it activates, every command it declares is registered, the dashboard and What's New open (`npm run smoke`) |
 | **Installer on Linux, macOS, Windows** | `install.sh`, and `install.ps1` in Windows PowerShell 5.1, install the latest release into stand-in IntelliJ IDEAs and a stand-in VS Code, from a clone and on their own |
 
@@ -938,7 +939,9 @@ Every pull request and every push to `main` runs the same checks a release must 
 It tags the commit `v<version>` and pushes the tag; nothing is built on your machine. The tag starts
 [`.github/workflows/release.yml`](.github/workflows/release.yml), which checks that the tag, both versions and the
 changelog agree and that the commit is on `main`, runs every check above, and only then publishes release `v<version>`
-with the very zip and `.vsix` the checks built and tested, the changelog's section as its notes. Both editors offer it
+with the very zip and `.vsix` the checks built and tested, the changelog's section as its notes. When CI has already
+passed every check for that commit on `main`, they are not run again: the files of that run are published, in under a
+minute, so it pays to tag once the push's run is green. Both editors offer it
 as an update from then on. If a check fails nothing is published: fix it, delete the tag
 (`git push --delete origin v<version> && git tag -d v<version>`), and run `./release.sh` again.
 

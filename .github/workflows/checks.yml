@@ -1,21 +1,67 @@
-# Everything a release must pass, run for every pull request and push (ci.yml) and before every release
-# (release.yml), which publishes the very files these jobs built.
+# Everything a release must pass, run for every pull request and push (ci.yml) and before a release of a commit
+# they have not checked (release.yml), which publishes the very files these jobs built.
+#
+# The jobs run side by side, and the run takes as long as its slowest, the IntelliJ plugin's. That one is kept
+# short by fetching its three IDEs in the background while it sets up (fetch-ide.sh) and by a Plugin Verifier
+# that downloads nothing; a pull request skips the jobs for the parts it does not touch.
 name: Checks
 
 on:
   workflow_call:
+    inputs:
+      everything:
+        description: Run every job, whatever the pull request changed. False only for a pull request.
+        type: boolean
+        default: true
 
 permissions:
   contents: read
 
 env:
-  # The IntelliJ IDEA the plugin is compiled against; the Plugin Verifier then checks it on the oldest one it
-  # installs on and the newest (intellij/build.gradle.kts).
+  # The IntelliJ IDEA the plugin is compiled against, and the oldest it installs on (sinceBuild) and the newest
+  # released, which the Plugin Verifier checks it on. intellij/build.gradle.kts has the same two for a
+  # ./gradlew verifyPlugin outside CI.
   IDEA_VERSION: 2025.3.1
+  VERIFY_OLDEST: 2024.3.7
+  VERIFY_NEWEST: '2026.3'
 
 jobs:
+  changes:
+    name: What changed
+    runs-on: ubuntu-latest
+    outputs:
+      core: ${{ steps.parts.outputs.core }}
+      plugin: ${{ steps.parts.outputs.plugin }}
+      vscode: ${{ steps.parts.outputs.vscode }}
+    steps:
+      - id: parts
+        name: The parts a pull request touches; anything else runs every job
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVERYTHING: ${{ inputs.everything }}
+          PULL_REQUEST: ${{ github.event.pull_request.number }}
+        run: |
+          core=true plugin=true vscode=true
+          # A list that cannot be read, or is empty, leaves every job on.
+          if [ "$EVERYTHING" != true ] && [ -n "$PULL_REQUEST" ] &&
+            files=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST/files" --paginate --jq '.[] | .filename, (.previous_filename // empty)') &&
+            [ -n "$files" ]; then
+            echo "$files"
+            # The build itself and these workflows are part of every job.
+            build='^(gradle/|gradlew|settings\.gradle\.kts$|\.github/)'
+            touches() { grep -Eq "$build|$1" <<<"$files" && echo true || echo false; }
+            core=$(touches '^intellij/core/')
+            # The plugin shows the What's New page kept with the extension's media.
+            plugin=$(touches '^(intellij/|vscode/media/whats-new/)')
+            vscode=$(touches '^vscode/')
+          fi
+          echo "core=$core, plugin=$plugin, vscode=$vscode"
+          { echo "core=$core"; echo "plugin=$plugin"; echo "vscode=$vscode"; } >>"$GITHUB_OUTPUT"
+
   core:
     name: Plugin core tests
+    needs: changes
+    if: needs.changes.outputs.core == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -36,18 +82,35 @@ jobs:
 
   plugin:
     name: IntelliJ plugin, built and verified
+    needs: changes
+    if: needs.changes.outputs.plugin == 'true'
     runs-on: ubuntu-latest
     steps:
-      - name: Room for three IDEs
-        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
       - uses: actions/checkout@v7
+      - name: Start fetching the three IDEs
+        run: |
+          IDES=$RUNNER_TEMP/ides
+          echo "IDES=$IDES" >>"$GITHUB_ENV"
+          # Unpacked they take some 12 GB; the runner has several times that free.
+          df -h / | tail -1
+          mkdir -p "$IDES"
+          # The one the build waits for first; the Verifier's two, wanted only after the build, a little later.
+          fetch() { nohup bash -c 'sleep "$1"; exec .github/scripts/fetch-ide.sh "$2" "$3"' - "$1" "$2" "$IDES/$2" >"$IDES/$2.log" 2>&1 & }
+          fetch 0 "$IDEA_VERSION"
+          for version in $(printf '%s\n' "$VERIFY_OLDEST" "$VERIFY_NEWEST" | sort -u | grep -vxF "$IDEA_VERSION"); do
+            fetch 15 "$version"
+          done
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@v6
+      - name: The core compiled, and Gradle warm, by the time IntelliJ IDEA ${{ env.IDEA_VERSION }} has arrived
+        run: |
+          ./gradlew :intellij:core:jar
+          .github/scripts/fetch-ide.sh --wait "$IDES/$IDEA_VERSION"
       - name: Build the plugin against IntelliJ IDEA ${{ env.IDEA_VERSION }}
-        run: ./gradlew :intellij:buildPlugin -PideaVersion=$IDEA_VERSION
+        run: ./gradlew :intellij:buildPlugin -PideaPath="$IDES/$IDEA_VERSION"
       - name: The zip is the plugin, all in its duo-watchdog folder
         run: |
           version=$(sed -n 's/^version = "\(.*\)"$/\1/p' intellij/build.gradle.kts)
@@ -57,8 +120,16 @@ jobs:
           grep -q " duo-watchdog/lib/duo-watchdog-$version.jar$" <<<"$listing"
           outside=$(awk 'NR > 3 && $4 != "" && $4 !~ /^duo-watchdog\// && $4 !~ /^-+$/ { print $4 }' <<<"$listing")
           if [ -n "$outside" ]; then echo "Outside the duo-watchdog folder: $outside"; exit 1; fi
+      - name: IntelliJ IDEA ${{ env.VERIFY_OLDEST }} and ${{ env.VERIFY_NEWEST }} have arrived
+        run: |
+          .github/scripts/fetch-ide.sh --wait "$IDES/$VERIFY_OLDEST" "$IDES/$VERIFY_NEWEST"
+          df -h / | tail -1
+      # Offline: against the two IDEs as they are. Otherwise it downloads 1.3 GB of plugins that the newest IDE's
+      # own plugins could use, which this plugin does not, and takes two minutes more to the same verdict.
       - name: Plugin Verifier, on the oldest and the newest IntelliJ IDEA
-        run: ./gradlew :intellij:verifyPlugin -PideaVersion=$IDEA_VERSION
+        run: |
+          ./gradlew :intellij:verifyPlugin -PideaPath="$IDES/$IDEA_VERSION" \
+            -PverifyIdePaths="$IDES/$VERIFY_OLDEST,$IDES/$VERIFY_NEWEST" -PverifyOffline
       - name: Keep the Verifier's reports
         if: always()
         uses: actions/upload-artifact@v7
@@ -74,6 +145,8 @@ jobs:
 
   vscode:
     name: VS Code extension, tested in VS Code
+    needs: changes
+    if: needs.changes.outputs.vscode == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
