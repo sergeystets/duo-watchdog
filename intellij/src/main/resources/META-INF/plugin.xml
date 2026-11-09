@@ -1,16 +1,63 @@
-<idea-plugin>
+<!-- url: the "Plugin homepage" link on the plugin's page in Settings | Plugins. -->
+<idea-plugin url="https://github.com/sergeystets/duo-watchdog">
     <id>local.duo-watchdog</id>
     <name>Duo Watchdog</name>
-    <vendor>local</vendor>
+    <vendor url="https://github.com/sergeystets/duo-watchdog">Sergii Stets</vendor>
+    <!-- The plugin's page in Settings | Plugins. The IDE draws it with Swing's HTML: paragraphs, lists, bold, links
+         and images with a width, nothing fancier. -->
     <description><![CDATA[
-    Watches your own GitLab Credits (GitLab Duo) for the current billing period, for one GitLab account or several:
-    used, left, the month-end forecast, usage by feature and by day.
-    Set a limit and the percents to be warned at; Duo Watchdog alerts once a period
-    when the forecast passes the limit, at each threshold, at the limit, and when GitLab blocks you.
+    <p><b>Keep an eye on your GitLab Duo credits without leaving the IDE.</b></p>
+    <p>Duo Watchdog tracks <b>your own</b> GitLab Credits for the current billing period, forecasts where the month
+    will end, and warns you before you hit your limit.</p>
+    <p><img src="https://raw.githubusercontent.com/sergeystets/duo-watchdog/main/docs/images/dashboard-light.png" alt="The Duo Watchdog dashboard" width="420"></p>
+
+    <h3>What you get</h3>
+    <ul>
+      <li><b>A meter in the status bar</b>: credits used out of your limit, amber from your first threshold, red when
+          GitLab blocks you. A click opens the dashboard.</li>
+      <li><b>A dashboard</b>: used, left, the month-end forecast, your pace and what you spent today, with usage by
+          day and by feature.</li>
+      <li><b>Alerts, once a billing period</b>: when the forecast passes your limit, at each threshold you set
+          (80% and 95% unless you change them), at the limit, and when GitLab blocks you.</li>
+      <li><b>Statistics</b>: the last 3, 6 or 12 months, by feature.</li>
+      <li><b>Sessions</b>: your Duo Agent Platform sessions and an estimate of what each cost, with the Duo CLI
+          session in progress live in the status bar.</li>
+      <li><b>Duo CLI quick actions</b>: New Session, Doctor and quick commands of your own, in a terminal in the
+          project.</li>
+      <li><b>Several accounts</b>: one token for each, on gitlab.com or a GitLab of your own, rotated a week before
+          it expires.</li>
+      <li><b>Updates from the IDE</b>: an <b>Update</b> button on this page when a newer release is out, and
+          <i>Tools | Duo Watchdog: Check for Updates…</i></li>
+    </ul>
+
+    <h3>Getting started</h3>
+    <ol>
+      <li>Open <i>Settings | Tools | Duo Watchdog</i> and click <b>+</b> (<i>Add Token…</i>).</li>
+      <li>Paste a personal access token with the scopes <code>read_api</code> and <code>ai_features</code>; GitLab
+          says whose it is.</li>
+      <li>Set your limit. The <b>Duo Watchdog</b> tool window on the right shows the rest.</li>
+    </ol>
+    <p>Needs GitLab 19.4 or later, and membership of the group that owns the GitLab Duo subscription; the Owner role
+    is not required. The token is kept in the IDE's password store.</p>
+
+    <h3>Links</h3>
+    <p><a href="https://github.com/sergeystets/duo-watchdog#readme">Documentation</a> &nbsp;·&nbsp;
+       <a href="https://github.com/sergeystets/duo-watchdog">Source code</a> &nbsp;·&nbsp;
+       <a href="https://github.com/sergeystets/duo-watchdog/issues">Issue tracker</a> &nbsp;·&nbsp;
+       <a href="https://github.com/sergeystets/duo-watchdog/releases">Releases</a> &nbsp;·&nbsp;
+       <a href="https://github.com/sergeystets/duo-watchdog/blob/main/LICENSE">License (MIT)</a></p>
     ]]></description>
 
     <change-notes><![CDATA[
-    <h3>What's new in 0.7.1</h3>
+    <h3>What's new in 0.7.2</h3>
+    <ul>
+      <li>The IDE itself offers each new release: <b>Update</b> on Duo Watchdog's page in <i>Settings | Plugins</i>,
+          with the versions (<code>0.7.2 → 0.7.3</code>), as for a plugin from the Marketplace. Duo Watchdog adds
+          its releases on GitHub to the IDE's plugin repositories; turning <i>Check for Duo Watchdog updates</i>
+          off in its settings takes them out again.</li>
+      <li>This page says what the plugin does and how to start, with a <b>Plugin homepage</b> link.</li>
+    </ul>
+    <h3>0.7.1</h3>
     <ul>
       <li>The installers download the ready-made plugin of the latest release from GitHub and check it against the
           release; nothing is built.</li>

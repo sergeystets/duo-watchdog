@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.7.2
+
+- **IntelliJ IDEA offers the update itself**: a newer release shows **Update** on Duo Watchdog's page in
+  *Settings → Plugins*, with the versions (`0.7.2 → 0.7.3`), as for a plugin from the Marketplace. Each release
+  carries an `updatePlugins.xml` for it, and the plugin adds its releases on GitHub to the IDE's plugin repositories
+  (*Settings → Plugins → ⚙ → Manage Plugin Repositories…*); turning **Check for Duo Watchdog updates once a day**
+  off takes them out again. Duo Watchdog's own notice and **Update to x.y.z** stay.
+- The plugin's page in *Settings → Plugins* says what it does and how to start, with a picture of the dashboard and
+  a **Plugin homepage** link.
+- No changes to the VS Code extension.
+
 ## 0.7.1
 
 - **Installers install the release**: `install.sh`, `install.ps1` and `install.bat` download the ready-made plugin and
