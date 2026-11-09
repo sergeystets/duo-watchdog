@@ -5,9 +5,9 @@
 #   install.bat -FromSource    build this clone instead: the plugin with gradlew installPlugin (JDK 17+), the
 #                              extension packaged from vscode\ (Node.js 20+)
 #
-# Without a clone, in PowerShell:
-#   iwr -useb https://raw.githubusercontent.com/sergeystets/duo-watchdog/main/install.ps1 -OutFile $env:TEMP\dw.ps1
-#   powershell -NoProfile -ExecutionPolicy Bypass -File $env:TEMP\dw.ps1
+# Without a clone this file runs on its own; README.md has the command that fetches and starts it. That command
+# is not repeated here: antivirus software takes a script with a download-and-run line in it for a dropper and
+# blocks the whole file.
 # Runs on the Windows PowerShell 5.1 that Windows 10 and 11 ship, with nothing else needed for the release.
 param([string]$Folder, [switch]$FromSource)
 
