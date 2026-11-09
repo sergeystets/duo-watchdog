@@ -24,6 +24,7 @@ import com.intellij.openapi.progress.Task;
 import com.intellij.openapi.project.DumbAwareAction;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.startup.ProjectActivity;
+import com.intellij.openapi.updateSettings.impl.UpdateSettings;
 import com.intellij.util.concurrency.AppExecutorUtil;
 import com.intellij.util.io.HttpRequests;
 import duowatchdog.core.Updates;
@@ -67,6 +68,27 @@ public final class Updater implements Disposable {
     private volatile String staged;
     private ScheduledFuture<?> schedule;
 
+    /**
+     * The latest release's list of plugins for the IDE: one entry, this plugin, with its version and its zip. With
+     * it among the IDE's plugin repositories, the IDE offers a newer release itself, with Update on the plugin's
+     * page in Settings | Plugins.
+     */
+    static final String IDE_REPOSITORY = Updates.RELEASES + "/latest/download/updatePlugins.xml";
+
+    /** Puts the releases among the IDE's plugin repositories, or takes them out when updates are turned off. */
+    static void listWithIde(boolean on) {
+        try {
+            List<String> hosts = UpdateSettings.getInstance().getStoredPluginHosts();
+            if (!on) {
+                hosts.remove(IDE_REPOSITORY);
+            } else if (!hosts.contains(IDE_REPOSITORY)) {
+                hosts.add(IDE_REPOSITORY);
+            }
+        } catch (RuntimeException | LinkageError e) {
+            // An IDE that keeps its repositories otherwise: Duo Watchdog's own notice and Update still work.
+        }
+    }
+
     static Updater getInstance() {
         return ApplicationManager.getApplication().getService(Updater.class);
     }
@@ -92,6 +114,7 @@ public final class Updater implements Disposable {
     /** Asks now, once the IDE has settled, and then looks every hour whether a day has passed. */
     synchronized void start() {
         if (schedule == null) {
+            listWithIde(CreditsSettings.getInstance().getState().checkForUpdates);
             schedule = AppExecutorUtil.getAppScheduledExecutorService()
                     .scheduleWithFixedDelay(this::checkIfDue, FIRST_SECONDS, LOOK_SECONDS, TimeUnit.SECONDS);
         }

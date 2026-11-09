@@ -116,6 +116,24 @@ jobs:
       - name: Release ${{ github.ref_name }} with the files the checks tested
         run: |
           ls -la dist
+          # What IntelliJ IDEA reads at releases/latest/download/updatePlugins.xml to offer this release itself,
+          # with Update on the plugin's page: the plugin, its version, its zip, and the oldest IDE it installs on,
+          # as the plugin's own plugin.xml in the zip says it.
+          unzip -p "dist/duo-watchdog-$VERSION.zip" "duo-watchdog/lib/duo-watchdog-$VERSION.jar" >dist/plugin.jar
+          since=$(unzip -p dist/plugin.jar META-INF/plugin.xml | sed -n 's/.*since-build="\([^"]*\)".*/\1/p' | sed -n 1p)
+          [ -n "$since" ] || { echo "::error::No since-build in the plugin's plugin.xml"; exit 1; }
+          cat >dist/updatePlugins.xml <<XML
+          <?xml version="1.0" encoding="UTF-8"?>
+          <plugins>
+            <plugin id="local.duo-watchdog" version="$VERSION"
+                    url="https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/duo-watchdog-$VERSION.zip">
+              <idea-version since-build="$since"/>
+              <name>Duo Watchdog</name>
+            </plugin>
+          </plugins>
+          XML
+          cat dist/updatePlugins.xml
           gh release create "$GITHUB_REF_NAME" "dist/duo-watchdog-$VERSION.zip" "dist/duo-watchdog-$VERSION.vsix" \
+            dist/updatePlugins.xml \
             --repo "$GITHUB_REPOSITORY" --verify-tag --latest \
             --title "Duo Watchdog $VERSION" --notes-file dist/notes.md

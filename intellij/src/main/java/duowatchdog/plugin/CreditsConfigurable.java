@@ -1146,6 +1146,7 @@ public final class CreditsConfigurable implements Configurable {
         settings.setQuickCommands(quickCommands.getItems());
         s.rotateTokens = rotateTokens.isSelected();
         s.checkForUpdates = checkForUpdates.isSelected();
+        Updater.listWithIde(s.checkForUpdates);
 
         Map<String, String> tokens = new HashMap<>(pendingTokens);
         Set<String> gone = new HashSet<>(removed);
