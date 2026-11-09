@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.7.1
+
+- **Installers install the release**: `install.sh`, `install.ps1` and `install.bat` download the ready-made plugin and
+  extension of the latest release from GitHub and check them against it, so nothing is built and no JDK or Node.js
+  is needed. They also run without a clone, in one line (see the README's Installation); `--from-source` builds
+  the clone as before.
+- Every release is now built and checked by GitHub Actions before it is published: the tests, JetBrains' Plugin
+  Verifier on the oldest and the newest IntelliJ IDEA, the extension in VS Code, and the installers on Linux, macOS
+  and Windows.
+- A build on Windows keeps `·` as `·`: the Java sources are compiled as UTF-8.
+
 ## 0.7.0
 
 - **Updates from the editor**: Duo Watchdog asks GitHub for its latest release a little after VS Code starts and then
