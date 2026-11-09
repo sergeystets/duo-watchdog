@@ -26,7 +26,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Usage's second row: "duo ▾  Ask before tools ▾  ▷ New Session  Doctor  AB Testing  +  ✎", the Duo CLI started in a new
+ * Usage's second row: "duo ▾  Manual ▾  ▷ New Session  Doctor  AB Testing  +  ✎", the Duo CLI started in a new
  * terminal ({@link CliLauncher}), then the quick commands of your own, the button that adds one and the one that edits
  * them in Settings. The two drop-downs are kept in the settings.
  */
@@ -78,7 +78,7 @@ final class CliActions {
         }
     }
 
-    /** "Ask before tools ▾": whether the CLI asks before each tool, or runs them all without asking. */
+    /** "Manual ▾" or "Auto ▾": whether the CLI asks before each tool, or runs them all without asking. */
     private static final class ModeChoice extends ComboBoxAction implements DumbAware {
 
         @Override

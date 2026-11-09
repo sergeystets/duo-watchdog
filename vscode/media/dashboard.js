@@ -8,6 +8,7 @@
     const accountRow = document.getElementById('account-row');
     const accountSelect = document.getElementById('account');
     const tabs = document.getElementById('tabs');
+    const updateButton = document.getElementById('update');
     let model = null;
     let hovered = -1;
     /** The month and the segment under the pointer in the monthly chart: { bar, segment } or null. */
@@ -117,9 +118,19 @@
         }
     }
 
+    /** "Update to 0.7.0" once a newer release is known, then "Reload to Update". */
+    function renderUpdate() {
+        updateButton.hidden = !model.update;
+        if (model.update) {
+            updateButton.textContent = model.update.label;
+            updateButton.title = model.update.title;
+        }
+    }
+
     function render() {
         byline.textContent = model.byline;
         byline.title = model.byline;
+        renderUpdate();
         renderAccounts();
         renderTabs();
         const searching = document.activeElement && document.activeElement.id === 'session-search';
@@ -261,19 +272,28 @@
         page.append(el('p', 'note secondary', r.note));
     }
 
-    /** A bar a feature, against the costliest. */
-    function featureRows(features) {
-        const rows = el('div', 'features');
+    /**
+     * A bar a feature, against the costliest. Paths, such as projects, take a line of their own over their bar, so
+     * that the project's own name, at the end, shows.
+     */
+    function featureRows(features, paths) {
+        const rows = el('div', paths ? 'features paths' : 'features');
         for (const f of features) {
-            const name = el('div', 'name', f.title);
-            name.title = f.title;
+            // A path is cut at its start (right to left); the marks keep its own characters left to right.
+            const name = el('div', 'name', paths ? '\u200e' + f.title + '\u200e' : f.title);
+            name.title = f.title + ': ' + f.value;
             const track = el('div', 'track');
             if (f.fraction != null && f.fraction > 0) {
                 const fill = el('div', 'fill');
                 fill.style.width = (f.fraction * 100) + '%';
                 track.append(fill);
             }
-            rows.append(name, track, el('div', 'value', f.value));
+            const value = el('div', 'value', f.value);
+            if (paths) {
+                rows.append(name, value, track);
+            } else {
+                rows.append(name, track, value);
+            }
         }
         return rows;
     }
@@ -529,7 +549,7 @@
 
         if (m.byProject.length > 0) {
             const section = el('section');
-            section.append(el('h2', null, 'By project'), featureRows(m.byProject));
+            section.append(el('h2', null, 'By project'), featureRows(m.byProject, true));
             page.append(section);
         }
 

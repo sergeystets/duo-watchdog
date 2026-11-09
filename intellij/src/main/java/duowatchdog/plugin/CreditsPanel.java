@@ -73,6 +73,8 @@ final class CreditsPanel extends SimpleToolWindowPanel implements Disposable {
         actions.add(new OpenSettingsAction());
         actions.addSeparator();
         actions.add(new AccountSwitcher(project));
+        // "Update to 0.7.0", shown only once a newer release is known.
+        actions.add(new Updater.ToolbarAction());
         toolbar = ActionManager.getInstance().createActionToolbar("DuoWatchdog", actions, true);
         toolbar.setTargetComponent(this);
         byline.setFont(JBFont.small());

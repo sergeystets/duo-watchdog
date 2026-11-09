@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.7.0
+
+- **Updates from the editor**: Duo Watchdog asks GitHub for its latest release a little after VS Code starts and then
+  once a day, and says when a newer one is out. **Update** downloads its `.vsix` from GitHub, checks its size and
+  SHA-256 against the release, and installs it; **Reload Window** loads it. **Release Notes** opens the release, **Skip
+  This Version** says nothing more about that one. The dashboard's toolbar shows **Update to x.y.z** while one is
+  known. New commands: **Duo Watchdog: Check for Updates** and **Duo Watchdog: Install the Update**. New setting:
+  `duoWatchdog.checkForUpdates` (on).
+- The Duo CLI's tool approval reads **Manual** or **Auto** (`--dangerously-skip-permissions`).
+- Sessions' **By project** puts each project on a line of its own over its bar, cut from the front so its own name
+  shows, with the whole path on hover.
+
 ## 0.6.0
 
 - **Duo CLI quick actions on Usage**: two drop-downs, `duo` or `glab duo cli`, and **Ask before tools** or

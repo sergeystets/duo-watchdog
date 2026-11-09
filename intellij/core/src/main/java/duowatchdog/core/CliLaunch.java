@@ -56,8 +56,8 @@ public final class CliLaunch {
 
     /** Whether the CLI asks before it runs a tool. */
     public enum Mode {
-        ASK("ask", "Ask before tools", "The CLI asks before it runs each tool"),
-        AUTO_APPROVE("autoApprove", "Auto-approve tools", "With " + SKIP_PERMISSIONS + ": the CLI runs every tool without asking");
+        ASK("ask", "Manual", "Manual: the CLI asks before it runs each tool"),
+        AUTO_APPROVE("autoApprove", "Auto", "Auto, with " + SKIP_PERMISSIONS + ": the CLI runs every tool without asking");
 
         private final String id;
         private final String label;

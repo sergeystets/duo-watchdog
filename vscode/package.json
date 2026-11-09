@@ -2,7 +2,7 @@
   "name": "duo-watchdog",
   "displayName": "Duo Watchdog",
   "description": "Watches your own GitLab Credits (GitLab Duo) for each of your GitLab accounts: used, left, the month-end forecast, usage by day and by feature, a year of statistics, with alerts before you hit your limit.",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "publisher": "local",
   "license": "MIT",
   "repository": {
@@ -100,6 +100,17 @@
         "category": "Duo Watchdog"
       },
       {
+        "command": "duoWatchdog.checkForUpdates",
+        "title": "Check for Updates",
+        "category": "Duo Watchdog"
+      },
+      {
+        "command": "duoWatchdog.installUpdate",
+        "title": "Install the Update",
+        "category": "Duo Watchdog",
+        "icon": "$(cloud-download)"
+      },
+      {
         "command": "duoWatchdog.copyDiagnostics",
         "title": "Copy Diagnostics",
         "category": "Duo Watchdog"
@@ -142,6 +153,10 @@
         {
           "command": "duoWatchdog.setToken",
           "when": "false"
+        },
+        {
+          "command": "duoWatchdog.installUpdate",
+          "when": "duoWatchdog.updateAvailable"
         }
       ]
     },
@@ -275,8 +290,8 @@
             "autoApprove"
           ],
           "enumDescriptions": [
-            "The CLI asks before it runs each tool",
-            "The CLI runs every tool without asking: --dangerously-skip-permissions"
+            "Manual: the CLI asks before it runs each tool",
+            "Auto: the CLI runs every tool without asking (--dangerously-skip-permissions)"
           ],
           "scope": "application",
           "order": 10,
@@ -309,6 +324,13 @@
           "scope": "application",
           "order": 11,
           "markdownDescription": "Quick commands of your own on Usage: a button each that starts the Duo CLI in a new terminal, then types its command at the CLI's prompt, such as `{ \"name\": \"AB Testing\", \"command\": \"/ab-testing\" }`. **+ Add command** on Usage builds one for you; **Edit…** changes, moves or removes them."
+        },
+        "duoWatchdog.checkForUpdates": {
+          "type": "boolean",
+          "default": true,
+          "scope": "application",
+          "order": 12,
+          "markdownDescription": "Ask GitHub for the latest release of Duo Watchdog ([github.com/sergeystets/duo-watchdog](https://github.com/sergeystets/duo-watchdog/releases)) when VS Code starts and then once a day; nothing about you or your accounts is sent. A newer one is said in a notice and on the dashboard's toolbar: **Update** downloads and installs it, and a reload loads it. **Duo Watchdog: Check for Updates** asks now, whatever this says."
         }
       }
     }

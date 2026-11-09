@@ -52,6 +52,7 @@ import duowatchdog.core.GitLabException;
 import duowatchdog.core.LiveSession;
 import duowatchdog.core.ModelCredits;
 import duowatchdog.core.Snapshot;
+import duowatchdog.core.Updates;
 import duowatchdog.plugin.CreditsSettings.Account;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nls;
@@ -78,6 +79,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -164,6 +166,7 @@ public final class CreditsConfigurable implements Configurable {
     private final CollectionListModel<CliLaunch.QuickCommand> quickCommands = new CollectionListModel<>();
     private JPanel quickCommandsList;
     private JBCheckBox rotateTokens;
+    private JBCheckBox checkForUpdates;
 
     /** What {@link #open} asked for before the page was built. */
     private String openId;
@@ -264,6 +267,7 @@ public final class CreditsConfigurable implements Configurable {
         alertPercents = new JBTextField(8);
         alertOnForecast = new JBCheckBox("Alert when the month-end forecast passes the limit");
         rotateTokens = new JBCheckBox("Rotate tokens a week before they expire");
+        checkForUpdates = new JBCheckBox("Check for Duo Watchdog updates once a day");
         // The token box says when the shown account's token rotates, so it follows the box before Apply.
         rotateTokens.addItemListener(e -> renderDetails());
         refreshMinutes = new JBIntSpinner(15, 1, 1440);
@@ -331,6 +335,14 @@ public final class CreditsConfigurable implements Configurable {
                         + "(30 to 365 days) and revokes the old one; the new one is saved and handed to glab. Needs the "
                         + "api or self_rotate scope. If you use the token anywhere else, the notice after a rotation "
                         + "copies the new one."))
+                .addComponent(new TitledSeparator("Updates"), JBUI.scale(16))
+                .addComponent(checkForUpdates)
+                .addComponent(hint("Asks GitHub for the latest release of Duo Watchdog (" + Updates.RELEASES + "), "
+                        + "when the IDE starts and then once a day; nothing about you or your accounts is sent. A newer "
+                        + "one is said in a notice and on the tool window's toolbar: Update downloads it and the IDE "
+                        + "installs it when it restarts. This is Duo Watchdog "
+                        + Objects.requireNonNullElse(Updater.currentVersion(), "?") + "; Tools | Duo Watchdog: "
+                        + "Check for Updates asks now."))
                 .addComponentFillVertically(new JPanel(), 0)
                 .getPanel();
 
@@ -1072,7 +1084,8 @@ public final class CreditsConfigurable implements Configurable {
                 || roundTripLimit.getNumber() != s.roundTripLimit
                 || !ModelCredits.assumed(s.groupDefaultModel).equals(groupDefaultModel.getSelectedItem())
                 || !quickCommands.getItems().equals(CreditsSettings.getInstance().quickCommands())
-                || rotateTokens.isSelected() != s.rotateTokens;
+                || rotateTokens.isSelected() != s.rotateTokens
+                || checkForUpdates.isSelected() != s.checkForUpdates;
     }
 
     @Override
@@ -1132,6 +1145,7 @@ public final class CreditsConfigurable implements Configurable {
         s.groupDefaultModel = ModelCredits.assumed((String) groupDefaultModel.getSelectedItem());
         settings.setQuickCommands(quickCommands.getItems());
         s.rotateTokens = rotateTokens.isSelected();
+        s.checkForUpdates = checkForUpdates.isSelected();
 
         Map<String, String> tokens = new HashMap<>(pendingTokens);
         Set<String> gone = new HashSet<>(removed);
@@ -1173,6 +1187,7 @@ public final class CreditsConfigurable implements Configurable {
         groupDefaultModel.setSelectedItem(ModelCredits.assumed(s.groupDefaultModel));
         quickCommands.replaceAll(CreditsSettings.getInstance().quickCommands());
         rotateTokens.setSelected(s.rotateTokens);
+        checkForUpdates.setSelected(s.checkForUpdates);
         shown = null;
         refreshRows();
         Account selected = CreditsService.getInstance().selected();

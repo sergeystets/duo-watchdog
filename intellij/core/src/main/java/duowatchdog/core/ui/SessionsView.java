@@ -102,7 +102,7 @@ public final class SessionsView extends Page {
         if (!projects.isEmpty()) {
             JPanel byProject = column();
             byProject.add(heading("By project", "≈ credits"));
-            FeatureBars bars = new FeatureBars(theme);
+            FeatureBars bars = new FeatureBars(theme, true);
             bars.show(projects);
             byProject.add(bars);
             place(byProject, 16);

@@ -29,7 +29,7 @@ export const MAX_QUICK_COMMANDS = 12;
 const MAX_NAME = 40;
 const MAX_COMMAND = 200;
 
-const MODE_LABELS: Record<CliMode, string> = { ask: 'Ask before tools', autoApprove: 'Auto-approve tools' };
+const MODE_LABELS: Record<CliMode, string> = { ask: 'Manual', autoApprove: 'Auto' };
 
 export function cliOrDefault(value: unknown): Cli {
     return CLIS.includes(value as Cli) ? value as Cli : 'duo';
@@ -141,8 +141,8 @@ export function quickView(cli: Cli, mode: CliMode, commands: readonly QuickComma
         clis: CLIS.map(value => ({ value, label: value })),
         modes: CLI_MODES.map(value => ({
             value, label: MODE_LABELS[value],
-            title: value === 'ask' ? 'The CLI asks before it runs each tool'
-                : 'With ' + SKIP_PERMISSIONS + ': the CLI runs every tool without asking',
+            title: value === 'ask' ? 'Manual: the CLI asks before it runs each tool'
+                : 'Auto, with ' + SKIP_PERMISSIONS + ': the CLI runs every tool without asking',
         })),
         buttons: [
             { kind: 'session', label: 'New session', title: launchTitle(cli, mode, null) },
