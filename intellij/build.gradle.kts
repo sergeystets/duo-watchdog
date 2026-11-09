@@ -1,3 +1,5 @@
+import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
+
 plugins {
     java
     id("org.jetbrains.intellij.platform") version "2.19.0"
@@ -35,13 +37,18 @@ fun findInstalledIdea(): String? {
         ?.path
 }
 
-// Compile against the IDEA already installed, never a downloaded one: -PideaPath=... (or IDEA_HOME) names it,
-// otherwise the usual places are searched.
+// Compile against the IDEA already installed: -PideaPath=... (or IDEA_HOME) names it, otherwise the usual places are
+// searched. CI, which has none, names a version to download instead: -PideaVersion=2025.3.1.
+val downloadedIdea: String? = providers.gradleProperty("ideaVersion").orNull
 val requestedIdea: String? = providers.gradleProperty("ideaPath").orElse(providers.environmentVariable("IDEA_HOME")).orNull
-val installedIdea: String? = if (requestedIdea != null) requestedIdea.takeIf { isIdea(File(it)) } else findInstalledIdea()
+val installedIdea: String? = when {
+    downloadedIdea != null -> null
+    requestedIdea != null -> requestedIdea.takeIf { isIdea(File(it)) }
+    else -> findInstalledIdea()
+}
 
 // Without an IDEA only this module's tasks fail, so the rest of the build (the VS Code module) still runs.
-if (installedIdea == null) {
+if (installedIdea == null && downloadedIdea == null) {
     val why = if (requestedIdea != null) {
         "Duo Watchdog: no IntelliJ IDEA at $requestedIdea (no product-info.json there)."
     } else {
@@ -81,9 +88,14 @@ fun pluginsDir(idea: String): File {
     }
 }
 
+/** The branch of a version, 253 for 2025.3.1, or null when it is not one. */
+fun versionBranch(version: String): Int? =
+    Regex("^20(\\d\\d)\\.(\\d)").find(version)?.let { it.groupValues[1].toInt() * 10 + it.groupValues[2].toInt() }
+
 // IDEs from 2026.2 (branch 262) on are compiled for Java 25, which a JDK 21 javac cannot read, so they are
 // compiled against with JDK 25. The classes stay Java 21 either way, so the plugin still installs on 2024.3.
-val compileJdk = if ((installedIdea?.let(::ideaBranch) ?: 0) >= 262) 25 else 21
+val compileBranch = downloadedIdea?.let(::versionBranch) ?: installedIdea?.let(::ideaBranch) ?: 0
+val compileJdk = if (compileBranch >= 262) 25 else 21
 
 java {
     toolchain {
@@ -107,10 +119,15 @@ tasks.processResources {
 dependencies {
     implementation(project(":intellij:core"))
     intellijPlatform {
-        if (installedIdea != null) {
+        if (downloadedIdea != null) {
+            logger.lifecycle("Duo Watchdog: compiling against IntelliJ IDEA $downloadedIdea, downloaded, with JDK $compileJdk")
+            intellijIdea(downloadedIdea)
+        } else if (installedIdea != null) {
             logger.lifecycle("Duo Watchdog: compiling against the installed IDE at $installedIdea with JDK $compileJdk")
             local(installedIdea)
         }
+        // ./gradlew verifyPlugin checks the built plugin against the IDEs below with JetBrains' Plugin Verifier.
+        pluginVerifier()
         // Usage's Duo CLI quick actions open a terminal tab; an optional dependency in plugin.xml.
         bundledPlugin("org.jetbrains.plugins.terminal")
     }
@@ -137,6 +154,15 @@ intellijPlatform {
         }
     }
     buildSearchableOptions = false
+    // The oldest IntelliJ IDEA the plugin installs on (sinceBuild) and the newest released, checked by
+    // ./gradlew verifyPlugin: a call to anything either of them lacks fails it. CI runs it before every release.
+    // -PverifyOldest / -PverifyNewest name others.
+    pluginVerification {
+        ides {
+            create(IntelliJPlatformType.IntellijIdeaCommunity, providers.gradleProperty("verifyOldest").getOrElse("2024.3.7"))
+            create(IntelliJPlatformType.IntellijIdea, providers.gradleProperty("verifyNewest").getOrElse("2026.3"))
+        }
+    }
 }
 
 /** Unpacks the built plugin where Install Plugin from Disk would, replacing an older Duo Watchdog. */

@@ -429,8 +429,8 @@ release is known. *Tools → Duo Watchdog: Check for Updates…* (also in *Help*
 in VS Code ask at once and say what they found. Turn the daily check off with **Check for Duo Watchdog updates once a
 day** in Settings, or `duoWatchdog.checkForUpdates` in VS Code.
 
-A release is made with `./release.sh`, which builds both files and publishes them to GitHub as release `v<version>`;
-see [Publishing a release](#publishing-a-release).
+A release is made with `./release.sh`, and GitHub Actions publishes it only once every check passes;
+see [Checks and releases](#checks-and-releases).
 
 ## Requirements
 
@@ -881,9 +881,12 @@ duo-watchdog/
 │   ├── src/core/             Port of intellij/core: GraphQL client, period & forecast, alerts, texts
 │   ├── src/                  Extension layer: status bar, webview dashboard, settings, secret storage
 │   ├── src/test/             node:test tests mirroring the Java tests
+│   ├── smoke/                The packaged .vsix in a real VS Code (npm run smoke)
 │   └── media/                Dashboard script and styles, icons
 ├── docs/images/              Logo and screenshots for this README
-├── release.sh                Builds both and publishes them as GitHub release v<version>, which they update from
+├── .github/workflows/        CI: checks.yml (every check), ci.yml (pull requests, main), release.yml (tags v*)
+├── .github/scripts/          The installers' smoke tests, for CI
+├── release.sh                Tags the version; GitHub Actions checks it and publishes the release
 ├── install.sh                Interactive installer for macOS / Linux: the latest release, or --from-source
 └── install.bat               Interactive installer for Windows (runs install.ps1): the same, or -FromSource
 ```
@@ -902,22 +905,33 @@ The VS Code extension builds with npm (Node.js 20+), from the root through Gradl
 The IntelliJ module needs an installed IntelliJ IDEA; without one only its own tasks fail, so the VS Code tasks
 still run.
 
-### Publishing a release
+### Checks and releases
 
-The plugin and the extension offer GitHub's latest release as an update ([Updates](#updates)), so a version reaches
-everyone once it is a release with both files. With the version raised in `intellij/build.gradle.kts` and
-`vscode/package.json` (the same in both), its `## x.y.z` section in `vscode/CHANGELOG.md`, and the commit on `main` on
-GitHub:
+Every pull request and every push to `main` runs the same checks a release must pass
+([`.github/workflows/checks.yml`](.github/workflows/checks.yml)), on GitHub Actions:
+
+| Check | What it proves |
+|---|---|
+| **Plugin core tests** | The JUnit tests, with every dashboard state painted headless (kept as the `ui-previews` artifact) |
+| **IntelliJ plugin, built and verified** | The plugin builds against IntelliJ IDEA 2025.3.1, its zip is the plugin and nothing else, and JetBrains' **Plugin Verifier** finds nothing it calls missing in the oldest IntelliJ IDEA it installs on (2024.3.7) or the newest (2026.3). `./gradlew verifyPlugin` runs the same here. |
+| **VS Code extension, tested in VS Code** | The unit tests, then the packaged `.vsix` in a real VS Code, the oldest it supports (1.74) and the current stable: it activates, every command it declares is registered, the dashboard and What's New open (`npm run smoke`) |
+| **Installer on Linux, macOS, Windows** | `install.sh`, and `install.ps1` in Windows PowerShell 5.1, install the latest release into stand-in IntelliJ IDEAs and a stand-in VS Code, from a clone and on their own |
+
+**A release is published only when all of them pass.** With the version raised in `intellij/build.gradle.kts` and
+`vscode/package.json` (the same in both), its `## x.y.z` section in `vscode/CHANGELOG.md`, and the commit merged into
+`main`:
 
 ```bash
-./release.sh          # builds, shows what it will publish, and asks
+./release.sh          # shows what it will tag, and asks
 ./release.sh --yes    # without asking
 ```
 
-It runs the tests, builds `duo-watchdog-<version>.zip` and `duo-watchdog-<version>.vsix`, and creates release
-`v<version>` at that commit with both files and the changelog's section as its notes (`gh` signed in, the same JDK,
-IntelliJ IDEA and Node.js as a build). It stops if the tree has changes, the commit is not on `origin/main`, the
-versions differ, or the release exists.
+It tags the commit `v<version>` and pushes the tag; nothing is built on your machine. The tag starts
+[`.github/workflows/release.yml`](.github/workflows/release.yml), which checks that the tag, both versions and the
+changelog agree and that the commit is on `main`, runs every check above, and only then publishes release `v<version>`
+with the very zip and `.vsix` the checks built and tested, the changelog's section as its notes. Both editors offer it
+as an update from then on. If a check fails nothing is published: fix it, delete the tag
+(`git push --delete origin v<version> && git tag -d v<version>`), and run `./release.sh` again.
 
 ## Troubleshooting
 
