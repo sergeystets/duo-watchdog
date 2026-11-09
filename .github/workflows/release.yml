@@ -1,6 +1,9 @@
 # A release, from a tag v<version> pushed by ./release.sh: published only when every check passes (checks.yml), with
 # the very plugin zip and .vsix those checks built and tested. The plugin and the extension offer the latest release
 # as an update, so a failed check here keeps a broken build from reaching anyone.
+#
+# A commit that CI has already checked in full on main (ci.yml, on the push) is not checked again: its files from
+# that run are published, in under a minute. Any other commit goes through every check here first.
 name: Release
 
 on:
@@ -17,8 +20,12 @@ jobs:
   prepare:
     name: The tag is a version ready to release
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
     outputs:
       version: ${{ steps.version.outputs.version }}
+      checked: ${{ steps.checked.outputs.run }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -48,17 +55,44 @@ jobs:
         with:
           name: release-notes
           path: notes.md
+      - id: checked
+        name: The CI run that passed every check for this commit on main, if there is one with both files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Only a push to main counts: it runs every job, where a pull request may skip some. No such run, or one
+          # whose files have expired, and the checks run here instead.
+          run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$GITHUB_SHA&branch=main&event=push&status=success&per_page=1" \
+            --jq '.workflow_runs[0].id // empty') || run=
+          if [ -n "$run" ]; then
+            files=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run/artifacts" --paginate \
+              --jq '.artifacts[] | select(.expired | not) | .name') || files=
+            if grep -qx plugin <<<"$files" && grep -qx vsix <<<"$files"; then
+              echo "Checked already: https://github.com/$GITHUB_REPOSITORY/actions/runs/$run"
+            else
+              echo "Run $run has no plugin and vsix to publish"
+              run=
+            fi
+          fi
+          [ -n "$run" ] || echo "No finished CI run for $GITHUB_SHA on main: checking it here"
+          echo "run=$run" >>"$GITHUB_OUTPUT"
 
   checks:
     needs: prepare
+    if: needs.prepare.outputs.checked == ''
     uses: ./.github/workflows/checks.yml
 
   publish:
     name: Publish the release
     needs: [prepare, checks]
+    # After the checks here passed, or without them when CI has passed them for this commit already.
+    if: >-
+      ${{ !cancelled() && needs.prepare.result == 'success' &&
+      (needs.checks.result == 'success' || (needs.checks.result == 'skipped' && needs.prepare.outputs.checked != '')) }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: read
     env:
       VERSION: ${{ needs.prepare.outputs.version }}
       GH_TOKEN: ${{ github.token }}
@@ -67,10 +101,14 @@ jobs:
         with:
           name: plugin
           path: dist
+          run-id: ${{ needs.prepare.outputs.checked || github.run_id }}
+          github-token: ${{ github.token }}
       - uses: actions/download-artifact@v8
         with:
           name: vsix
           path: dist
+          run-id: ${{ needs.prepare.outputs.checked || github.run_id }}
+          github-token: ${{ github.token }}
       - uses: actions/download-artifact@v8
         with:
           name: release-notes
