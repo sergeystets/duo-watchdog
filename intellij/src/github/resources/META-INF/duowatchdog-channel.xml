@@ -1,0 +1,19 @@
+<!-- The build for the releases on GitHub: Duo Watchdog's own updates (Updater). plugin.xml includes this file; the
+     build for JetBrains Marketplace (-Pmarketplace) has an empty one, src/marketplace. -->
+<idea-plugin>
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- Asks GitHub for a newer Duo Watchdog once an IDE run and then once a day, unless turned off. -->
+        <postStartupActivity implementation="duowatchdog.plugin.Updater$Activity"/>
+    </extensions>
+
+    <actions>
+        <action id="duowatchdog.CheckForUpdates"
+                class="duowatchdog.plugin.Updater$CheckAction"
+                text="Duo Watchdog: Check for Updates…"
+                description="Ask GitHub whether a newer Duo Watchdog is out, and offer to install it"
+                icon="AllIcons.Actions.Download">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+            <add-to-group group-id="HelpMenu" anchor="last"/>
+        </action>
+    </actions>
+</idea-plugin>

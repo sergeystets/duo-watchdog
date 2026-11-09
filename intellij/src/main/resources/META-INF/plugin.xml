@@ -1,6 +1,6 @@
 <!-- url: the "Plugin homepage" link on the plugin's page in Settings | Plugins. -->
-<idea-plugin url="https://github.com/sergeystets/duo-watchdog">
-    <id>local.duo-watchdog</id>
+<idea-plugin url="https://github.com/sergeystets/duo-watchdog" xmlns:xi="http://www.w3.org/2001/XInclude">
+    <id>io.github.sergeystets.duowatchdog</id>
     <name>Duo Watchdog</name>
     <vendor url="https://github.com/sergeystets/duo-watchdog">Sergii Stets</vendor>
     <!-- The plugin's page in Settings | Plugins. The IDE draws it with Swing's HTML: paragraphs, lists, bold, links
@@ -26,8 +26,7 @@
           project.</li>
       <li><b>Several accounts</b>: one token for each, on gitlab.com or a GitLab of your own, rotated a week before
           it expires.</li>
-      <li><b>Updates from the IDE</b>: an <b>Update</b> button on this page when a newer release is out, and
-          <i>Tools | Duo Watchdog: Check for Updates…</i></li>
+      <li><b>Updates from the IDE</b>: an <b>Update</b> button on this page when a newer version is out.</li>
     </ul>
 
     <h3>Getting started</h3>
@@ -183,8 +182,6 @@
         <!-- The last threshold, the limit, a block, a token about to expire or turned down: these stay until closed. -->
         <notificationGroup id="Duo Watchdog Important" displayType="STICKY_BALLOON"/>
         <postStartupActivity implementation="duowatchdog.plugin.WhatsNew$Activity"/>
-        <!-- Asks GitHub for a newer Duo Watchdog once an IDE run and then once a day, unless turned off. -->
-        <postStartupActivity implementation="duowatchdog.plugin.Updater$Activity"/>
     </extensions>
 
     <actions>
@@ -202,14 +199,6 @@
                 icon="AllIcons.Actions.Copy">
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
-        <action id="duowatchdog.CheckForUpdates"
-                class="duowatchdog.plugin.Updater$CheckAction"
-                text="Duo Watchdog: Check for Updates…"
-                description="Ask GitHub whether a newer Duo Watchdog is out, and offer to install it"
-                icon="AllIcons.Actions.Download">
-            <add-to-group group-id="ToolsMenu" anchor="last"/>
-            <add-to-group group-id="HelpMenu" anchor="last"/>
-        </action>
         <action id="duowatchdog.WhatsNew"
                 class="duowatchdog.plugin.WhatsNew$ShowAction"
                 text="What's New in Duo Watchdog"
@@ -217,4 +206,8 @@
             <add-to-group group-id="HelpMenu" anchor="last"/>
         </action>
     </actions>
+
+    <!-- What differs between the two builds: Duo Watchdog's own updates in the one for the releases on GitHub
+         (src/github), nothing in the one for JetBrains Marketplace (src/marketplace, -Pmarketplace). -->
+    <xi:include href="/META-INF/duowatchdog-channel.xml"/>
 </idea-plugin>
