@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# Publishes this version of Duo Watchdog as GitHub release v<version>, with the IntelliJ plugin
-# (duo-watchdog-<version>.zip) and the VS Code extension (duo-watchdog-<version>.vsix). Both offer the latest release as
-# an update from the editor, so a version reaches everyone once it is released.
+# Releases this version of Duo Watchdog: tags this commit, which must be on main, v<version> and pushes the tag.
+# GitHub Actions then runs every check (.github/workflows/release.yml): the tests, the IntelliJ plugin built and checked
+# by JetBrains' Plugin Verifier on the oldest and the newest IntelliJ IDEA, the VS Code extension tested in VS Code,
+# and the installers on Linux, macOS and Windows. It publishes the release, with the very files it tested, only when
+# every check passes. Both editors then offer it as an update.
 #
-#   ./release.sh          run the tests, build, show what it will publish, and ask
+#   ./release.sh          show what it will tag, and ask
 #   ./release.sh --yes    the same without asking
 #
-# Needs what a build needs (JDK 17+, an installed IntelliJ IDEA, Node.js 20+) and gh signed in to GitHub.
+# Needs git, and gh signed in to GitHub. Nothing is built here.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -36,39 +38,32 @@ TAG=v$VERSION
 command -v gh >/dev/null || die "gh is not installed: https://cli.github.com"
 gh auth status >/dev/null 2>&1 || die "gh is not signed in: run gh auth login"
 [ -z "$(git status --porcelain)" ] || die "the working tree has changes; commit them first"
-git fetch --quiet origin main
+git fetch --quiet --tags origin main
 COMMIT=$(git rev-parse HEAD)
 git merge-base --is-ancestor "$COMMIT" origin/main ||
     die "$(git rev-parse --short HEAD) is not on origin/main; merge and push it first"
+if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null || [ -n "$(git ls-remote --tags origin "refs/tags/$TAG")" ]; then
+    die "tag $TAG exists already; raise the version first"
+fi
 if gh release view "$TAG" --repo "$REPOSITORY" >/dev/null 2>&1; then
     die "release $TAG exists already; raise the version first"
 fi
 
-# The changelog's "## <version>" section, up to the next one.
+# The changelog's "## <version>" section, up to the next one: the release's notes.
 NOTES=$(awk -v v="## $VERSION" '$0 == v { on = 1; next } on && /^## / { exit } on { print }' vscode/CHANGELOG.md)
 [ -n "$(printf '%s' "$NOTES" | tr -d '[:space:]')" ] || die "vscode/CHANGELOG.md has no \"## $VERSION\" section"
 
-printf 'Testing and building Duo Watchdog %s...\n' "$VERSION"
-./gradlew --quiet test :intellij:buildPlugin :vscode:packageExtension
-ZIP=intellij/build/distributions/duo-watchdog-$VERSION.zip
-VSIX=vscode/duo-watchdog-$VERSION.vsix
-[ -f "$ZIP" ] || die "the build made no $ZIP"
-[ -f "$VSIX" ] || die "the build made no $VSIX"
-# The listing first, then the search: piped into grep -q, which quits at the first match, unzip could be cut off
-# while still writing, and pipefail would take that for a missing jar.
-LISTING=$(unzip -l "$ZIP") || die "cannot read $ZIP"
-grep -q " duo-watchdog/lib/duo-watchdog-$VERSION.jar$" <<<"$LISTING" ||
-    die "$ZIP has no duo-watchdog/lib/duo-watchdog-$VERSION.jar"
-
-printf '\nRelease %s of %s at %s:\n' "$TAG" "$REPOSITORY" "$(git rev-parse --short HEAD)"
-printf '  %s (%s bytes)\n' "$ZIP" "$(wc -c <"$ZIP" | tr -d ' ')"
-printf '  %s (%s bytes)\n' "$VSIX" "$(wc -c <"$VSIX" | tr -d ' ')"
-printf '\n%s\n\n' "$NOTES"
+printf 'Release %s of %s, from %s:\n\n%s\n\n' "$TAG" "$REPOSITORY" "$(git log -1 --format='%h %s' "$COMMIT")" "$NOTES"
 if [ -z "$YES" ]; then
-    read -r -p "Publish it? Everyone with Duo Watchdog is offered it as an update. [y/N] " answer || exit 1
-    case "$answer" in [yY]*) ;; *) die "not published" ;; esac
+    read -r -p "Tag it and let GitHub check and publish it? [y/N] " answer || exit 1
+    case "$answer" in [yY]*) ;; *) die "not tagged" ;; esac
 fi
 
-printf '%s\n' "$NOTES" | gh release create "$TAG" "$ZIP" "$VSIX" --repo "$REPOSITORY" --target "$COMMIT" \
-    --title "Duo Watchdog $VERSION" --notes-file - --latest
-printf 'Published https://github.com/%s/releases/tag/%s\n' "$REPOSITORY" "$TAG"
+git tag -a "$TAG" -m "Duo Watchdog $VERSION" "$COMMIT"
+git push --quiet origin "refs/tags/$TAG"
+printf '\nPushed %s. GitHub Actions checks it now and publishes it only if every check passes:\n' "$TAG"
+printf '  https://github.com/%s/actions/workflows/release.yml\n' "$REPOSITORY"
+printf 'Watch it with: gh run watch --repo %s $(gh run list --repo %s --workflow release.yml --limit 1 --json databaseId --jq ".[0].databaseId")\n' \
+    "$REPOSITORY" "$REPOSITORY"
+printf 'If a check fails, nothing is published: fix it, then drop the tag and release again:\n'
+printf '  git push --delete origin %s && git tag -d %s && ./release.sh\n' "$TAG" "$TAG"

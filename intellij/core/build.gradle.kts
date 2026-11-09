@@ -8,6 +8,11 @@ java {
     }
 }
 
+// The sources are UTF-8. Left unsaid, javac on Windows may read them as Windows-1252, and every "·" shows as "Â·".
+tasks.withType<JavaCompile>().configureEach {
+    options.encoding = "UTF-8"
+}
+
 repositories {
     mavenCentral()
 }

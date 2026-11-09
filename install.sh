@@ -1,13 +1,29 @@
 #!/usr/bin/env bash
 # Installs or updates Duo Watchdog in IntelliJ IDEA and VS Code on this machine, asking where.
 #
-#   ./install.sh            pick from the IntelliJ IDEA and VS Code installs found
-#   ./install.sh <folder>   offer that IntelliJ IDEA or VS Code too, e.g. one in an unusual place
+#   ./install.sh                 the latest release from GitHub, ready-made: nothing is built
+#   ./install.sh <folder>        offer that IntelliJ IDEA or VS Code too, e.g. one in an unusual place
+#   ./install.sh --from-source   build this clone instead: the plugin with ./gradlew installPlugin (JDK 17+),
+#                                the extension packaged from vscode/ (Node.js 20+)
 #
-# IntelliJ IDEA gets the plugin built by ./gradlew installPlugin (needs JDK 17+), VS Code the extension
-# packaged from vscode/ (needs Node.js 20+). Runs on the bash 3.2 that macOS ships.
+# Without a clone: bash <(curl -fsSL https://raw.githubusercontent.com/sergeystets/duo-watchdog/main/install.sh)
+# The release needs curl or wget, and unzip for IntelliJ IDEA. Runs on the bash 3.2 that macOS ships.
 set -euo pipefail
-cd "$(dirname "$0")"
+
+REPOSITORY=sergeystets/duo-watchdog
+# Read from a pipe (curl ... | bash), the script's own lines are its input, and its questions would eat them.
+if [ -z "${BASH_SOURCE[0]:-}" ]; then
+    printf 'Run it so that it can ask you things:\n  bash <(curl -fsSL https://raw.githubusercontent.com/%s/main/install.sh)\n' \
+        "$REPOSITORY" >&2
+    exit 1
+fi
+# A clone has the sources beside the script. Run on its own, the script installs the release and needs nothing else.
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd -P || true)
+CLONE=
+if [ -n "$HERE" ] && [ -f "$HERE/intellij/build.gradle.kts" ] && [ -f "$HERE/gradlew" ]; then
+    CLONE=yes
+    cd "$HERE"
+fi
 
 bold() { if [ -t 1 ]; then printf '\033[1m%s\033[0m\n' "$*"; else printf '%s\n' "$*"; fi; }
 say() { printf '%s\n' "$*"; }
@@ -66,9 +82,156 @@ cleanup() {
 }
 trap cleanup EXIT
 trap 'exit 130' INT TERM
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/duo-watchdog.XXXXXX")
 
-PLUGIN_VERSION=$(sed -n 's/^version = "\(.*\)"$/\1/p' intellij/build.gradle.kts)
-EXTENSION_VERSION=$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' vscode/package.json 2>/dev/null | head -n 1 || true)
+usage() {
+    say "Usage: ./install.sh [--from-source] [folder]"
+    say
+    say "  (nothing)       install the latest release from GitHub, ready-made: nothing is built"
+    say "  folder          also offer the IntelliJ IDEA or VS Code in that folder"
+    say "  --from-source   build this clone instead (needs a JDK 17+ and Node.js 20+)"
+}
+
+FROM_SOURCE=
+FOLDER_ARG=
+for arg in "$@"; do
+    case "$arg" in
+        --from-source) FROM_SOURCE=yes ;;
+        -h | --help) usage && exit 0 ;;
+        -*) say "Unknown option $arg." >&2 && usage >&2 && exit 2 ;;
+        *) FOLDER_ARG=$arg ;;
+    esac
+done
+if [ -n "$FROM_SOURCE" ] && [ -z "$CLONE" ]; then
+    say "--from-source builds a clone of the repository, and this script is not in one. Either:"
+    say "  git clone https://github.com/$REPOSITORY.git && duo-watchdog/install.sh --from-source"
+    say "or leave --from-source out to install the latest release, which needs no build."
+    exit 1
+fi
+
+# --- Where the files come from ---------------------------------------------------------------------------
+
+# GET $1 to stdout, with $2 as the Accept header when given; curl, else wget.
+fetch() {
+    local accept=()
+    if command -v curl >/dev/null; then
+        [ -z "${2:-}" ] || accept=(-H "Accept: $2")
+        curl -fsSL --retry 2 --connect-timeout 15 -A duo-watchdog-installer ${accept[@]+"${accept[@]}"} "$1"
+    elif command -v wget >/dev/null; then
+        [ -z "${2:-}" ] || accept=("--header=Accept: $2")
+        wget -q -O - -U duo-watchdog-installer ${accept[@]+"${accept[@]}"} "$1"
+    else
+        say "Neither curl nor wget is installed, and one of them downloads the release." >&2
+        return 1
+    fi
+}
+
+# GitHub's answer for a release, as lines: "tag<TAB>v0.7.0", then "file<TAB>name<TAB>address<TAB>size<TAB>sha256" for
+# each file (the SHA-256 empty when GitHub gives none). Each file's size and digest come before its address.
+release_lines() {
+    awk '{ json = json $0 }
+        END {
+            while (match(json, /"(tag_name|name|size|digest|browser_download_url)":("[^"]*"|[0-9]+)/)) {
+                token = substr(json, RSTART, RLENGTH)
+                json = substr(json, RSTART + RLENGTH)
+                key = token; sub(/^"/, "", key); sub(/".*$/, "", key)
+                value = token; sub(/^"[^"]*":/, "", value); gsub(/"/, "", value)
+                if (key == "tag_name") print "tag\t" value
+                else if (key == "name") { name = value; size[name] = ""; digest[name] = "" }
+                else if (key == "size") size[name] = value
+                else if (key == "digest") digest[name] = value
+                else print "file\t" name "\t" value "\t" size[name] "\t" digest[name]
+            }
+        }'
+}
+
+RELEASE_TAG="" RELEASE_VERSION=""
+ZIP_URL="" ZIP_SIZE="" ZIP_SHA="" VSIX_URL="" VSIX_SIZE="" VSIX_SHA=""
+
+# The latest release and its two files, from GitHub's API. When the API turns it down (it limits how often an
+# address may ask), the release page's redirect names the tag and the files go by their usual names, unchecked.
+find_release() {
+    local json="" lines tag kind name url size sha
+    if json=$(fetch "https://api.github.com/repos/$REPOSITORY/releases/latest" application/vnd.github+json 2>/dev/null); then
+        lines=$(printf '%s' "$json" | release_lines)
+        while IFS=$'\t' read -r kind name url size sha; do
+            case "$kind" in
+                tag) RELEASE_TAG=$name ;;
+                file)
+                    case "$url" in "https://github.com/$REPOSITORY/releases/download/"*) ;; *) continue ;; esac
+                    sha=${sha#sha256:}
+                    case "$name" in
+                        duo-watchdog-*.zip) ZIP_URL=$url ZIP_SIZE=$size ZIP_SHA=$sha ;;
+                        duo-watchdog-*.vsix) VSIX_URL=$url VSIX_SIZE=$size VSIX_SHA=$sha ;;
+                    esac
+                    ;;
+            esac
+        done <<<"$lines"
+    elif command -v curl >/dev/null; then
+        tag=$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$REPOSITORY/releases/latest" 2>/dev/null) || return 1
+        case "$tag" in */releases/tag/*) RELEASE_TAG=${tag##*/} ;; *) return 1 ;; esac
+    else
+        return 1
+    fi
+    RELEASE_VERSION=${RELEASE_TAG#v}
+    case "$RELEASE_VERSION" in [0-9]*) ;; *) return 1 ;; esac
+    case "$RELEASE_VERSION" in *[!0-9A-Za-z.+-]*) return 1 ;; esac
+    if [ -z "$json" ]; then
+        ZIP_URL="https://github.com/$REPOSITORY/releases/download/$RELEASE_TAG/duo-watchdog-$RELEASE_VERSION.zip"
+        VSIX_URL="https://github.com/$REPOSITORY/releases/download/$RELEASE_TAG/duo-watchdog-$RELEASE_VERSION.vsix"
+    fi
+}
+
+sha256_of() {
+    if command -v sha256sum >/dev/null; then
+        sha256sum "$1" | cut -d ' ' -f 1
+    elif command -v shasum >/dev/null; then
+        shasum -a 256 "$1" | cut -d ' ' -f 1
+    fi
+}
+
+# Downloads $2 into $1 and checks it against the release: its size ($3) and SHA-256 ($4), when known.
+download() {
+    local actual
+    say "Downloading $2"
+    fetch "$2" >"$1" || return 1
+    actual=$(wc -c <"$1" | tr -d ' ')
+    if [ -n "$3" ] && [ "$actual" != "$3" ]; then
+        say "It has $actual bytes, but the release lists $3."
+        return 1
+    fi
+    if [ -z "$4" ]; then
+        say "GitHub gave no SHA-256 for it, so only its size is checked."
+        return 0
+    fi
+    actual=$(sha256_of "$1")
+    if [ -z "$actual" ]; then
+        say "Neither sha256sum nor shasum is installed, so its SHA-256 is not checked."
+    elif [ "$actual" != "$4" ]; then
+        say "Its SHA-256 is $actual, but the release lists $4."
+        return 1
+    else
+        say "SHA-256 matches the release: $actual"
+    fi
+}
+
+if [ -n "$FROM_SOURCE" ]; then
+    PLUGIN_VERSION=$(sed -n 's/^version = "\(.*\)"$/\1/p' intellij/build.gradle.kts)
+    EXTENSION_VERSION=$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' vscode/package.json 2>/dev/null | sed -n 1p || true)
+    SOURCE_LINE="Building Duo Watchdog from this clone (--from-source)."
+    SOURCE_TEXT="built from this clone"
+else
+    if ! find_release; then
+        say "Could not find Duo Watchdog's latest release on GitHub (https://github.com/$REPOSITORY/releases)."
+        say "Check the connection, or a proxy (https_proxy), and run again."
+        [ -z "$CLONE" ] || say "Or build this clone instead: ./install.sh --from-source"
+        exit 1
+    fi
+    PLUGIN_VERSION=$RELEASE_VERSION
+    EXTENSION_VERSION=$RELEASE_VERSION
+    SOURCE_LINE="Installing the ready-made files of release $RELEASE_TAG from GitHub; nothing is built."
+    SOURCE_TEXT="from release $RELEASE_TAG on GitHub"
+fi
 
 # --- IntelliJ IDEA ---------------------------------------------------------------------------------------
 
@@ -333,6 +496,11 @@ drop() {
 any_added() { local i; for i in "${!ADDED[@]}"; do [ "${ADDED[$i]}" = yes ] && return 0; done; return 1; }
 
 LOGO=docs/images/logo.ascii
+# Run on its own, the script fetches the drawing of the release it installs; without it, the title shows alone.
+if [ -z "$CLONE" ]; then
+    LOGO="$WORK/logo.ascii"
+    fetch "https://raw.githubusercontent.com/$REPOSITORY/$RELEASE_TAG/docs/images/logo.ascii" >"$LOGO" 2>/dev/null || rm -f "$LOGO"
+fi
 
 # The logo without the margin all its lines share and without blank lines above and below it.
 logo() {
@@ -403,6 +571,13 @@ if [ "$PLUGIN_VERSION" = "$EXTENSION_VERSION" ]; then
 else
     banner "$PLUGIN_VERSION (VS Code $EXTENSION_VERSION)"
 fi
+say "$SOURCE_LINE"
+if [ -n "$CLONE" ] && [ -z "$FROM_SOURCE" ]; then
+    CLONE_VERSION=$(sed -n 's/^version = "\(.*\)"$/\1/p' intellij/build.gradle.kts)
+    if [ "$CLONE_VERSION" != "$RELEASE_VERSION" ]; then
+        say "This clone is at $CLONE_VERSION; ./install.sh --from-source builds that instead."
+    fi
+fi
 say "Looking for IntelliJ IDEA and VS Code..."
 
 if [ -f "$REMEMBERED" ]; then
@@ -416,7 +591,7 @@ if [ -f "$REMEMBERED" ]; then
         fi
     done <"$REMEMBERED"
 fi
-[ $# -ge 1 ] && { add_folder "$1" || true; }
+[ -z "$FOLDER_ARG" ] || add_folder "$FOLDER_ARG" || true
 while IFS= read -r dir; do
     [ -n "$dir" ] && ! listed "$dir" && { add_idea "$dir" || true; }
 done < <(find_ideas)
@@ -582,26 +757,34 @@ while [ ${#CHOSEN[@]} -eq 0 ]; do
     esac
 done
 
-# --- Check the tools before building ---------------------------------------------------------------------
+# --- Check the tools ------------------------------------------------------------------------------------
 
 needs() { local i; for i in "${CHOSEN[@]}"; do [ "${KINDS[$i]}" = "$1" ] && return 0; done; return 1; }
 
-if needs idea && [ -z "${JAVA_HOME:-}" ] && ! command -v java >/dev/null; then
-    say "IntelliJ IDEA needs a JDK 17 or later to build the plugin, and none was found."
-    say "Install one (e.g. 'brew install --cask temurin@21' or your package manager's openjdk-21) and run again."
-    exit 1
-fi
-if needs code; then
-    major=$(node_major)
-    if [ -z "$major" ] || [ "$major" -lt 20 ] || ! command -v npm >/dev/null; then
-        say "VS Code needs Node.js 20 or later (with npm) to package the extension; found: $(node --version 2>/dev/null || echo none)."
-        say "Install it from https://nodejs.org (or 'brew install node') and run again."
+if [ -n "$FROM_SOURCE" ]; then
+    if needs idea && [ -z "${JAVA_HOME:-}" ] && ! command -v java >/dev/null; then
+        say "IntelliJ IDEA needs a JDK 17 or later to build the plugin, and none was found."
+        say "Install one (e.g. 'brew install --cask temurin@21' or your package manager's openjdk-21) and run again,"
+        say "or leave --from-source out to install the ready-made release."
         exit 1
     fi
+    if needs code; then
+        major=$(node_major)
+        if [ -z "$major" ] || [ "$major" -lt 20 ] || ! command -v npm >/dev/null; then
+            say "VS Code needs Node.js 20 or later (with npm) to package the extension; found: $(node --version 2>/dev/null || echo none)."
+            say "Install it from https://nodejs.org (or 'brew install node') and run again,"
+            say "or leave --from-source out to install the ready-made release."
+            exit 1
+        fi
+    fi
+elif needs idea && ! command -v unzip >/dev/null; then
+    say "IntelliJ IDEA's plugin comes as a zip, and unzip is not installed. Install it (e.g. 'sudo apt install unzip'"
+    say "or 'sudo dnf install unzip') and run again."
+    exit 1
 fi
 
 say
-say "Plan:"
+say "Plan, $SOURCE_TEXT:"
 for i in "${CHOSEN[@]}"; do
     note=""
     [ "${KINDS[$i]}" = idea ] && idea_running "${PLACES[$i]}" && note=" (you'll be asked to close it first)"
@@ -631,7 +814,7 @@ for i in "${CHOSEN[@]}"; do
 done
 
 # A checkout made with core.autocrlf=true has CRLF in gradlew, which then fails with "/bin/sh^M: bad interpreter".
-if [ ${#IDEAS[@]} -gt 0 ] && grep -q "$(printf '\r')" gradlew; then
+if [ -n "$FROM_SOURCE" ] && [ ${#IDEAS[@]} -gt 0 ] && grep -q "$(printf '\r')" gradlew; then
     say "gradlew has Windows line endings (CRLF), so it can't run here. Your git wrote them:"
     say "it has core.autocrlf=true. Fix the setting and check the files out again (this discards local edits):"
     say "  git config --global core.autocrlf input"
@@ -640,16 +823,21 @@ if [ ${#IDEAS[@]} -gt 0 ] && grep -q "$(printf '\r')" gradlew; then
     IDEAS=()
 fi
 
-# Each step's share of the bar; building the plugin is most of the wait.
-W_PREPARE=10 W_BUILD=45 W_NPM=20 W_PACKAGE=10 W_CODE=5
+# Each step's share of the bar: building the plugin is most of the wait, or else downloading the release.
+W_PREPARE=10 W_BUILD=45 W_NPM=20 W_PACKAGE=10 W_CODE=5 W_DOWNLOAD=30 W_UNPACK=10
 STEP_COUNT=0 TOTAL_WEIGHT=0
-if [ ${#IDEAS[@]} -gt 0 ]; then
-    STEP_COUNT=$((1 + ${#IDEAS[@]}))
-    TOTAL_WEIGHT=$((W_PREPARE + W_BUILD * ${#IDEAS[@]}))
-fi
-if [ ${#CODES[@]} -gt 0 ]; then
-    STEP_COUNT=$((STEP_COUNT + 2 + ${#CODES[@]}))
-    TOTAL_WEIGHT=$((TOTAL_WEIGHT + W_NPM + W_PACKAGE + W_CODE * ${#CODES[@]}))
+if [ -n "$FROM_SOURCE" ]; then
+    if [ ${#IDEAS[@]} -gt 0 ]; then
+        STEP_COUNT=$((1 + ${#IDEAS[@]}))
+        TOTAL_WEIGHT=$((W_PREPARE + W_BUILD * ${#IDEAS[@]}))
+    fi
+    if [ ${#CODES[@]} -gt 0 ]; then
+        STEP_COUNT=$((STEP_COUNT + 2 + ${#CODES[@]}))
+        TOTAL_WEIGHT=$((TOTAL_WEIGHT + W_NPM + W_PACKAGE + W_CODE * ${#CODES[@]}))
+    fi
+elif [ $((${#IDEAS[@]} + ${#CODES[@]})) -gt 0 ]; then
+    STEP_COUNT=$((1 + ${#IDEAS[@]} + ${#CODES[@]}))
+    TOTAL_WEIGHT=$((W_DOWNLOAD + W_UNPACK * ${#IDEAS[@]} + W_CODE * ${#CODES[@]}))
 fi
 STEP_NUMBER=0 DONE_WEIGHT=0 GRADLE_TASKS=0
 STEP_LABEL="" STEP_KIND="" STEP_WEIGHT=0 STEP_TAU=1 STEP_LOG="" STEP_START=0
@@ -767,14 +955,78 @@ skip_step() {
 
 in_vscode() { (cd vscode && "$@"); }
 
+ZIP_FILE="$WORK/duo-watchdog-$PLUGIN_VERSION.zip"
+VSIX_FILE="$WORK/duo-watchdog-$EXTENSION_VERSION.vsix"
+
+# The release's files that the chosen editors need, each checked against the release; the plugin's zip also for
+# holding this plugin of this version, all in its duo-watchdog folder.
+download_release() {
+    local listing
+    if [ ${#IDEAS[@]} -gt 0 ]; then
+        [ -n "$ZIP_URL" ] || { say "Release $RELEASE_TAG has no duo-watchdog-$RELEASE_VERSION.zip."; return 1; }
+        download "$ZIP_FILE" "$ZIP_URL" "$ZIP_SIZE" "$ZIP_SHA" || return 1
+        listing=$(unzip -l "$ZIP_FILE") || { say "The download is not a zip."; return 1; }
+        if ! grep -q " duo-watchdog/lib/duo-watchdog-$RELEASE_VERSION.jar$" <<<"$listing"; then
+            say "The zip has no duo-watchdog/lib/duo-watchdog-$RELEASE_VERSION.jar, so it is not this plugin."
+            return 1
+        fi
+        if awk 'NR > 3 && $4 != "" && $4 !~ /^duo-watchdog\// && $4 !~ /^-+$/ { bad = 1 } END { exit !bad }' <<<"$listing"; then
+            say "The zip holds files outside its duo-watchdog folder."
+            return 1
+        fi
+    fi
+    if [ ${#CODES[@]} -gt 0 ]; then
+        [ -n "$VSIX_URL" ] || { say "Release $RELEASE_TAG has no duo-watchdog-$RELEASE_VERSION.vsix."; return 1; }
+        download "$VSIX_FILE" "$VSIX_URL" "$VSIX_SIZE" "$VSIX_SHA" || return 1
+    fi
+}
+
+# Puts the plugin where Install Plugin from Disk would, in place of an older Duo Watchdog, as ./gradlew installPlugin
+# does.
+unpack_plugin() {
+    local target
+    target=$(plugins_dir "$1") || return 1
+    say "Unpacking into $target"
+    mkdir -p "$target" && rm -rf "$target/duo-watchdog" && unzip -q -o "$ZIP_FILE" -d "$target"
+}
+
 if [ "$STEP_COUNT" -gt 0 ]; then
-    WORK=$(mktemp -d "${TMPDIR:-/tmp}/duo-watchdog.XXXXXX")
     say
     bold "Installing ($STEP_COUNT steps)"
     if [ -n "$LIVE" ]; then printf '\033[?25l'; fi
 fi
 
-if [ ${#IDEAS[@]} -gt 0 ]; then
+if [ -z "$FROM_SOURCE" ] && [ "$STEP_COUNT" -gt 0 ]; then
+    if run_step "Downloading Duo Watchdog $RELEASE_VERSION from GitHub" download $W_DOWNLOAD 3 download_release; then
+        for i in ${IDEAS[@]+"${IDEAS[@]}"}; do
+            if run_step "Installing the plugin into ${NAMES[$i]}" unpack $W_UNPACK 2 unpack_plugin "${PLACES[$i]}"; then
+                RESULTS+=("OK       ${NAMES[$i]}: Duo Watchdog $PLUGIN_VERSION installed.")
+                STARTS+=("$i")
+            else
+                RESULTS+=("FAILED   ${NAMES[$i]}: the plugin didn't unpack, see the output above.")
+            fi
+        done
+        for i in ${CODES[@]+"${CODES[@]}"}; do
+            if run_step "Installing the extension into ${NAMES[$i]}" code $W_CODE 8 \
+                "${PLACES[$i]}" --install-extension "$VSIX_FILE" --force; then
+                RESULTS+=("OK       ${NAMES[$i]}: Duo Watchdog $EXTENSION_VERSION installed. In open windows run 'Developer: Reload Window'.")
+            else
+                RESULTS+=("FAILED   ${NAMES[$i]}: '${PLACES[$i]} --install-extension' failed.")
+            fi
+        done
+    else
+        for i in ${IDEAS[@]+"${IDEAS[@]}"}; do
+            skip_step "Installing the plugin into ${NAMES[$i]}" $W_UNPACK "the download failed"
+            RESULTS+=("FAILED   ${NAMES[$i]}: the download failed, see its output above.")
+        done
+        for i in ${CODES[@]+"${CODES[@]}"}; do
+            skip_step "Installing the extension into ${NAMES[$i]}" $W_CODE "the download failed"
+            RESULTS+=("FAILED   ${NAMES[$i]}: the download failed, see its output above.")
+        done
+    fi
+fi
+
+if [ -n "$FROM_SOURCE" ] && [ ${#IDEAS[@]} -gt 0 ]; then
     # The dry run lists the tasks the build will run, so the bar can follow it task by task.
     if run_step "Preparing Gradle (the first run downloads Gradle and a JDK)" prepare $W_PREPARE 20 \
         ./gradlew :intellij:installPlugin -PideaPath="${PLACES[${IDEAS[0]}]}" --dry-run --console=plain; then
@@ -796,7 +1048,7 @@ if [ ${#IDEAS[@]} -gt 0 ]; then
     fi
 fi
 
-if [ ${#CODES[@]} -gt 0 ]; then
+if [ -n "$FROM_SOURCE" ] && [ ${#CODES[@]} -gt 0 ]; then
     VSIX="vscode/duo-watchdog-$EXTENSION_VERSION.vsix"
     why=""
     if ! run_step "Downloading the extension's npm packages" npm $W_NPM 25 \
@@ -832,5 +1084,6 @@ for i in ${STARTS[@]+"${STARTS[@]}"}; do
     yes_default "Start ${NAMES[$i]} now?" && start_idea "${PLACES[$i]}"
 done
 for result in "${RESULTS[@]}"; do case "$result" in FAILED*) exit 1 ;; esac; done
-say "Next: set your GitLab token. IntelliJ IDEA: Settings > Tools > Duo Watchdog."
-say "VS Code: Ctrl/Cmd+Shift+P > 'Duo Watchdog: Set GitLab Token'."
+say "Next: add your GitLab token. IntelliJ IDEA: Settings > Tools > Duo Watchdog."
+say "VS Code: Ctrl/Cmd+Shift+P > 'Duo Watchdog: Add or Replace a Token'."
+say "From here on, Duo Watchdog offers each new release itself."

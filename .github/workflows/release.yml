@@ -1,0 +1,83 @@
+# A release, from a tag v<version> pushed by ./release.sh: published only when every check passes (checks.yml), with
+# the very plugin zip and .vsix those checks built and tested. The plugin and the extension offer the latest release
+# as an update, so a failed check here keeps a broken build from reaching anyone.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+
+jobs:
+  prepare:
+    name: The tag is a version ready to release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: version
+        name: The tag, the plugin, the extension and the changelog agree, and the commit is on main
+        run: |
+          tag=$GITHUB_REF_NAME
+          version=${tag#v}
+          plugin=$(sed -n 's/^version = "\(.*\)"$/\1/p' intellij/build.gradle.kts)
+          extension=$(sed -n 's/^  "version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' vscode/package.json | sed -n 1p)
+          if [ "$plugin" != "$version" ] || [ "$extension" != "$version" ]; then
+            echo "::error::$tag, but the plugin is $plugin and the extension $extension"
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$tag is not on main; only what main has is released"
+            exit 1
+          fi
+          awk -v v="## $version" '$0 == v { on = 1; next } on && /^## / { exit } on { print }' vscode/CHANGELOG.md >notes.md
+          if [ -z "$(tr -d '[:space:]' <notes.md)" ]; then
+            echo "::error::vscode/CHANGELOG.md has no \"## $version\" section for the release notes"
+            exit 1
+          fi
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-notes
+          path: notes.md
+
+  checks:
+    needs: prepare
+    uses: ./.github/workflows/checks.yml
+
+  publish:
+    name: Publish the release
+    needs: [prepare, checks]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: plugin
+          path: dist
+      - uses: actions/download-artifact@v8
+        with:
+          name: vsix
+          path: dist
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-notes
+          path: dist
+      - name: Release ${{ github.ref_name }} with the files the checks tested
+        run: |
+          ls -la dist
+          gh release create "$GITHUB_REF_NAME" "dist/duo-watchdog-$VERSION.zip" "dist/duo-watchdog-$VERSION.vsix" \
+            --repo "$GITHUB_REPOSITORY" --verify-tag --latest \
+            --title "Duo Watchdog $VERSION" --notes-file dist/notes.md
