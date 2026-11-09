@@ -10,7 +10,14 @@
     ]]></description>
 
     <change-notes><![CDATA[
-    <h3>What's new in 0.7.0</h3>
+    <h3>What's new in 0.7.1</h3>
+    <ul>
+      <li>The installers download the ready-made plugin of the latest release from GitHub and check it against the
+          release; nothing is built.</li>
+      <li>Every release is built and checked by GitHub Actions, with JetBrains' Plugin Verifier, before it is
+          published.</li>
+    </ul>
+    <h3>0.7.0</h3>
     <ul>
       <li><b>Updates from the IDE</b>: Duo Watchdog asks GitHub for its latest release when the IDE starts and then
           once a day, and says when a newer one is out. <b>Update</b> downloads its plugin zip from GitHub, checks it
