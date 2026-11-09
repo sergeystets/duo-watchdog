@@ -24,7 +24,9 @@ esac
 
 REPOSITORY=sergeystets/duo-watchdog
 PLUGIN_VERSION=$(sed -n 's/^version = "\(.*\)"$/\1/p' intellij/build.gradle.kts)
-EXTENSION_VERSION=$(sed -n 's/^  "version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' vscode/package.json | head -n 1)
+# sed -n 1p reads to the end, where head would quit early: with pipefail, a writer cut off by a closed pipe
+# (SIGPIPE) fails the whole pipeline.
+EXTENSION_VERSION=$(sed -n 's/^  "version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' vscode/package.json | sed -n 1p)
 [ -n "$PLUGIN_VERSION" ] || die "no version in intellij/build.gradle.kts"
 [ "$PLUGIN_VERSION" = "$EXTENSION_VERSION" ] ||
     die "the plugin is $PLUGIN_VERSION but the extension $EXTENSION_VERSION; make them the same"
@@ -52,7 +54,10 @@ ZIP=intellij/build/distributions/duo-watchdog-$VERSION.zip
 VSIX=vscode/duo-watchdog-$VERSION.vsix
 [ -f "$ZIP" ] || die "the build made no $ZIP"
 [ -f "$VSIX" ] || die "the build made no $VSIX"
-unzip -l "$ZIP" | grep -q " duo-watchdog/lib/duo-watchdog-$VERSION.jar$" ||
+# The listing first, then the search: piped into grep -q, which quits at the first match, unzip could be cut off
+# while still writing, and pipefail would take that for a missing jar.
+LISTING=$(unzip -l "$ZIP") || die "cannot read $ZIP"
+grep -q " duo-watchdog/lib/duo-watchdog-$VERSION.jar$" <<<"$LISTING" ||
     die "$ZIP has no duo-watchdog/lib/duo-watchdog-$VERSION.jar"
 
 printf '\nRelease %s of %s at %s:\n' "$TAG" "$REPOSITORY" "$(git rev-parse --short HEAD)"
