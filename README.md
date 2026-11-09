@@ -12,6 +12,7 @@
 A plugin for **IntelliJ IDEA** (and other JetBrains IDEs) and an extension for **VS Code** that track **your own**
 GitLab Credits usage for the current billing period, forecast where the month will end, and warn you before you hit your limit.
 
+[![CI](https://github.com/sergeystets/duo-watchdog/actions/workflows/ci.yml/badge.svg)](https://github.com/sergeystets/duo-watchdog/actions/workflows/ci.yml)
 ![IntelliJ Platform](https://img.shields.io/badge/IntelliJ_Platform-2024.3%2B-000000?logo=intellijidea&logoColor=white)
 ![VS Code](https://img.shields.io/badge/VS_Code-1.74%2B-007ACC?logo=visualstudiocode&logoColor=white)
 ![Java](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk&logoColor=white)
