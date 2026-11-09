@@ -34,6 +34,8 @@ export interface Settings {
     cliMode: CliMode;
     /** Quick commands of your own: a button each, that types its command at the Duo CLI's prompt. */
     quickCommands: QuickCommand[];
+    /** Ask GitHub once a day whether a newer Duo Watchdog is out, and say so. */
+    checkForUpdates: boolean;
 }
 
 export function settings(): Settings {
@@ -51,6 +53,7 @@ export function settings(): Settings {
         cli: cliOrDefault(c.get<string>('cli')),
         cliMode: cliModeOrDefault(c.get<string>('cliMode')),
         quickCommands: quickCommandsOrNone(c.get<unknown>('quickCommands')),
+        checkForUpdates: c.get<boolean>('checkForUpdates', true),
     };
 }
 

@@ -17,6 +17,7 @@ import { log } from './log';
 import { CreditsService } from './service';
 import { OLD_TOKEN_KEY, SECTION, settings } from './settings';
 import { StatusBar } from './statusBar';
+import { Updater } from './updates';
 import { announceRelease, showWhatsNew } from './whatsNew';
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -33,8 +34,9 @@ export function activate(context: vscode.ExtensionContext): void {
     const sessions = new SessionsService(store, nodeTransport, history, logs);
     const live = new LiveSessionWatcher();
     const liveBar = new LiveStatusBar();
+    const updater = new Updater(context);
     const dashboard = new DashboardView(context.extensionUri, service, commands, history, context.globalState, sessions,
-        live);
+        live, updater);
 
     context.subscriptions.push(
         service,
@@ -45,6 +47,8 @@ export function activate(context: vscode.ExtensionContext): void {
         sessions.onDidChange(() => dashboard.update()),
         live,
         liveBar,
+        updater,
+        updater.onDidChange(() => dashboard.update()),
         live.onDidChange(() => {
             liveBar.update(live.run());
             dashboard.liveChanged();
@@ -82,6 +86,8 @@ export function activate(context: vscode.ExtensionContext): void {
             return service.refresh();
         }),
         vscode.commands.registerCommand('duoWatchdog.whatsNew', () => showWhatsNew(context.extensionUri)),
+        vscode.commands.registerCommand('duoWatchdog.checkForUpdates', () => updater.check(true)),
+        vscode.commands.registerCommand('duoWatchdog.installUpdate', () => updater.install()),
         vscode.commands.registerCommand('duoWatchdog.copyDiagnostics', () => copyDiagnostics(context, store, service, logs, live)),
         vscode.commands.registerCommand('duoWatchdog.sessions', () => dashboard.show('sessions')),
         vscode.commands.registerCommand('duoWatchdog.cliSession', () => launchCli(live, null, null)),
@@ -101,6 +107,7 @@ export function activate(context: vscode.ExtensionContext): void {
     // Before the first refresh, which may move the token saved by 0.3 to an account.
     announceRelease(context, store).catch(e => console.error('[duo-watchdog] the release notice failed', e));
     service.reschedule();
+    updater.start();
 }
 
 export function deactivate(): void {

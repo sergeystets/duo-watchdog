@@ -6,6 +6,7 @@ import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
+import java.util.Arrays;
 
 /** What every component's painting starts with. */
 final class Draw {
@@ -32,6 +33,24 @@ final class Draw {
             end--;
         }
         return end == 0 ? "" : text.substring(0, end).stripTrailing() + ellipsis;
+    }
+
+    /**
+     * A path cut to fit {@code width} from the front, a folder at a time, so that its last part, the project's own
+     * name, shows: "…/mobile/ios-app", then "…/ios-app", then the last part cut at its end.
+     */
+    static String fitPath(String path, FontMetrics fm, int width) {
+        if (fm.stringWidth(path) <= width) {
+            return path;
+        }
+        String[] parts = path.split("/");
+        for (int i = 1; i < parts.length; i++) {
+            String shorter = "…/" + String.join("/", Arrays.copyOfRange(parts, i, parts.length));
+            if (fm.stringWidth(shorter) <= width) {
+                return shorter;
+            }
+        }
+        return fit(parts.length > 1 ? "…/" + parts[parts.length - 1] : path, fm, width);
     }
 
     /**

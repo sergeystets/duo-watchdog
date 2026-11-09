@@ -79,7 +79,7 @@ test('Usage shows the choices made, New session, Doctor and the quick commands, 
     const q = quickView('glab duo cli', 'autoApprove', [AB]);
     assert.equal(q.cli, 'glab duo cli');
     assert.equal(q.mode, 'autoApprove');
-    assert.deepEqual(q.modes.map(m => m.label), ['Ask before tools', 'Auto-approve tools']);
+    assert.deepEqual(q.modes.map(m => m.label), ['Manual', 'Auto']);
     assert.deepEqual(q.buttons.map(b => b.label), ['New session', 'Doctor', 'AB Testing']);
     assert.deepEqual(q.buttons[2], {
         kind: 'command', index: 0, label: 'AB Testing',

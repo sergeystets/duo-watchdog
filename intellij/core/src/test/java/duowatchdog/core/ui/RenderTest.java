@@ -138,6 +138,38 @@ class RenderTest {
     }
 
     /**
+     * Projects whose paths start the same and are longer than the row, as in a narrow tool window: each shows its own
+     * name, cut from the front, rather than the same start twice.
+     */
+    @Test
+    void projectsShowTheirOwnNames() throws IOException {
+        java.awt.image.BufferedImage scratch = new java.awt.image.BufferedImage(1, 1, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = scratch.createGraphics();
+        java.awt.FontMetrics fm = g.getFontMetrics(FONT.deriveFont(12f));
+        g.dispose();
+        String android = "sysdev/mct-mobile-apps/mct-mobile-android";
+        String ios = "sysdev/mct-mobile-apps/mct-mobile-ios";
+        int width = fm.stringWidth("…/mct-mobile-android") + 2;
+        assertEquals("…/mct-mobile-android", Draw.fitPath(android, fm, width), "the first folders go");
+        assertEquals("…/mct-mobile-ios", Draw.fitPath(ios, fm, width));
+        assertEquals(android, Draw.fitPath(android, fm, 10_000), "a path that fits is whole");
+        int narrow = fm.stringWidth("…/mct-mob") + 1;
+        String cut = Draw.fitPath(android, fm, narrow);
+        assertTrue(cut.startsWith("…/mct-m") && cut.endsWith("…") && fm.stringWidth(cut) <= narrow,
+                "its own name, cut at its end: " + cut);
+        assertEquals("", Draw.fitPath(android, fm, 0), "nothing fits");
+
+        FeatureBars bars = new FeatureBars(Theme.light(FONT), true);
+        bars.show(List.of(new FlowUsage(android, android, 41.2), new FlowUsage(ios, ios, 17.9),
+                new FlowUsage("sysdev/tools", "sysdev/tools", 2.0)));
+        BufferedImage image = save("sessions-projects-narrow", bars, 240);
+        assertTrue(image.getHeight() > 0);
+        bars.setSize(240, bars.getPreferredSize().height);
+        assertEquals(android + ": 41.2", bars.getToolTipText(new java.awt.event.MouseEvent(bars, 0, 0, 0, 5, 5, 0, false)),
+                "the whole path on hover");
+    }
+
+    /**
      * The Duo CLI session now, at the top of Sessions: priced and near its round trips, unpriced, on the group's default
      * model, and none.
      */

@@ -10,7 +10,18 @@
     ]]></description>
 
     <change-notes><![CDATA[
-    <h3>What's new in 0.6.0</h3>
+    <h3>What's new in 0.7.0</h3>
+    <ul>
+      <li><b>Updates from the IDE</b>: Duo Watchdog asks GitHub for its latest release when the IDE starts and then
+          once a day, and says when a newer one is out. <b>Update</b> downloads its plugin zip from GitHub, checks it
+          against the release, and the IDE puts it in place when it restarts (<b>Restart Now</b>). The tool window's
+          toolbar shows <b>Update to x.y.z</b> while one is known; <i>Tools | Duo Watchdog: Check for Updates</i> asks at
+          once. Settings | Updates turns the daily check off.</li>
+      <li>The Duo CLI's tool approval reads <b>Manual</b> or <b>Auto</b> (<code>--dangerously-skip-permissions</code>).</li>
+      <li>Sessions' <b>By project</b> puts each project on a line of its own over its bar, cut from the front so its own
+          name shows, with the whole path on hover.</li>
+    </ul>
+    <h3>0.6.0</h3>
     <ul>
       <li><b>Duo CLI quick actions on Usage</b>: a row under the toolbar with two drop-downs, <code>duo</code> or
           <code>glab duo cli</code>, and <b>Ask before tools</b> or <b>Auto-approve tools</b>
@@ -118,6 +129,8 @@
         <!-- The last threshold, the limit, a block, a token about to expire or turned down: these stay until closed. -->
         <notificationGroup id="Duo Watchdog Important" displayType="STICKY_BALLOON"/>
         <postStartupActivity implementation="duowatchdog.plugin.WhatsNew$Activity"/>
+        <!-- Asks GitHub for a newer Duo Watchdog once an IDE run and then once a day, unless turned off. -->
+        <postStartupActivity implementation="duowatchdog.plugin.Updater$Activity"/>
     </extensions>
 
     <actions>
@@ -134,6 +147,14 @@
                 description="Copy what Duo Watchdog knows and did, without tokens, to paste into a bug report"
                 icon="AllIcons.Actions.Copy">
             <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+        <action id="duowatchdog.CheckForUpdates"
+                class="duowatchdog.plugin.Updater$CheckAction"
+                text="Duo Watchdog: Check for Updates…"
+                description="Ask GitHub whether a newer Duo Watchdog is out, and offer to install it"
+                icon="AllIcons.Actions.Download">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+            <add-to-group group-id="HelpMenu" anchor="last"/>
         </action>
         <action id="duowatchdog.WhatsNew"
                 class="duowatchdog.plugin.WhatsNew$ShowAction"

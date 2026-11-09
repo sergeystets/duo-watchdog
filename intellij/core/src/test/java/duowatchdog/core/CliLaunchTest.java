@@ -97,7 +97,7 @@ class CliLaunchTest {
                 CliLaunch.title(Cli.GLAB, Mode.AUTO_APPROVE, null));
         assertEquals("Runs duo in a new terminal, then types /ab-testing once it has started",
                 CliLaunch.title(Cli.DUO, Mode.ASK, "/ab-testing"));
-        assertEquals("Ask before tools", Mode.ASK.label());
-        assertEquals("Auto-approve tools", Mode.AUTO_APPROVE.label());
+        assertEquals("Manual", Mode.ASK.label());
+        assertEquals("Auto", Mode.AUTO_APPROVE.label());
     }
 }

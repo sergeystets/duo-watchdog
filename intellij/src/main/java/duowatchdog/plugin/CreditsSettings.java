@@ -185,6 +185,12 @@ public final class CreditsSettings implements PersistentStateComponent<CreditsSe
         public int statisticsMonths = 3;
         /** The plugin version the What's New page was last offered for. */
         public String lastSeenVersion = "";
+        /** Ask GitHub once a day whether a newer Duo Watchdog is out, and say so. */
+        public boolean checkForUpdates = true;
+        /** When GitHub was last asked, in epoch milliseconds; 0 for never. */
+        public long lastUpdateCheck = 0;
+        /** A version the notice's Skip This Version passed over; asked about again only from Check for Updates. */
+        public String skippedUpdate = "";
     }
 
     /** A quick command of your own, as kept: its button's name and what it types at the Duo CLI's prompt. */
