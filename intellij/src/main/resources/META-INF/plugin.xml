@@ -40,9 +40,12 @@
     <p>Needs GitLab 19.4 or later, and membership of the group that owns the GitLab Duo subscription; the Owner role
     is not required. The token is kept in the IDE's password store.</p>
 
+    <h3>Links</h3>
     <p><a href="https://github.com/sergeystets/duo-watchdog#readme">Documentation</a> &nbsp;·&nbsp;
+       <a href="https://github.com/sergeystets/duo-watchdog">Source code</a> &nbsp;·&nbsp;
+       <a href="https://github.com/sergeystets/duo-watchdog/issues">Issue tracker</a> &nbsp;·&nbsp;
        <a href="https://github.com/sergeystets/duo-watchdog/releases">Releases</a> &nbsp;·&nbsp;
-       <a href="https://github.com/sergeystets/duo-watchdog/issues">Report a problem</a></p>
+       <a href="https://github.com/sergeystets/duo-watchdog/blob/main/LICENSE">License (MIT)</a></p>
     ]]></description>
 
     <change-notes><![CDATA[
