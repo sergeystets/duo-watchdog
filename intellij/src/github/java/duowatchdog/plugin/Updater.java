@@ -53,7 +53,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @Service(Service.Level.APP)
 public final class Updater implements Disposable {
 
-    static final String PLUGIN_ID = "local.duo-watchdog";
     private static final long FIRST_SECONDS = 20;
     /** How often it looks whether a day has passed since it last asked. */
     private static final long LOOK_SECONDS = 3600;
@@ -94,13 +93,12 @@ public final class Updater implements Disposable {
     }
 
     static @Nullable IdeaPluginDescriptor plugin() {
-        return PluginManagerCore.getPlugin(PluginId.getId(PLUGIN_ID));
+        return PluginManagerCore.getPlugin(PluginId.getId(DuoPlugin.ID));
     }
 
     /** "0.6.0"; null when the IDE does not say. */
     static @Nullable String currentVersion() {
-        IdeaPluginDescriptor plugin = plugin();
-        return plugin == null ? null : plugin.getVersion();
+        return DuoPlugin.version();
     }
 
     @Nullable Updates.Release available() {

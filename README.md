@@ -453,6 +453,18 @@ repositories (*Settings → Plugins → ⚙ → Manage Plugin Repositories…*).
 plugin from the Marketplace: **Update** on its page in *Settings → Plugins*, with `0.7.2 → 0.7.3` beside it, and in
 the IDE's own *Check for Updates*. Turning the daily check off takes the address out again.
 
+**The plugin's id is `io.github.sergeystets.duowatchdog`** after 0.7.2, which had `local.duo-watchdog`. From 0.7.2
+or older, take the next version with Duo Watchdog's own **Update** (the notice, or the dashboard's toolbar) or with
+the installer: both put it in place of the old one, and your accounts and settings stay. The IDE's own **Update**
+button does not offer a plugin under another id.
+
+**Two builds of the plugin.** `./gradlew :intellij:buildPlugin` builds the one for the releases here on GitHub,
+with the updates above. `./gradlew :intellij:buildPlugin -Pmarketplace` builds
+`duo-watchdog-<version>-marketplace.zip` for [JetBrains Marketplace](https://plugins.jetbrains.com): the same plugin
+without updates of its own (no daily check, no *Check for Updates…*, no plugin repository added), since there the
+IDE updates it. A release uploads that build to the Marketplace when the repository has the
+`JETBRAINS_MARKETPLACE_TOKEN` secret.
+
 A release is made with `./release.sh`, and GitHub Actions publishes it only once every check passes;
 see [Checks and releases](#checks-and-releases).
 

@@ -130,6 +130,21 @@ jobs:
         run: |
           ./gradlew :intellij:verifyPlugin -PideaPath="$IDES/$IDEA_VERSION" \
             -PverifyIdePaths="$IDES/$VERIFY_OLDEST,$IDES/$VERIFY_NEWEST" -PverifyOffline
+      # The same plugin as JetBrains Marketplace gets it (-Pmarketplace): without its own updates, which the IDE
+      # does there. Built after the other, whose zip stays beside it, and verified on the same two IDEs.
+      - name: The plugin for JetBrains Marketplace, built and verified, with no updater in it
+        run: |
+          ./gradlew :intellij:buildPlugin :intellij:verifyPlugin -Pmarketplace -PideaPath="$IDES/$IDEA_VERSION" \
+            -PverifyIdePaths="$IDES/$VERIFY_OLDEST,$IDES/$VERIFY_NEWEST" -PverifyOffline
+          version=$(sed -n 's/^version = "\(.*\)"$/\1/p' intellij/build.gradle.kts)
+          zip=intellij/build/distributions/duo-watchdog-$version-marketplace.zip
+          unzip -p "$zip" "duo-watchdog/lib/duo-watchdog-$version.jar" >"$RUNNER_TEMP/marketplace.jar"
+          classes=$(unzip -l "$RUNNER_TEMP/marketplace.jar")
+          if grep -q 'duowatchdog/plugin/Updater' <<<"$classes"; then
+            echo "::error::The plugin for JetBrains Marketplace has the Updater in it"
+            exit 1
+          fi
+          grep -q 'duowatchdog/plugin/Channel.class' <<<"$classes"
       - name: Keep the Verifier's reports
         if: always()
         uses: actions/upload-artifact@v7
@@ -140,7 +155,14 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: plugin
-          path: intellij/build/distributions/duo-watchdog-*.zip
+          path: |
+            intellij/build/distributions/duo-watchdog-*.zip
+            !intellij/build/distributions/duo-watchdog-*-marketplace.zip
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        with:
+          name: plugin-marketplace
+          path: intellij/build/distributions/duo-watchdog-*-marketplace.zip
           if-no-files-found: error
 
   vscode:

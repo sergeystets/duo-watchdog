@@ -305,7 +305,7 @@ public final class CreditsConfigurable implements Configurable {
                 })
                 .createPanel();
 
-        panel = FormBuilder.createFormBuilder()
+        FormBuilder form = FormBuilder.createFormBuilder()
                 .addComponent(new TitledSeparator("Accounts"))
                 .addComponent(hint("One token per account. When you add a token, GitLab says whose it is: a token for "
                         + "an account already in the list replaces that account's token. The list puts the most "
@@ -334,17 +334,19 @@ public final class CreditsConfigurable implements Configurable {
                 .addComponent(hint("A week before a token expires, GitLab replaces it with a new one that lives as long "
                         + "(30 to 365 days) and revokes the old one; the new one is saved and handed to glab. Needs the "
                         + "api or self_rotate scope. If you use the token anywhere else, the notice after a rotation "
-                        + "copies the new one."))
-                .addComponent(new TitledSeparator("Updates"), JBUI.scale(16))
-                .addComponent(checkForUpdates)
-                .addComponent(hint("Asks GitHub for the latest release of Duo Watchdog (" + Updates.RELEASES + "), "
-                        + "when the IDE starts and then once a day; nothing about you or your accounts is sent. A newer "
-                        + "one is said in a notice and on the tool window's toolbar: Update downloads it and the IDE "
-                        + "installs it when it restarts. This is Duo Watchdog "
-                        + Objects.requireNonNullElse(Updater.currentVersion(), "?") + "; Tools | Duo Watchdog: "
-                        + "Check for Updates asks now."))
-                .addComponentFillVertically(new JPanel(), 0)
-                .getPanel();
+                        + "copies the new one."));
+        // The build for JetBrains Marketplace has no updates of its own: the IDE updates the plugin.
+        if (Channel.SELF_UPDATES) {
+            form.addComponent(new TitledSeparator("Updates"), JBUI.scale(16))
+                    .addComponent(checkForUpdates)
+                    .addComponent(hint("Asks GitHub for the latest release of Duo Watchdog (" + Updates.RELEASES + "), "
+                            + "when the IDE starts and then once a day; nothing about you or your accounts is sent. A newer "
+                            + "one is said in a notice and on the tool window's toolbar: Update downloads it and the IDE "
+                            + "installs it when it restarts. This is Duo Watchdog "
+                            + Objects.requireNonNullElse(DuoPlugin.version(), "?") + "; Tools | Duo Watchdog: "
+                            + "Check for Updates asks now."));
+        }
+        panel = form.addComponentFillVertically(new JPanel(), 0).getPanel();
 
         ApplicationManager.getApplication().getMessageBus().connect(uiDisposable)
                 .subscribe(CreditsListener.TOPIC, this::refreshRows);
@@ -1146,7 +1148,7 @@ public final class CreditsConfigurable implements Configurable {
         settings.setQuickCommands(quickCommands.getItems());
         s.rotateTokens = rotateTokens.isSelected();
         s.checkForUpdates = checkForUpdates.isSelected();
-        Updater.listWithIde(s.checkForUpdates);
+        Channel.updatesTurned(s.checkForUpdates);
 
         Map<String, String> tokens = new HashMap<>(pendingTokens);
         Set<String> gone = new HashSet<>(removed);

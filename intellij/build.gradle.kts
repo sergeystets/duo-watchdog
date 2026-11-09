@@ -6,13 +6,27 @@ plugins {
     id("org.jetbrains.intellij.platform") version "2.19.0"
 }
 
-group = "local.duowatchdog"
+group = "io.github.sergeystets.duowatchdog"
 version = "0.7.2"
 
 repositories {
     mavenCentral()
     intellijPlatform {
         defaultRepositories()
+    }
+}
+
+// Two builds of the one plugin, with the same id and version. The default is for the releases on GitHub, which the
+// installers and the plugin's own Updater install (src/github). -Pmarketplace is for JetBrains Marketplace, where the
+// IDE updates the plugin: no Updater, no Check for Updates, no plugin repository added (src/marketplace). Its zip is
+// duo-watchdog-<version>-marketplace.zip.
+val marketplace = providers.gradleProperty("marketplace").isPresent
+val channel = if (marketplace) "marketplace" else "github"
+
+sourceSets {
+    main {
+        java.srcDir("src/$channel/java")
+        resources.srcDir("src/$channel/resources")
     }
 }
 
@@ -113,6 +127,12 @@ tasks.withType<JavaCompile>().configureEach {
 
 // What's New: the page and its pictures live with the VS Code extension's media, and both show them.
 tasks.processResources {
+    // The plugin's version, for DuoPlugin.version().
+    val version = project.version.toString()
+    inputs.property("version", version)
+    filesMatching("duowatchdog/plugin.properties") {
+        expand("version" to version)
+    }
     from(rootProject.file("vscode/media/whats-new")) {
         into("whatsnew")
     }
@@ -144,6 +164,10 @@ base {
 // The plugin's final jar takes its whole file name from the module, not from archivesName.
 tasks.named<AbstractArchiveTask>("composedJar") {
     archiveFileName = "duo-watchdog-${project.version}.jar"
+}
+
+tasks.buildPlugin {
+    if (marketplace) archiveClassifier = "marketplace"
 }
 
 intellijPlatform {
