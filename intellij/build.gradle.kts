@@ -173,6 +173,15 @@ tasks.buildPlugin {
 intellijPlatform {
     projectName = "duo-watchdog"
     pluginConfiguration {
+        // The Marketplace build's notes say nothing of what it does not have: the updates from GitHub, the
+        // installers. plugin.xml marks those items "github-only".
+        if (marketplace) {
+            changeNotes = provider {
+                val xml = file("src/main/resources/META-INF/plugin.xml").readText()
+                val notes = xml.substringAfter("<change-notes><![CDATA[").substringBefore("]]></change-notes>")
+                Regex("""[ \t]*<!--github-only-->.*?<!--/github-only-->\n?""", RegexOption.DOT_MATCHES_ALL).replace(notes, "")
+            }
+        }
         ideaVersion {
             // Installs on 2024.3 and every later IDE, whichever IDE it was compiled against.
             sinceBuild = "243"

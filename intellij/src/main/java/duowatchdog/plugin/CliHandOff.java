@@ -2,11 +2,11 @@ package duowatchdog.plugin;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
-import com.intellij.execution.configurations.PathEnvironmentVariableUtil;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectManager;
 import com.intellij.openapi.util.SystemInfo;
+import com.intellij.util.EnvironmentUtil;
 import duowatchdog.core.Glab;
 import org.jetbrains.annotations.Nullable;
 
@@ -126,7 +126,7 @@ final class CliHandOff {
 
     private static @Nullable Target look() {
         if (!SystemInfo.isWindows) {
-            File onPath = PathEnvironmentVariableUtil.findInPath("glab");
+            File onPath = onPath("glab");
             if (onPath != null) {
                 return new Target(onPath, null, null);
             }
@@ -139,7 +139,7 @@ final class CliHandOff {
         if (inProject != null) {
             return new Target(null, distro, inProject);
         }
-        File exe = PathEnvironmentVariableUtil.findInPath("glab.exe");
+        File exe = onPath("glab.exe");
         if (exe != null) {
             return new Target(exe, null, null);
         }
@@ -158,8 +158,23 @@ final class CliHandOff {
         return null;
     }
 
+    /** The program of that name in the first PATH folder that has it, with the PATH of the user's shell. */
+    private static @Nullable File onPath(String name) {
+        String path = EnvironmentUtil.getValue("PATH");
+        if (path == null) {
+            return null;
+        }
+        for (String folder : path.split(File.pathSeparator)) {
+            File file = new File(folder, name);
+            if (!folder.isEmpty() && file.isFile() && file.canExecute()) {
+                return file;
+            }
+        }
+        return null;
+    }
+
     private static @Nullable File wslExe() {
-        File onPath = PathEnvironmentVariableUtil.findInPath("wsl.exe");
+        File onPath = onPath("wsl.exe");
         if (onPath != null) {
             return onPath;
         }

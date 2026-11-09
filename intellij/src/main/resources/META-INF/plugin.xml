@@ -47,29 +47,37 @@
        <a href="https://github.com/sergeystets/duo-watchdog/blob/main/LICENSE">License (MIT)</a></p>
     ]]></description>
 
+    <!-- An item between "github-only" comments is about the build for the releases on GitHub alone; the build for
+         JetBrains Marketplace (-Pmarketplace) leaves it out of its notes (build.gradle.kts). -->
     <change-notes><![CDATA[
     <h3>What's new in 0.7.2</h3>
     <ul>
+      <!--github-only-->
       <li>The IDE itself offers each new release: <b>Update</b> on Duo Watchdog's page in <i>Settings | Plugins</i>,
           with the versions (<code>0.7.2 → 0.7.3</code>), as for a plugin from the Marketplace. Duo Watchdog adds
           its releases on GitHub to the IDE's plugin repositories; turning <i>Check for Duo Watchdog updates</i>
           off in its settings takes them out again.</li>
+      <!--/github-only-->
       <li>This page says what the plugin does and how to start, with a <b>Plugin homepage</b> link.</li>
     </ul>
     <h3>0.7.1</h3>
     <ul>
+      <!--github-only-->
       <li>The installers download the ready-made plugin of the latest release from GitHub and check it against the
           release; nothing is built.</li>
+      <!--/github-only-->
       <li>Every release is built and checked by GitHub Actions, with JetBrains' Plugin Verifier, before it is
           published.</li>
     </ul>
     <h3>0.7.0</h3>
     <ul>
+      <!--github-only-->
       <li><b>Updates from the IDE</b>: Duo Watchdog asks GitHub for its latest release when the IDE starts and then
           once a day, and says when a newer one is out. <b>Update</b> downloads its plugin zip from GitHub, checks it
           against the release, and the IDE puts it in place when it restarts (<b>Restart Now</b>). The tool window's
           toolbar shows <b>Update to x.y.z</b> while one is known; <i>Tools | Duo Watchdog: Check for Updates</i> asks at
           once. Settings | Updates turns the daily check off.</li>
+      <!--/github-only-->
       <li>The Duo CLI's tool approval reads <b>Manual</b> or <b>Auto</b> (<code>--dangerously-skip-permissions</code>).</li>
       <li>Sessions' <b>By project</b> puts each project on a line of its own over its bar, cut from the front so its own
           name shows, with the whole path on hover.</li>
