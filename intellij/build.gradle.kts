@@ -93,6 +93,8 @@ java {
 
 tasks.withType<JavaCompile>().configureEach {
     options.release = 21
+    // The sources are UTF-8. Left unsaid, javac on Windows may read them as Windows-1252, and every "·" shows as "Â·".
+    options.encoding = "UTF-8"
 }
 
 // What's New: the page and its pictures live with the VS Code extension's media, and both show them.
