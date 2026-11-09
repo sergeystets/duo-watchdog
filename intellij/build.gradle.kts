@@ -1,4 +1,5 @@
 import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
+import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask.FailureLevel
 
 plugins {
     java
@@ -158,6 +159,14 @@ intellijPlatform {
     // ./gradlew verifyPlugin: a call to anything either of them lacks fails it. CI runs it before every release.
     // -PverifyOldest / -PverifyNewest name others.
     pluginVerification {
+        // What fails it: a call to something an IDE lacks, a broken plugin, a dependency it cannot find. Calls to
+        // JetBrains' internal API (the staged update, the name of the password store) are reported, not failed:
+        // they have no public equivalent, and the Gradle plugin's default would fail on them.
+        failureLevel = listOf(
+            FailureLevel.COMPATIBILITY_PROBLEMS,
+            FailureLevel.INVALID_PLUGIN,
+            FailureLevel.MISSING_DEPENDENCIES,
+        )
         ides {
             create(IntelliJPlatformType.IntellijIdeaCommunity, providers.gradleProperty("verifyOldest").getOrElse("2024.3.7"))
             create(IntelliJPlatformType.IntellijIdea, providers.gradleProperty("verifyNewest").getOrElse("2026.3"))
