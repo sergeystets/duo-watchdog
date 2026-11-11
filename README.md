@@ -20,6 +20,11 @@ GitLab Credits usage for the current billing period, forecast where the month wi
 ![GitLab](https://img.shields.io/badge/GitLab-Duo-FC6D26?logo=gitlab&logoColor=white)
 ![Version](https://img.shields.io/badge/version-0.7.3-blue)
 
+<a href="https://plugins.jetbrains.com/plugin/35949-duo-watchdog"><img src="https://img.shields.io/badge/Get_from-JetBrains_Marketplace-000000?style=for-the-badge&logo=jetbrains&logoColor=white" alt="Get from JetBrains Marketplace"></a>
+
+[![JetBrains Marketplace version](https://img.shields.io/jetbrains/plugin/v/35949-duo-watchdog?label=Marketplace&logo=jetbrains)](https://plugins.jetbrains.com/plugin/35949-duo-watchdog)
+[![JetBrains Marketplace downloads](https://img.shields.io/jetbrains/plugin/d/35949-duo-watchdog?logo=jetbrains)](https://plugins.jetbrains.com/plugin/35949-duo-watchdog)
+
 </div>
 
 <p align="center">
@@ -512,7 +517,15 @@ files for Windows, macOS and Linux: `duo-watchdog-<version>.zip` for IntelliJ ID
 for VS Code. Installing builds nothing, so it needs no JDK, Node.js or Gradle, and no clone. Once installed,
 Duo Watchdog offers each new release itself and installs it from the editor: see [Updates](#updates).
 
-### With the install script (recommended)
+### From JetBrains Marketplace (recommended for JetBrains IDEs)
+
+<a href="https://plugins.jetbrains.com/plugin/35949-duo-watchdog"><img src="https://img.shields.io/badge/Get_from-JetBrains_Marketplace-000000?style=for-the-badge&logo=jetbrains&logoColor=white" alt="Get from JetBrains Marketplace"></a>
+
+In IntelliJ IDEA (or another JetBrains IDE), open *Settings → Plugins → Marketplace*, search for **Duo Watchdog** and click
+*Install*. Or open the [plugin page](https://plugins.jetbrains.com/plugin/35949-duo-watchdog) and click *Install to IDE*.
+The IDE updates it like any other Marketplace plugin.
+
+### With the install script
 
 One line, no clone needed. It downloads the install script and runs it; the script installs the latest release.
 
@@ -833,7 +846,7 @@ git clone https://github.com/sergeystets/duo-watchdog.git
 cd duo-watchdog
 ```
 
-**3. Run the installer** and answer its questions (see [With the install script](#with-the-install-script-recommended)):
+**3. Run the installer** and answer its questions (see [With the install script](#with-the-install-script)):
 
 ```powershell
 .\install.bat
