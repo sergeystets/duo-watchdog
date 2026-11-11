@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>What's New in Duo Watchdog 0.6.0</title>
+<title>What's New in Duo Watchdog 0.7.0</title>
 <!-- Shown by the VS Code extension in a webview and by the IntelliJ plugin in a dialog, which reads plain HTML:
      keep it to headings, paragraphs, lists and images with a width. -->
 <style>
@@ -17,9 +17,17 @@ img { margin: 6px 0 4px; border: 1px solid #c9ccd6; }
 </style>
 </head>
 <body>
-<h1>What's new in Duo Watchdog 0.6.0</h1>
-<p><b>Duo CLI quick actions on Usage.</b> Pick how to start the GitLab Duo CLI, <b>duo</b> or <b>glab duo cli</b>, and
-whether it asks before each tool or auto-approves them all (<code>--dangerously-skip-permissions</code>). Then
+<h1>What's new in Duo Watchdog 0.7.0</h1>
+<p><b>Updates from the editor.</b> Duo Watchdog now asks GitHub for its latest release when the editor starts and then
+once a day, and says when a newer one is out. <b>Update</b> downloads it from GitHub, checks it against the release, and
+installs it: IntelliJ IDEA puts it in place when it restarts, VS Code when the window reloads. While one is known, the
+dashboard's toolbar shows <b>Update to x.y.z</b>; <i>Check for Updates</i> asks at once, and Settings turns the daily
+check off. Nothing about you or your accounts is sent.</p>
+<p>The Duo CLI's tool approval on Usage reads <b>Manual</b> (it asks before each tool) or <b>Auto</b>
+(<code>--dangerously-skip-permissions</code>). In Sessions, <b>By project</b> gives each project a line of its own over
+its bar, cut from the front so its own name shows, with the whole path on hover.</p>
+<p>0.6.0: <b>Duo CLI quick actions on Usage.</b> Pick how to start the GitLab Duo CLI, <b>duo</b> or <b>glab duo cli</b>, and
+whether it asks before each tool (Manual) or runs them all (Auto, <code>--dangerously-skip-permissions</code>). Then
 <b>New session</b> runs it in a new terminal in your project, <b>Doctor</b> also types <code>/doctor</code> at its
 prompt, and your own <b>quick commands</b> theirs. <b>+</b> builds one: type its command, such as
 <code>/ab-testing</code>, then its button's name, such as <b>AB Testing</b>. A command is typed only once the CLI has

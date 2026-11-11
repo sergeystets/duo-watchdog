@@ -76,6 +76,34 @@ button.icon:hover {
     background: var(--vscode-toolbar-hoverBackground);
 }
 
+/* A newer Duo Watchdog: "Update to 0.7.0". */
+.toolbar .update {
+    height: 20px;
+    margin-left: 6px;
+    padding: 0 8px;
+    border: none;
+    border-radius: 10px;
+    background: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    font: inherit;
+    font-size: 11px;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.toolbar .update[hidden] {
+    display: none;
+}
+
+.toolbar .update:hover {
+    background: var(--vscode-button-hoverBackground);
+}
+
+.toolbar .update:focus-visible {
+    outline: 1px solid var(--vscode-focusBorder);
+    outline-offset: 1px;
+}
+
 button.icon:focus-visible,
 button.link:focus-visible {
     outline: 1px solid var(--vscode-focusBorder);
@@ -458,6 +486,22 @@ h2 .caption {
 .features .value {
     text-align: right;
     font-weight: 700;
+}
+
+/* Projects: the path on a line of its own, over its bar, cut at its start so the project's own name shows. */
+.features.paths {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 3px;
+}
+
+.features.paths .name {
+    direction: rtl;
+    text-align: left;
+}
+
+.features.paths .track {
+    grid-column: 1 / -1;
+    margin-bottom: 7px;
 }
 
 .small {

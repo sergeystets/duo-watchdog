@@ -1,13 +1,10 @@
 package duowatchdog.plugin;
 
-import com.intellij.ide.plugins.IdeaPluginDescriptor;
-import com.intellij.ide.plugins.PluginManagerCore;
 import com.intellij.notification.Notification;
 import com.intellij.notification.NotificationAction;
 import com.intellij.notification.NotificationType;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.extensions.PluginId;
 import com.intellij.openapi.project.DumbAwareAction;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.startup.ProjectActivity;
@@ -38,7 +35,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 final class WhatsNew {
 
-    private static final String PLUGIN_ID = "local.duo-watchdog";
     private static final String PAGE = "/whatsnew/whats-new.html";
     /** Once per IDE run, whichever project opens first. */
     private static final AtomicBoolean CHECKED = new AtomicBoolean();
@@ -51,12 +47,11 @@ final class WhatsNew {
         if (!CHECKED.compareAndSet(false, true)) {
             return;
         }
-        IdeaPluginDescriptor plugin = PluginManagerCore.getPlugin(PluginId.getId(PLUGIN_ID));
-        if (plugin == null || plugin.getVersion() == null) {
+        String version = DuoPlugin.version();
+        if (version == null) {
             return;
         }
         CreditsSettings.Settings s = CreditsSettings.getInstance().getState();
-        String version = plugin.getVersion();
         if (version.equals(s.lastSeenVersion)) {
             return;
         }

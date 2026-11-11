@@ -1,0 +1,4 @@
+<!-- The build for JetBrains Marketplace (-Pmarketplace): the IDE updates the plugin, so nothing is registered here.
+     The build for the releases on GitHub has Duo Watchdog's own updates in this file, src/github. -->
+<idea-plugin>
+</idea-plugin>

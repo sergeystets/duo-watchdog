@@ -1,13 +1,10 @@
 package duowatchdog.plugin;
 
-import com.intellij.ide.plugins.IdeaPluginDescriptor;
-import com.intellij.ide.plugins.PluginManagerCore;
 import com.intellij.notification.Notification;
 import com.intellij.notification.NotificationType;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.application.ApplicationInfo;
 import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.extensions.PluginId;
 import com.intellij.openapi.ide.CopyPasteManager;
 import com.intellij.openapi.project.DumbAwareAction;
 import com.intellij.openapi.project.Project;
@@ -25,6 +22,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Objects;
 
 /**
  * Tools | Duo Watchdog: Copy Diagnostics: what the plugin knows and did, as text to paste into a bug report: the IDE
@@ -53,10 +51,9 @@ final class Diagnostics extends DumbAwareAction {
 
     static String report() {
         StringBuilder r = new StringBuilder();
-        IdeaPluginDescriptor plugin = PluginManagerCore.getPlugin(PluginId.getId("local.duo-watchdog"));
         ApplicationInfo ide = ApplicationInfo.getInstance();
         r.append("Duo Watchdog diagnostics, ").append(WHEN.format(ZonedDateTime.now())).append('\n');
-        r.append("Plugin ").append(plugin != null ? plugin.getVersion() : "?")
+        r.append("Plugin ").append(Objects.requireNonNullElse(DuoPlugin.version(), "?"))
                 .append(" · ").append(ide.getFullApplicationName()).append(" (").append(ide.getBuild().asString()).append(')')
                 .append(" · ").append(SystemInfo.OS_NAME).append(' ').append(SystemInfo.OS_VERSION).append(' ')
                 .append(SystemInfo.OS_ARCH).append(" · Java ").append(SystemInfo.JAVA_VERSION).append('\n');

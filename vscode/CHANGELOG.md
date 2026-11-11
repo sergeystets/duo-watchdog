@@ -1,5 +1,51 @@
 # Changelog
 
+## 0.7.3
+
+- **Ready for JetBrains Marketplace**: the plugin's id is now `io.github.sergeystets.duowatchdog` (it was
+  `local.duo-watchdog`), and there is a second build of it for the Marketplace, without updates of its own, since
+  there the IDE updates it. The build in the releases here keeps its updates.
+- **From 0.7.2 or older**, take this version with Duo Watchdog's own **Update** (the notice, or the dashboard's
+  toolbar) or with the installer: both put it in place of the old one, and your accounts and settings stay. The IDE's
+  own **Update** button in *Settings → Plugins* does not offer a plugin under another id.
+- The plugin no longer calls what JetBrains keeps internal to the IDE or has marked for removal. Where your tokens
+  are kept is now named as the macOS Keychain, the Windows Credential Manager, or on Linux the IDE's password store.
+- No changes to the VS Code extension.
+
+## 0.7.2
+
+- **IntelliJ IDEA offers the update itself**: a newer release shows **Update** on Duo Watchdog's page in
+  *Settings → Plugins*, with the versions (`0.7.2 → 0.7.3`), as for a plugin from the Marketplace. Each release
+  carries an `updatePlugins.xml` for it, and the plugin adds its releases on GitHub to the IDE's plugin repositories
+  (*Settings → Plugins → ⚙ → Manage Plugin Repositories…*); turning **Check for Duo Watchdog updates once a day**
+  off takes them out again. Duo Watchdog's own notice and **Update to x.y.z** stay.
+- The plugin's page in *Settings → Plugins* says what it does and how to start, with a picture of the dashboard and
+  a **Plugin homepage** link.
+- No changes to the VS Code extension.
+
+## 0.7.1
+
+- **Installers install the release**: `install.sh`, `install.ps1` and `install.bat` download the ready-made plugin and
+  extension of the latest release from GitHub and check them against it, so nothing is built and no JDK or Node.js
+  is needed. They also run without a clone, in one line (see the README's Installation); `--from-source` builds
+  the clone as before.
+- Every release is now built and checked by GitHub Actions before it is published: the tests, JetBrains' Plugin
+  Verifier on the oldest and the newest IntelliJ IDEA, the extension in VS Code, and the installers on Linux, macOS
+  and Windows.
+- A build on Windows keeps `·` as `·`: the Java sources are compiled as UTF-8.
+
+## 0.7.0
+
+- **Updates from the editor**: Duo Watchdog asks GitHub for its latest release a little after VS Code starts and then
+  once a day, and says when a newer one is out. **Update** downloads its `.vsix` from GitHub, checks its size and
+  SHA-256 against the release, and installs it; **Reload Window** loads it. **Release Notes** opens the release, **Skip
+  This Version** says nothing more about that one. The dashboard's toolbar shows **Update to x.y.z** while one is
+  known. New commands: **Duo Watchdog: Check for Updates** and **Duo Watchdog: Install the Update**. New setting:
+  `duoWatchdog.checkForUpdates` (on).
+- The Duo CLI's tool approval reads **Manual** or **Auto** (`--dangerously-skip-permissions`).
+- Sessions' **By project** puts each project on a line of its own over its bar, cut from the front so its own name
+  shows, with the whole path on hover.
+
 ## 0.6.0
 
 - **Duo CLI quick actions on Usage**: two drop-downs, `duo` or `glab duo cli`, and **Ask before tools** or

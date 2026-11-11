@@ -1,0 +1,23 @@
+# Every pull request and every push to main goes through what a release must pass (checks.yml). A push to main runs
+# all of it, and a release of that commit then publishes the files this run built (release.yml); a pull request
+# runs the jobs for the parts it touches.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    uses: ./.github/workflows/checks.yml
+    with:
+      everything: ${{ github.event_name != 'pull_request' }}

@@ -1,15 +1,32 @@
+import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
+import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask.FailureLevel
+
 plugins {
     java
     id("org.jetbrains.intellij.platform") version "2.19.0"
 }
 
-group = "local.duowatchdog"
-version = "0.6.0"
+group = "io.github.sergeystets.duowatchdog"
+version = "0.7.3"
 
 repositories {
     mavenCentral()
     intellijPlatform {
         defaultRepositories()
+    }
+}
+
+// Two builds of the one plugin, with the same id and version. The default is for the releases on GitHub, which the
+// installers and the plugin's own Updater install (src/github). -Pmarketplace is for JetBrains Marketplace, where the
+// IDE updates the plugin: no Updater, no Check for Updates, no plugin repository added (src/marketplace). Its zip is
+// duo-watchdog-<version>-marketplace.zip.
+val marketplace = providers.gradleProperty("marketplace").isPresent
+val channel = if (marketplace) "marketplace" else "github"
+
+sourceSets {
+    main {
+        java.srcDir("src/$channel/java")
+        resources.srcDir("src/$channel/resources")
     }
 }
 
@@ -35,13 +52,19 @@ fun findInstalledIdea(): String? {
         ?.path
 }
 
-// Compile against the IDEA already installed, never a downloaded one: -PideaPath=... (or IDEA_HOME) names it,
-// otherwise the usual places are searched.
+// Compile against the IDEA already installed: -PideaPath=... (or IDEA_HOME) names it, otherwise the usual places are
+// searched. CI, which has none, fetches one and names its folder with -PideaPath; -PideaVersion=2025.3.1 has Gradle
+// download that version instead.
+val downloadedIdea: String? = providers.gradleProperty("ideaVersion").orNull
 val requestedIdea: String? = providers.gradleProperty("ideaPath").orElse(providers.environmentVariable("IDEA_HOME")).orNull
-val installedIdea: String? = if (requestedIdea != null) requestedIdea.takeIf { isIdea(File(it)) } else findInstalledIdea()
+val installedIdea: String? = when {
+    downloadedIdea != null -> null
+    requestedIdea != null -> requestedIdea.takeIf { isIdea(File(it)) }
+    else -> findInstalledIdea()
+}
 
 // Without an IDEA only this module's tasks fail, so the rest of the build (the VS Code module) still runs.
-if (installedIdea == null) {
+if (installedIdea == null && downloadedIdea == null) {
     val why = if (requestedIdea != null) {
         "Duo Watchdog: no IntelliJ IDEA at $requestedIdea (no product-info.json there)."
     } else {
@@ -81,9 +104,14 @@ fun pluginsDir(idea: String): File {
     }
 }
 
+/** The branch of a version, 253 for 2025.3.1, or null when it is not one. */
+fun versionBranch(version: String): Int? =
+    Regex("^20(\\d\\d)\\.(\\d)").find(version)?.let { it.groupValues[1].toInt() * 10 + it.groupValues[2].toInt() }
+
 // IDEs from 2026.2 (branch 262) on are compiled for Java 25, which a JDK 21 javac cannot read, so they are
 // compiled against with JDK 25. The classes stay Java 21 either way, so the plugin still installs on 2024.3.
-val compileJdk = if ((installedIdea?.let(::ideaBranch) ?: 0) >= 262) 25 else 21
+val compileBranch = downloadedIdea?.let(::versionBranch) ?: installedIdea?.let(::ideaBranch) ?: 0
+val compileJdk = if (compileBranch >= 262) 25 else 21
 
 java {
     toolchain {
@@ -93,10 +121,18 @@ java {
 
 tasks.withType<JavaCompile>().configureEach {
     options.release = 21
+    // The sources are UTF-8. Left unsaid, javac on Windows may read them as Windows-1252, and every "·" shows as "Â·".
+    options.encoding = "UTF-8"
 }
 
 // What's New: the page and its pictures live with the VS Code extension's media, and both show them.
 tasks.processResources {
+    // The plugin's version, for DuoPlugin.version().
+    val version = project.version.toString()
+    inputs.property("version", version)
+    filesMatching("duowatchdog/plugin.properties") {
+        expand("version" to version)
+    }
     from(rootProject.file("vscode/media/whats-new")) {
         into("whatsnew")
     }
@@ -105,10 +141,15 @@ tasks.processResources {
 dependencies {
     implementation(project(":intellij:core"))
     intellijPlatform {
-        if (installedIdea != null) {
+        if (downloadedIdea != null) {
+            logger.lifecycle("Duo Watchdog: compiling against IntelliJ IDEA $downloadedIdea, downloaded, with JDK $compileJdk")
+            intellijIdea(downloadedIdea)
+        } else if (installedIdea != null) {
             logger.lifecycle("Duo Watchdog: compiling against the installed IDE at $installedIdea with JDK $compileJdk")
             local(installedIdea)
         }
+        // ./gradlew verifyPlugin checks the built plugin against the IDEs below with JetBrains' Plugin Verifier.
+        pluginVerifier()
         // Usage's Duo CLI quick actions open a terminal tab; an optional dependency in plugin.xml.
         bundledPlugin("org.jetbrains.plugins.terminal")
     }
@@ -125,9 +166,22 @@ tasks.named<AbstractArchiveTask>("composedJar") {
     archiveFileName = "duo-watchdog-${project.version}.jar"
 }
 
+tasks.buildPlugin {
+    if (marketplace) archiveClassifier = "marketplace"
+}
+
 intellijPlatform {
     projectName = "duo-watchdog"
     pluginConfiguration {
+        // The Marketplace build's notes say nothing of what it does not have: the updates from GitHub, the
+        // installers. plugin.xml marks those items "github-only".
+        if (marketplace) {
+            changeNotes = provider {
+                val xml = file("src/main/resources/META-INF/plugin.xml").readText()
+                val notes = xml.substringAfter("<change-notes><![CDATA[").substringBefore("]]></change-notes>")
+                Regex("""[ \t]*<!--github-only-->.*?<!--/github-only-->\n?""", RegexOption.DOT_MATCHES_ALL).replace(notes, "")
+            }
+        }
         ideaVersion {
             // Installs on 2024.3 and every later IDE, whichever IDE it was compiled against.
             sinceBuild = "243"
@@ -135,6 +189,36 @@ intellijPlatform {
         }
     }
     buildSearchableOptions = false
+    // The oldest IntelliJ IDEA the plugin installs on (sinceBuild) and the newest released, checked by
+    // ./gradlew verifyPlugin: a call to anything either of them lacks fails it. CI runs it before every release.
+    // -PverifyOldest / -PverifyNewest name others; CI's are VERIFY_OLDEST and VERIFY_NEWEST in checks.yml.
+    pluginVerification {
+        // What fails it: a call to something an IDE lacks, a broken plugin, a dependency it cannot find. Calls to
+        // JetBrains' internal API (the staged update, the name of the password store) are reported, not failed:
+        // they have no public equivalent, and the Gradle plugin's default would fail on them.
+        failureLevel = listOf(
+            FailureLevel.COMPATIBILITY_PROBLEMS,
+            FailureLevel.INVALID_PLUGIN,
+            FailureLevel.MISSING_DEPENDENCIES,
+        )
+        ides {
+            // CI has both unpacked already (.github/scripts/fetch-ide.sh fetches them while the job sets up) and
+            // names their folders, separated by commas: -PverifyIdePaths=/ides/2024.3.7,/ides/2026.3.
+            val unpacked = providers.gradleProperty("verifyIdePaths").orNull
+            if (unpacked != null) {
+                unpacked.split(',').filter { it.isNotBlank() }.forEach { local(it.trim()) }
+            } else {
+                create(IntelliJPlatformType.IntellijIdeaCommunity, providers.gradleProperty("verifyOldest").getOrElse("2024.3.7"))
+                create(IntelliJPlatformType.IntellijIdea, providers.gradleProperty("verifyNewest").getOrElse("2026.3"))
+            }
+        }
+    }
+}
+
+// -PverifyOffline keeps the Plugin Verifier to the IDEs it is given, as CI does: it then skips downloading the
+// plugins that the IDE's own plugins could use (1.3 GB for 2026.3), which says nothing about this one.
+tasks.verifyPlugin {
+    if (providers.gradleProperty("verifyOffline").isPresent) offline = true
 }
 
 /** Unpacks the built plugin where Install Plugin from Disk would, replacing an older Duo Watchdog. */

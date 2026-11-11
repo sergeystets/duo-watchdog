@@ -1,0 +1,175 @@
+# A release, from a tag v<version> pushed by ./release.sh: published only when every check passes (checks.yml), with
+# the very plugin zip and .vsix those checks built and tested. The plugin and the extension offer the latest release
+# as an update, so a failed check here keeps a broken build from reaching anyone.
+#
+# A commit that CI has already checked in full on main (ci.yml, on the push) is not checked again: its files from
+# that run are published, in under a minute. Any other commit goes through every check here first.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+
+jobs:
+  prepare:
+    name: The tag is a version ready to release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      checked: ${{ steps.checked.outputs.run }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: version
+        name: The tag, the plugin, the extension and the changelog agree, and the commit is on main
+        run: |
+          tag=$GITHUB_REF_NAME
+          version=${tag#v}
+          plugin=$(sed -n 's/^version = "\(.*\)"$/\1/p' intellij/build.gradle.kts)
+          extension=$(sed -n 's/^  "version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' vscode/package.json | sed -n 1p)
+          if [ "$plugin" != "$version" ] || [ "$extension" != "$version" ]; then
+            echo "::error::$tag, but the plugin is $plugin and the extension $extension"
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$tag is not on main; only what main has is released"
+            exit 1
+          fi
+          awk -v v="## $version" '$0 == v { on = 1; next } on && /^## / { exit } on { print }' vscode/CHANGELOG.md >notes.md
+          if [ -z "$(tr -d '[:space:]' <notes.md)" ]; then
+            echo "::error::vscode/CHANGELOG.md has no \"## $version\" section for the release notes"
+            exit 1
+          fi
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-notes
+          path: notes.md
+      - id: checked
+        name: The CI run that passed every check for this commit on main, if there is one with both files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Only a push to main counts: it runs every job, where a pull request may skip some. No such run, or one
+          # whose files have expired, and the checks run here instead.
+          run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$GITHUB_SHA&branch=main&event=push&status=success&per_page=1" \
+            --jq '.workflow_runs[0].id // empty') || run=
+          if [ -n "$run" ]; then
+            files=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run/artifacts" --paginate \
+              --jq '.artifacts[] | select(.expired | not) | .name') || files=
+            if grep -qx plugin <<<"$files" && grep -qx plugin-marketplace <<<"$files" && grep -qx vsix <<<"$files"; then
+              echo "Checked already: https://github.com/$GITHUB_REPOSITORY/actions/runs/$run"
+            else
+              echo "Run $run has no plugin, plugin-marketplace and vsix to publish"
+              run=
+            fi
+          fi
+          [ -n "$run" ] || echo "No finished CI run for $GITHUB_SHA on main: checking it here"
+          echo "run=$run" >>"$GITHUB_OUTPUT"
+
+  checks:
+    needs: prepare
+    if: needs.prepare.outputs.checked == ''
+    uses: ./.github/workflows/checks.yml
+
+  publish:
+    name: Publish the release
+    needs: [prepare, checks]
+    # After the checks here passed, or without them when CI has passed them for this commit already.
+    if: >-
+      ${{ !cancelled() && needs.prepare.result == 'success' &&
+      (needs.checks.result == 'success' || (needs.checks.result == 'skipped' && needs.prepare.outputs.checked != '')) }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: plugin
+          path: dist
+          run-id: ${{ needs.prepare.outputs.checked || github.run_id }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v8
+        with:
+          name: vsix
+          path: dist
+          run-id: ${{ needs.prepare.outputs.checked || github.run_id }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-notes
+          path: dist
+      - name: Release ${{ github.ref_name }} with the files the checks tested
+        run: |
+          ls -la dist
+          # What IntelliJ IDEA reads at releases/latest/download/updatePlugins.xml to offer this release itself,
+          # with Update on the plugin's page: the plugin, its version, its zip, and the oldest IDE it installs on,
+          # as the plugin's own plugin.xml in the zip says it.
+          unzip -p "dist/duo-watchdog-$VERSION.zip" "duo-watchdog/lib/duo-watchdog-$VERSION.jar" >dist/plugin.jar
+          since=$(unzip -p dist/plugin.jar META-INF/plugin.xml | sed -n 's/.*since-build="\([^"]*\)".*/\1/p' | sed -n 1p)
+          [ -n "$since" ] || { echo "::error::No since-build in the plugin's plugin.xml"; exit 1; }
+          cat >dist/updatePlugins.xml <<XML
+          <?xml version="1.0" encoding="UTF-8"?>
+          <plugins>
+            <plugin id="io.github.sergeystets.duowatchdog" version="$VERSION"
+                    url="https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/duo-watchdog-$VERSION.zip">
+              <idea-version since-build="$since"/>
+              <name>Duo Watchdog</name>
+            </plugin>
+          </plugins>
+          XML
+          cat dist/updatePlugins.xml
+          gh release create "$GITHUB_REF_NAME" "dist/duo-watchdog-$VERSION.zip" "dist/duo-watchdog-$VERSION.vsix" \
+            dist/updatePlugins.xml \
+            --repo "$GITHUB_REPOSITORY" --verify-tag --latest \
+            --title "Duo Watchdog $VERSION" --notes-file dist/notes.md
+
+  # The same version for JetBrains Marketplace: the build without its own updates (-Pmarketplace), which the checks
+  # built and verified beside the other. JetBrains reviews it before the IDEs offer it. The plugin's first version is
+  # uploaded by hand at https://plugins.jetbrains.com/plugin/add, which makes its page; from then on this job does
+  # it, once the repository has the secret JETBRAINS_MARKETPLACE_TOKEN (https://plugins.jetbrains.com/author/me/tokens).
+  marketplace:
+    name: Upload to JetBrains Marketplace
+    needs: [prepare, publish]
+    if: ${{ !cancelled() && needs.publish.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+      MARKETPLACE_TOKEN: ${{ secrets.JETBRAINS_MARKETPLACE_TOKEN }}
+    steps:
+      - name: No JETBRAINS_MARKETPLACE_TOKEN, so nothing is uploaded
+        if: env.MARKETPLACE_TOKEN == ''
+        run: echo "::notice::No JETBRAINS_MARKETPLACE_TOKEN secret, so $VERSION was not uploaded to JetBrains Marketplace"
+      - uses: actions/download-artifact@v8
+        if: env.MARKETPLACE_TOKEN != ''
+        with:
+          name: plugin-marketplace
+          path: dist
+          run-id: ${{ needs.prepare.outputs.checked || github.run_id }}
+          github-token: ${{ github.token }}
+      - name: Upload ${{ github.ref_name }} with the file the checks tested
+        if: env.MARKETPLACE_TOKEN != ''
+        run: |
+          ls -la dist
+          curl -sS --fail-with-body --retry 2 \
+            -H "Authorization: Bearer $MARKETPLACE_TOKEN" \
+            -F xmlId=io.github.sergeystets.duowatchdog \
+            -F "file=@dist/duo-watchdog-$VERSION-marketplace.zip" \
+            https://plugins.jetbrains.com/plugin/uploadPlugin

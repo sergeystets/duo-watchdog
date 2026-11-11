@@ -18,6 +18,7 @@ import { log } from './log';
 import { CreditsService } from './service';
 import { SessionsService } from './sessions';
 import { SECTION, settings } from './settings';
+import { Updater } from './updates';
 
 /** The commands the page's buttons and links run. */
 const ACTIONS: Record<string, string> = {
@@ -31,6 +32,7 @@ const ACTIONS: Record<string, string> = {
     cliDoctor: 'duoWatchdog.cliDoctor',
     addQuickCommand: 'duoWatchdog.addQuickCommand',
     editQuickCommands: 'duoWatchdog.editQuickCommands',
+    installUpdate: 'duoWatchdog.installUpdate',
 };
 
 export type Tab = 'usage' | 'statistics' | 'sessions';
@@ -59,7 +61,7 @@ export class DashboardView implements vscode.WebviewViewProvider {
     constructor(private readonly extensionUri: vscode.Uri, private readonly service: CreditsService,
                 private readonly commands: Commands, private readonly history: HistoryCache,
                 private readonly state: vscode.Memento, private readonly sessions: SessionsService,
-                private readonly live: LiveSessionWatcher) {
+                private readonly live: LiveSessionWatcher, private readonly updater: Updater) {
     }
 
     /** The Duo CLI session now changed: shown on Sessions only. */
@@ -221,7 +223,7 @@ export class DashboardView implements vscode.WebviewViewProvider {
         const s = settings();
         const live = this.tab === 'sessions' ? liveCard(this.live.meter(), s.roundTripLimit) : null;
         const quick = this.tab === 'usage' ? quickView(s.cli, s.cliMode, s.quickCommands) : null;
-        const model = { ...usage, tab: this.tab, statistics, sessions, live, quick };
+        const model = { ...usage, tab: this.tab, statistics, sessions, live, quick, update: this.updater.button() };
         void this.view.webview.postMessage({ type: 'model', model });
     }
 
@@ -255,6 +257,7 @@ export class DashboardView implements vscode.WebviewViewProvider {
   <button class="icon" data-action="settings" title="Settings" aria-label="Settings">
     <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 5.6a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 0 0 0-4.8Zm5.6 3.3-.1-1.8 1.3-1-1.3-2.3-1.6.6-1.5-.9L10.2 2H7.6l-.3 1.5-1.5.9-1.6-.6-1.3 2.3 1.3 1-.1 1.8-1.2 1 1.3 2.3 1.6-.6 1.5.9.3 1.5h2.6l.3-1.5 1.5-.9 1.6.6 1.3-2.3Z" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"/></svg>
   </button>
+  <button class="update" id="update" data-action="installUpdate" hidden></button>
   <span class="byline" id="byline"></span>
 </div>
 <div class="account" id="account-row" hidden>

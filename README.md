@@ -12,12 +12,13 @@
 A plugin for **IntelliJ IDEA** (and other JetBrains IDEs) and an extension for **VS Code** that track **your own**
 GitLab Credits usage for the current billing period, forecast where the month will end, and warn you before you hit your limit.
 
+[![CI](https://github.com/sergeystets/duo-watchdog/actions/workflows/ci.yml/badge.svg)](https://github.com/sergeystets/duo-watchdog/actions/workflows/ci.yml)
 ![IntelliJ Platform](https://img.shields.io/badge/IntelliJ_Platform-2024.3%2B-000000?logo=intellijidea&logoColor=white)
 ![VS Code](https://img.shields.io/badge/VS_Code-1.74%2B-007ACC?logo=visualstudiocode&logoColor=white)
 ![Java](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-VS_Code_extension-3178C6?logo=typescript&logoColor=white)
 ![GitLab](https://img.shields.io/badge/GitLab-Duo-FC6D26?logo=gitlab&logoColor=white)
-![Version](https://img.shields.io/badge/version-0.6.0-blue)
+![Version](https://img.shields.io/badge/version-0.7.3-blue)
 
 <a href="https://plugins.jetbrains.com/plugin/35949-duo-watchdog"><img src="https://img.shields.io/badge/Get_from-JetBrains_Marketplace-000000?style=for-the-badge&logo=jetbrains&logoColor=white" alt="Get from JetBrains Marketplace"></a>
 
@@ -33,6 +34,40 @@ GitLab Credits usage for the current billing period, forecast where the month wi
 </p>
 
 ---
+
+## What's new in 0.7.3
+
+- **Ready for JetBrains Marketplace**: the plugin's id is now `io.github.sergeystets.duowatchdog`, and a second
+  build of it, for the Marketplace, has no updates of its own, since there the IDE updates it. See
+  [Updates](#updates).
+- **From 0.7.2 or older**, take this version with Duo Watchdog's own **Update** or with the installer; the IDE's own
+  **Update** button does not offer a plugin under another id.
+- The plugin no longer calls what JetBrains keeps internal to the IDE or has marked for removal.
+
+## What's new in 0.7.2
+
+- **IntelliJ IDEA offers the update itself**: a newer release shows **Update** on Duo Watchdog's page in
+  *Settings → Plugins*, with the versions (`0.7.2 → 0.7.3`), as for a plugin from the Marketplace. See
+  [Updates](#updates).
+- The plugin's page there says what it does and how to start, with a **Plugin homepage** link.
+
+## What's new in 0.7.1
+
+- **The installers install the release**: they download the ready-made plugin and extension of the latest release
+  from GitHub and check them against it; nothing is built, and no JDK or Node.js is needed. They also run without a
+  clone, in one line. See [Installation](#installation).
+- Every release is built and checked by GitHub Actions before it is published.
+
+## What's new in 0.7.0
+
+- **Updates from the editor**: Duo Watchdog asks GitHub for its latest release when the IDE starts and then once a
+  day, says when a newer one is out, and **Update** downloads and installs it: IntelliJ IDEA puts it in place on its
+  next restart (**Restart Now**), VS Code on the next reload. Also *Tools → Duo Watchdog: Check for Updates…* and
+  **Duo Watchdog: Check for Updates**, and an **Update to x.y.z** button on the dashboard's toolbar. See
+  [Updates](#updates).
+- The Duo CLI's tool approval reads **Manual** or **Auto** (`--dangerously-skip-permissions`).
+- Sessions' **By project** puts each project on a line of its own over its bar, cut from the front so the project's
+  own name shows (`…/mobile-android`), with the whole path on hover.
 
 ## What's new in 0.6.0
 
@@ -88,6 +123,10 @@ GitLab Credits usage for the current billing period, forecast where the month wi
 
 ## Contents
 
+- [What's new in 0.7.3](#whats-new-in-073)
+- [What's new in 0.7.2](#whats-new-in-072)
+- [What's new in 0.7.1](#whats-new-in-071)
+- [What's new in 0.7.0](#whats-new-in-070)
 - [What's new in 0.6.0](#whats-new-in-060)
 - [What's new in 0.5.0](#whats-new-in-050)
 - [What's new in 0.4.0](#whats-new-in-040)
@@ -149,7 +188,7 @@ project (IntelliJ IDEA's Terminal, VS Code's integrated terminal). Two drop-down
 | Drop-down | Choices |
 |---|---|
 | **The CLI** | `duo`, or `glab duo cli`, which hands its arguments to `duo` |
-| **Tool approval** | **Ask before tools** (the CLI's default), or **Auto-approve tools**: `--dangerously-skip-permissions`, the CLI runs every tool without asking |
+| **Tool approval** | **Manual**: the CLI asks before each tool (its default), or **Auto**: `--dangerously-skip-permissions`, the CLI runs every tool without asking |
 
 | Button | Does |
 |---|---|
@@ -208,7 +247,8 @@ The **Sessions** tab lists your GitLab Duo Agent Platform sessions (the Duo CLI,
   within about two seconds of each step; click the session's number for its details.
 - The number of **sessions**, the days' **credits**, the part estimated to be **≈ in sessions**, and **Other use**:
   Code Suggestions, classic Chat, and what no session accounts for
-- Credits per **project**
+- Credits per **project**, each on a line of its own over its bar; a long path is cut from the front so the project's
+  own name shows (`…/mobile-android`), and hovering shows it whole
 - Every session, newest first: title, project, flow, status, the agent's steps and ≈ credits. Click one for its
   details: model, start and last update, how its estimate was made, and a link to it in GitLab.
 - Paste a **session ID** (the number the Duo CLI shows), its `gid://` or its link into the search field and press
@@ -403,6 +443,46 @@ Enter your cap, or a smaller budget of your own.
 Requests go through the IDE's proxy and trusted certificates
 (*Settings → Appearance & Behavior → System Settings → HTTP Proxy / Server Certificates*).
 
+### Updates
+
+Duo Watchdog asks GitHub for its latest release
+([`/repos/sergeystets/duo-watchdog/releases/latest`](https://github.com/sergeystets/duo-watchdog/releases)) a little
+after the IDE starts and then once a day. Nothing about you or your accounts is sent; drafts and pre-releases are not
+offered. When the release is newer than the one running, a notice says so:
+
+| Notice button | Does |
+|---|---|
+| **Update** | Downloads the release's file, `duo-watchdog-<version>.zip` (IntelliJ IDEA) or `.vsix` (VS Code), from GitHub only, and checks it: its size and SHA-256 against what the release lists, and for IntelliJ IDEA that the zip is this plugin of that version. IntelliJ IDEA then puts it in place when it next starts, as it does its own plugin updates (**Restart Now**, or later); VS Code installs it with *Install from VSIX* and loads it on the next reload (**Reload Window**). |
+| **Release Notes** | Opens the release on GitHub |
+| **Skip This Version** | Says nothing more about it; a later version is offered again, and Check for Updates still shows it |
+
+The dashboard's toolbar shows **Update to x.y.z** (then **Restart to Update** / **Reload to Update**) while a newer
+release is known. *Tools → Duo Watchdog: Check for Updates…* (also in *Help*) and **Duo Watchdog: Check for Updates**
+in VS Code ask at once and say what they found. Turn the daily check off with **Check for Duo Watchdog updates once a
+day** in Settings, or `duoWatchdog.checkForUpdates` in VS Code.
+
+**IntelliJ IDEA offers it too, from 0.7.2 on.** Each release carries an `updatePlugins.xml` naming its version and
+its zip, and the plugin adds
+`https://github.com/sergeystets/duo-watchdog/releases/latest/download/updatePlugins.xml` to the IDE's plugin
+repositories (*Settings → Plugins → ⚙ → Manage Plugin Repositories…*). The IDE then treats Duo Watchdog as it does a
+plugin from the Marketplace: **Update** on its page in *Settings → Plugins*, with `0.7.2 → 0.7.3` beside it, and in
+the IDE's own *Check for Updates*. Turning the daily check off takes the address out again.
+
+**The plugin's id is `io.github.sergeystets.duowatchdog`** from 0.7.3 on; 0.7.2 had `local.duo-watchdog`. From 0.7.2
+or older, take 0.7.3 with Duo Watchdog's own **Update** (the notice, or the dashboard's toolbar) or with
+the installer: both put it in place of the old one, and your accounts and settings stay. The IDE's own **Update**
+button does not offer a plugin under another id.
+
+**Two builds of the plugin.** `./gradlew :intellij:buildPlugin` builds the one for the releases here on GitHub,
+with the updates above. `./gradlew :intellij:buildPlugin -Pmarketplace` builds
+`duo-watchdog-<version>-marketplace.zip` for [JetBrains Marketplace](https://plugins.jetbrains.com): the same plugin
+without updates of its own (no daily check, no *Check for Updates…*, no plugin repository added), since there the
+IDE updates it. A release uploads that build to the Marketplace when the repository has the
+`JETBRAINS_MARKETPLACE_TOKEN` secret.
+
+A release is made with `./release.sh`, and GitHub Actions publishes it only once every check passes;
+see [Checks and releases](#checks-and-releases).
+
 ## Requirements
 
 ### Using the plugin
@@ -418,6 +498,9 @@ Requests go through the IDE's proxy and trusted certificates
 
 ### Building from source
 
+Only to build it yourself: installing needs none of this, since every release carries the plugin and the extension
+ready-made (see [Installation](#installation)).
+
 | Tool | Minimum version | Notes |
 |---|---|---|
 | JDK (to run Gradle) | **17** | Gradle 9.8 needs Java 17+. Any JDK 17, 21 or 25 works. |
@@ -429,25 +512,49 @@ Requests go through the IDE's proxy and trusted certificates
 
 ## Installation
 
+Every [release](https://github.com/sergeystets/duo-watchdog/releases) carries Duo Watchdog **ready-made**, the same
+files for Windows, macOS and Linux: `duo-watchdog-<version>.zip` for IntelliJ IDEA and `duo-watchdog-<version>.vsix`
+for VS Code. Installing builds nothing, so it needs no JDK, Node.js or Gradle, and no clone. Once installed,
+Duo Watchdog offers each new release itself and installs it from the editor: see [Updates](#updates).
+
 ### From JetBrains Marketplace (recommended for JetBrains IDEs)
 
 <a href="https://plugins.jetbrains.com/plugin/35949-duo-watchdog"><img src="https://img.shields.io/badge/Get_from-JetBrains_Marketplace-000000?style=for-the-badge&logo=jetbrains&logoColor=white" alt="Get from JetBrains Marketplace"></a>
 
 In IntelliJ IDEA (or another JetBrains IDE), open *Settings → Plugins → Marketplace*, search for **Duo Watchdog** and click
 *Install*. Or open the [plugin page](https://plugins.jetbrains.com/plugin/35949-duo-watchdog) and click *Install to IDE*.
+The IDE updates it like any other Marketplace plugin.
 
 ### With the install script
 
-Clone the repository and run the script for your OS. It installs Duo Watchdog for the first time, and also updates it later
-(run `git pull` first to get the latest version).
+One line, no clone needed. It downloads the install script and runs it; the script installs the latest release.
+
+macOS / Linux (needs `curl` or `wget`, and `unzip` for IntelliJ IDEA, which most systems have):
 
 ```bash
-./install.sh                 # macOS / Linux
+bash <(curl -fsSL https://raw.githubusercontent.com/sergeystets/duo-watchdog/main/install.sh)
+```
+
+Windows, in PowerShell (needs nothing more than Windows 10 or 11 has):
+
+```powershell
+iwr -useb https://raw.githubusercontent.com/sergeystets/duo-watchdog/main/install.ps1 -OutFile $env:TEMP\dw.ps1; powershell -NoProfile -ExecutionPolicy Bypass -File $env:TEMP\dw.ps1
+```
+
+In a clone of the repository, the same scripts do the same, and can also build the clone instead:
+
+```bash
+./install.sh                 # macOS / Linux: the latest release, ready-made
+./install.sh --from-source   # build this clone (needs a JDK 17+ and Node.js 20+)
 ```
 
 ```bat
-install.bat                  :: Windows (or double-click it in Explorer)
+install.bat                  :: Windows (or double-click it in Explorer): the latest release, ready-made
+install.bat -FromSource      :: build this clone (needs a JDK 17+ and Node.js 20+)
 ```
+
+`curl … | bash` would not work: the script asks questions, and from a pipe its own lines would be the answers. It
+says so and stops; use `bash <(curl …)` as above.
 
 The script is interactive:
 
@@ -460,27 +567,32 @@ The script is interactive:
    A folder you add is **remembered** and listed again on the next run; *Forget a folder you added* drops it. The list
    is kept in `~/.config/duo-watchdog/folders` (macOS, Linux) or `%APPDATA%\duo-watchdog\folders.txt` (Windows).
    Without a terminal (answers from a pipe) the choices are numbered and it reads a number.
-3. It checks that the tools it needs are installed: a JDK 17+ for IntelliJ IDEA, Node.js 20+ for VS Code.
+3. It looks up the latest release on GitHub. With `--from-source` it builds instead, and checks for the tools that
+   takes: a JDK 17+ for IntelliJ IDEA, Node.js 20+ for VS Code.
 4. It shows the plan (install, update from one version to another, or reinstall) and asks you to confirm. If an
    IntelliJ IDEA it is about to update is running, it asks you to close it (or skip it) now, so nothing interrupts
    the install.
 5. It installs, one step a line, with a **progress bar** for the whole install under the step that is running.
-   **IntelliJ IDEA**: Gradle builds the plugin against that IDE and puts it into the IDE's plugins folder (replacing an
-   older Duo Watchdog); the bar follows Gradle task by task. **VS Code**: it packages the extension once and installs
-   it with `code --install-extension`; run *Developer: Reload Window* in open VS Code windows to load the new version.
-   The tools' own output goes to a log; a step that fails shows the end of it and where the whole log is.
+   **The release** (the default): it downloads the files the chosen editors need from GitHub and checks each against
+   the release, its size and SHA-256, and that the zip is this plugin of that version. Then **IntelliJ IDEA**: it
+   unpacks the plugin into the IDE's plugins folder, replacing an older Duo Watchdog. **VS Code**: it installs the
+   `.vsix` with `code --install-extension`; run *Developer: Reload Window* in open VS Code windows to load it.
+   With **`--from-source`**: Gradle builds the plugin against that IDE and puts it into its plugins folder, the bar
+   following Gradle task by task, and the extension is packaged once from `vscode/`. The output of each step goes to a
+   log; a step that fails shows the end of it and where the whole log is.
 6. It sums up and offers to start the IntelliJ IDEAs it installed into.
 
 The script greets you with the Duo Watchdog doberman and title from [`docs/images/logo.ascii`](docs/images/logo.ascii),
-printed as drawn; edit that file to change it. Any `version x.y.z` in it is replaced with the version being installed.
+printed as drawn (run without a clone, it fetches the drawing of the release it installs); edit that file to change it. Any `version x.y.z` in it is replaced with the version being installed.
 In a terminal narrower than the drawing (114 columns) it keeps the title on the right of the dog with the subtitle on two
 lines (about 80 columns); narrower still, the title goes under the dog, and below the dog's width only the title shows,
 so nothing wraps.
 
 ```
    (docs/images/logo.ascii: the doberman, with "D U O   W A T C H D O G", the subtitle and
-    "Installer, version 0.5.0" beside it)
+    "Installer, version 0.7.3" beside it)
 
+Installing the ready-made files of release v0.7.3 from GitHub; nothing is built.
 Looking for IntelliJ IDEA and VS Code...
 
 Found on this computer:
@@ -492,7 +604,7 @@ Found on this computer:
 
   [2] IntelliJ IDEA 2026.2.0.1
       C:\Program Files\JetBrains\IntelliJ IDEA 2026.2
-      Duo Watchdog 0.4.0 is installed; 0.5.0 is available.
+      Duo Watchdog 0.4.0 is installed; 0.7.3 is available.
       It is running now; you'll be asked to close it before installing.
 
 Where should Duo Watchdog go?
@@ -504,15 +616,15 @@ Where should Duo Watchdog go?
     Forget a folder you added...
     Exit without installing
 
-Plan:
-  - IntelliJ IDEA 2026.2.0.1: update Duo Watchdog 0.4.0 -> 0.5.0 (you'll be asked to close it first)
-  - VS Code 1.130.0: install Duo Watchdog 0.5.0
+Plan, from release v0.7.3 on GitHub:
+  - IntelliJ IDEA 2026.2.0.1: update Duo Watchdog 0.4.0 -> 0.7.3 (you'll be asked to close it first)
+  - VS Code 1.130.0: install Duo Watchdog 0.7.3
 Continue? [Y/n]
 
-Installing (5 steps)
-  ✓ Preparing Gradle (the first run downloads Gradle and a JDK)  0:12
-  ⠼ Building and installing the plugin into IntelliJ IDEA 2026.2.0.1 · compileJava  0:21
-    ██████████████░░░░░░░░░░░░░░░░░░░░░░░░░░  35%  step 2 of 5
+Installing (3 steps)
+  ✓ Downloading Duo Watchdog 0.7.3 from GitHub  0:01
+  ⠼ Installing the plugin into IntelliJ IDEA 2026.2.0.1  0:00
+    ████████████████████████░░░░░░░░░░░░░░░░  60%  step 2 of 3
 ```
 
 You can also pass the folder of an IntelliJ IDEA or VS Code that the script doesn't find on its own (it's remembered too):
@@ -522,8 +634,15 @@ For IntelliJ IDEA that's the folder with `product-info.json`; for VS Code, the f
 
 ### Without the script
 
-**IntelliJ IDEA**, in one command: build the plugin and put it into the plugins folder of the IDE it was compiled against.
-Close the IDE first:
+From the [latest release](https://github.com/sergeystets/duo-watchdog/releases/latest), nothing to build:
+
+- **IntelliJ IDEA**: download `duo-watchdog-<version>.zip`, then *Settings → Plugins → ⚙ → Install Plugin from
+  Disk…*, pick the zip, and restart.
+- **VS Code**: download `duo-watchdog-<version>.vsix`, then *Extensions → ⋯ → Install from VSIX…* (or
+  `code --install-extension duo-watchdog-<version>.vsix`), and reload the window.
+
+From a clone, **IntelliJ IDEA** in one command: build the plugin and put it into the plugins folder of the IDE it was
+compiled against. Close the IDE first:
 
 ```bash
 ./gradlew installPlugin                                      # the IDEA the build finds
@@ -534,9 +653,11 @@ Add `-PpluginsDir=...` if your IDE keeps its plugins somewhere else (`idea.plugi
 
 Or the IDE's own way:
 
-1. [Build the plugin](#building-from-source), or get `duo-watchdog-<version>.zip` from a teammate.
+1. [Build the plugin](#building-from-source), or download `duo-watchdog-<version>.zip` from the release.
 2. In the IDE, open *Settings → Plugins → ⚙ → Install Plugin from Disk…*
-3. Select `intellij/build/distributions/duo-watchdog-0.6.0.zip` and restart if the IDE asks you to.
+3. Select `intellij/build/distributions/duo-watchdog-0.7.3.zip` and restart if the IDE asks you to.
+
+Once installed, Duo Watchdog updates itself from GitHub's releases: see [Updates](#updates).
 
 **Compatibility:** IntelliJ IDEA and any other JetBrains IDE from **2024.3** onward. This holds whichever IDE version the plugin was built against.
 
@@ -580,6 +701,7 @@ Shared by every account:
 | **Group default model** | The model your group's default is, for the ≈ $ of a Duo CLI session on it: the CLI's log does not name it. Default: `Sonnet 4.5`. Also prices a step whose log names no model, or one with no known rate. |
 | **Duo CLI quick commands** | Buttons of your own on Usage: each starts the Duo CLI, then types its command at the CLI's prompt. **+** adds one, the pencil changes it, the arrows move it. None by default. The CLI and the tool approval are the drop-downs on Usage. |
 | **Rotate tokens a week before they expire** | On by default. See [Token rotation](#token-rotation). |
+| **Check for Duo Watchdog updates once a day** | On by default. See [Updates](#updates). |
 
 The box under the token field shows the token's state:
 
@@ -615,8 +737,9 @@ group, limit and last alert, to that account.
 | `duoWatchdog.roundTripLimit` | `20` | Round trips recommended at most per Duo CLI session; amber from 80%, red at it; `0` for no colour |
 | `duoWatchdog.groupDefaultModel` | `"Sonnet 4.5"` | The model your group's default is: prices a Duo CLI step on it, on a model the log does not name, or on one with no known rate |
 | `duoWatchdog.cli` | `"duo"` | How Usage's quick actions start the Duo CLI: `duo` or `glab duo cli`; also the drop-down on Usage |
-| `duoWatchdog.cliMode` | `"ask"` | `ask` before each tool, or `autoApprove` them all (`--dangerously-skip-permissions`); also the drop-down on Usage. Your user settings only, never a workspace's |
+| `duoWatchdog.cliMode` | `"ask"` | `ask` before each tool (**Manual**), or `autoApprove` them all (**Auto**, `--dangerously-skip-permissions`); also the drop-down on Usage. Your user settings only, never a workspace's |
 | `duoWatchdog.quickCommands` | `[]` | Quick commands of your own, e.g. `[{ "name": "AB Testing", "command": "/ab-testing" }]`: a button each on Usage that types its command at the Duo CLI's prompt. **+ Add command** and **Edit…** on Usage build them |
+| `duoWatchdog.checkForUpdates` | `true` | Ask GitHub once a day for a newer Duo Watchdog and offer to install it: see [Updates](#updates) |
 
 `duoWatchdog.groupPath` and `duoWatchdog.limit` are deprecated: each account has its own now. They are read once,
 when the token saved by 0.3.0 moves to its account. Tokens are kept in VS Code's secret storage, one per account.
@@ -631,7 +754,7 @@ VS Code extension (`:vscode`, which runs its npm build). Open the root folder in
 
 ```bash
 ./gradlew test            # all tests: the plugin's core and the VS Code extension
-./gradlew buildPlugin     # → intellij/build/distributions/duo-watchdog-0.6.0.zip
+./gradlew buildPlugin     # → intellij/build/distributions/duo-watchdog-0.7.3.zip
 ./gradlew runIde          # launch a sandbox IDE with the plugin installed
 ```
 
@@ -748,11 +871,11 @@ because the path contains spaces:
 **5. Find the result:**
 
 ```powershell
-dir intellij\build\distributions    # → duo-watchdog-0.6.0.zip
+dir intellij\build\distributions    # → duo-watchdog-0.7.3.zip
 ```
 
 Then follow [Installation](#installation): *Settings → Plugins → ⚙ → Install Plugin from Disk…* and pick
-`intellij\build\distributions\duo-watchdog-0.6.0.zip`.
+`intellij\build\distributions\duo-watchdog-0.7.3.zip`.
 
 **Optional:** run the tests or try the plugin in a sandbox IDE:
 
@@ -817,10 +940,14 @@ duo-watchdog/
 │   ├── src/core/             Port of intellij/core: GraphQL client, period & forecast, alerts, texts
 │   ├── src/                  Extension layer: status bar, webview dashboard, settings, secret storage
 │   ├── src/test/             node:test tests mirroring the Java tests
+│   ├── smoke/                The packaged .vsix in a real VS Code (npm run smoke)
 │   └── media/                Dashboard script and styles, icons
 ├── docs/images/              Logo and screenshots for this README
-├── install.sh                Interactive installer for macOS / Linux
-└── install.bat               Interactive installer for Windows (runs install.ps1)
+├── .github/workflows/        CI: checks.yml (every check), ci.yml (pull requests, main), release.yml (tags v*)
+├── .github/scripts/          The installers' smoke tests, for CI
+├── release.sh                Tags the version; GitHub Actions checks it and publishes the release
+├── install.sh                Interactive installer for macOS / Linux: the latest release, or --from-source
+└── install.bat               Interactive installer for Windows (runs install.ps1): the same, or -FromSource
 ```
 
 The UI components get their colors from the plugin as light/dark pairs, so they follow the IDE theme.
@@ -829,13 +956,44 @@ Running `./gradlew test` also renders every dashboard state to PNG (in `intellij
 The VS Code extension builds with npm (Node.js 20+), from the root through Gradle or in `vscode/` directly:
 
 ```bash
-./gradlew :vscode:test               # 154 tests, no VS Code needed         (npm ci && npm test)
-./gradlew :vscode:packageExtension   # → vscode/duo-watchdog-0.6.0.vsix      (npm run package)
+./gradlew :vscode:test               # 160 tests, no VS Code needed         (npm ci && npm test)
+./gradlew :vscode:packageExtension   # → vscode/duo-watchdog-0.7.3.vsix      (npm run package)
 ./gradlew :vscode:installExtension   # into VS Code; -PcodePath=codium for another CLI
 ```
 
 The IntelliJ module needs an installed IntelliJ IDEA; without one only its own tasks fail, so the VS Code tasks
 still run.
+
+### Checks and releases
+
+Every pull request and every push to `main` runs the same checks a release must pass
+([`.github/workflows/checks.yml`](.github/workflows/checks.yml)), on GitHub Actions, side by side; a pull request
+runs only those for the parts it touches (the core, the plugin, the extension):
+
+| Check | What it proves |
+|---|---|
+| **Plugin core tests** | The JUnit tests, with every dashboard state painted headless (kept as the `ui-previews` artifact) |
+| **IntelliJ plugin, built and verified** | The plugin builds against IntelliJ IDEA 2025.3.1, its zip is the plugin and nothing else, and JetBrains' **Plugin Verifier** finds nothing it calls missing in the oldest IntelliJ IDEA it installs on (2024.3.7) or the newest (2026.3). `./gradlew verifyPlugin` runs the same here (`-PverifyOffline`, as CI does, to skip its downloads). |
+| **VS Code extension, tested in VS Code** | The unit tests, then the packaged `.vsix` in a real VS Code, the oldest it supports (1.74) and the current stable: it activates, every command it declares is registered, the dashboard and What's New open (`npm run smoke`) |
+| **Installer on Linux, macOS, Windows** | `install.sh`, and `install.ps1` in Windows PowerShell 5.1, install the latest release into stand-in IntelliJ IDEAs and a stand-in VS Code, from a clone and on their own |
+
+**A release is published only when all of them pass.** With the version raised in `intellij/build.gradle.kts` and
+`vscode/package.json` (the same in both), its `## x.y.z` section in `vscode/CHANGELOG.md`, and the commit merged into
+`main`:
+
+```bash
+./release.sh          # shows what it will tag, and asks
+./release.sh --yes    # without asking
+```
+
+It tags the commit `v<version>` and pushes the tag; nothing is built on your machine. The tag starts
+[`.github/workflows/release.yml`](.github/workflows/release.yml), which checks that the tag, both versions and the
+changelog agree and that the commit is on `main`, runs every check above, and only then publishes release `v<version>`
+with the very zip and `.vsix` the checks built and tested, the changelog's section as its notes. When CI has already
+passed every check for that commit on `main`, they are not run again: the files of that run are published, in under a
+minute, so it pays to tag once the push's run is green. Both editors offer it
+as an update from then on. If a check fails nothing is published: fix it, delete the tag
+(`git push --delete origin v<version> && git tag -d v<version>`), and run `./release.sh` again.
 
 ## Troubleshooting
 

@@ -8,3 +8,5 @@ tsconfig.json
 build.gradle.kts
 build/**
 .gradle/**
+smoke/**
+.vscode-test/**
